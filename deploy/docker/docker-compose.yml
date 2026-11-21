@@ -1,0 +1,26 @@
+# District 360：前后端同一个端口（后端同时托管前端页面），页面地址 http://<服务器>:<D360_HOST_PORT><D360_CONTEXT_PATH>/
+# 端口、二级路由、内存等改同目录下的 .env；数据库等改 config/application-prod.yml。
+# version 供老版本 docker-compose 1.x 使用；新版 docker compose 会提示 obsolete，可忽略
+version: "3.3"
+
+services:
+  district360:
+    image: ${D360_IMAGE:-district360:1.0}
+    container_name: district360
+    restart: unless-stopped
+    ports:
+      - "${D360_HOST_PORT:-8360}:8080"
+    environment:
+      D360_CONTEXT_PATH: ${D360_CONTEXT_PATH-/district360}   # 不带冒号：.env 里留空表示挂在根路径
+      JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx2g}
+      TZ: ${TZ:-Asia/Dubai}
+    volumes:
+      - ./jar:/app/jar:ro            # district360.jar
+      - ./config:/app/config:ro      # application-prod.yml
+      - ./static:/app/static:ro      # 前端页面（frontend/dist）
+      - ./logs:/app/logs             # 应用日志 district360.log
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"

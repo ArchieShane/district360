@@ -1,8 +1,13 @@
 server:
   port: ${D360_PORT:8080}
+  # 二级路由（如 /district360）：本地开发为空；Docker 镜像默认 /district360，用环境变量 D360_CONTEXT_PATH 改
+  servlet:
+    context-path: ${D360_CONTEXT_PATH:}
+  # 前面有 Nginx 等反向代理时，按 X-Forwarded-* 生成重定向地址
+  forward-headers-strategy: framework
   compression:
     enabled: true
-    mime-types: application/json,application/geo+json,application/x-protobuf
+    mime-types: application/json,application/geo+json,application/x-protobuf,text/html,text/css,text/javascript,application/javascript,image/svg+xml
 
 spring:
   application:
@@ -16,6 +21,14 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration
+  # 前端页面（frontend/dist）：本地开发由 Vite 提供，不用管；Docker 里由后端同端口托管，
+  # 镜像设置 D360_STATIC_LOCATIONS=file:/app/static/（宿主机映射目录）
+  web:
+    resources:
+      static-locations: ${D360_STATIC_LOCATIONS:classpath:/static/}
+      cache:
+        cachecontrol:
+          no-cache: true   # 每次向服务器确认是否有更新（未变返回 304），前端更新后不用强刷
   flyway:
     schemas: stat
     default-schema: stat

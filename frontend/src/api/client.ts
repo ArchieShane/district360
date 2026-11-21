@@ -1,6 +1,12 @@
 import type { ApiResponse, DistrictFeatureCollection, DistrictListItem, DistrictOverview, FacilityCategory, FacilityItem, LineageInfo, MetaInfo, PageResult } from './types'
 
-const BASE = '/api/v1'
+/**
+ * 接口地址用相对路径：页面挂在什么路径下（开发时 /，生产时 /district360/ 等二级路由），接口就跟着走，
+ * 换二级路由名只改后端配置，前端不用重新打包。
+ */
+const BASE = 'api/v1'
+/** 瓦片地址 MapLibre 要绝对地址；用当前页面所在目录拼，保留 {z}/{x}/{y} 不被转义 */
+const ABS_BASE = () => new URL('./', location.href).href + BASE
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(BASE + path, { headers: { Accept: 'application/json' } })
@@ -28,6 +34,6 @@ export const api = {
   facilities: (code: string, category: FacilityCategory) =>
     get<FacilityItem[]>(`/districts/${encodeURIComponent(code)}/facilities/${category}`),
   lineage: () => get<LineageInfo>('/lineage'),
-  plotTilesUrl: (v: string) => `${location.origin}${BASE}/map/tiles/plots/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,
-  buildingTilesUrl: (v: string) => `${location.origin}${BASE}/map/tiles/buildings/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,
+  plotTilesUrl: (v: string) => `${ABS_BASE()}/map/tiles/plots/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,
+  buildingTilesUrl: (v: string) => `${ABS_BASE()}/map/tiles/buildings/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,
 }

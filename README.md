@@ -73,7 +73,11 @@ cd frontend && npm install && npm run dev
 
 打开 http://localhost:5173 ，`/api` 会代理到 http://localhost:8080 。底图默认用 CARTO dark-matter（免 key），可在 `frontend/.env.local` 里用 `VITE_BASEMAP_STYLE` 换成其他 MapLibre 样式。
 
-生产构建：`npm run build`，产物在 `frontend/dist`，由 Nginx 托管并把 `/api` 反向代理到后端即可。
+生产构建：`npm run build`，产物在 `frontend/dist`（相对路径打包，可挂在任意二级路由下）。
+
+## Docker 离线部署
+
+前后端同一个端口、默认二级路由 `/district360`，jar / 配置 / 前端页面映射在宿主机目录。打包：`deploy/docker/build-package.sh`（在 109 上做镜像），部署和 Nginx 配置见 [deploy/docker/README.md](deploy/docker/README.md)。
 
 ## 切换 makani 库（schema / 表名前缀）
 

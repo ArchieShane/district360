@@ -21,3 +21,6 @@ frontend/.env.*.local
 
 # Claude Code local config
 .claude/
+
+# Docker 部署包产物
+deploy/docker/out/

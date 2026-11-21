@@ -1,0 +1,53 @@
+# District 360 生产配置（映射到容器 /app/config/application-prod.yml，改完重启容器生效：docker restart district360）
+# 这里只写需要覆盖的项，其余默认值见 jar 内的 application.yml。
+# 端口、二级路由、JVM 内存不在这里改，改部署目录下的 .env。
+
+d360:
+  datasource:
+    # 统计库：接口唯一读取的库，抽取结果写在这里（PostgreSQL + PostGIS）。
+    # 首次使用先建库并装 PostGIS：CREATE DATABASE district360;  再在库里 CREATE EXTENSION IF NOT EXISTS postgis;
+    # 表由 Flyway 在后端启动时自动创建（stat schema）。
+    stat:
+      url: jdbc:postgresql://<统计库IP>:<端口>/district360?currentSchema=stat,public
+      username: <用户名>
+      password: "<密码>"
+
+    # makani 源库：只给 makani 抽取用
+    makani:
+      url: jdbc:postgresql://<makani库IP>:<端口>/<makani库名>
+      username: <用户名>
+      password: "<密码>"
+
+    # 宜居 / ADREC：配置了 url 对应模块才启用，不用就保持注释
+#    liveability:
+#      url: jdbc:postgresql://<IP>:<端口>/<库名>
+#      username: <用户名>
+#      password: "<密码>"
+#    adrec:
+#      url: jdbc:postgresql://<IP>:<端口>/<库名>
+#      username: <用户名>
+#      password: "<密码>"
+
+  # makani 源表位置：表全名 = <schema>.<table-prefix><表名>
+  #   全量库 makani_sync_full / 生产库：schema = public，table-prefix = ""
+  #   数据治理库 makani_1119          ：schema = ods，   table-prefix = ods_makani_
+  makani:
+    schema: public
+    table-prefix: ""
+
+  etl:
+    # 每天 03:00（迪拜时间）自动抽取；统计表为空时启动后自动跑一次 makani 抽取（约 2.5 分钟）
+    enabled: true
+
+  admin:
+    # 手动触发抽取的口令（请求头 X-Admin-Token）；留空则禁用手动触发接口
+    # 例：curl -X POST -H "X-Admin-Token: <口令>" http://<服务器>:<端口>/district360/api/v1/admin/etl/all
+    token: ""
+
+logging:
+  file:
+    name: /app/logs/district360.log
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 30
