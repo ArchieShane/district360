@@ -27,7 +27,7 @@ district360/
 
 ```bash
 tar xzf district360-docker-*.tar.gz && cd district360
-vi config/application-prod.yml   # 填统计库、makani 库的地址和账号（<...> 占位符全部替换）
+vi config/application-prod.yml   # 填统计库、makani、宜居、ADREC 四个库的地址和账号（<...> 占位符全部替换；ADREC 的 source-srid 以数据方确认的为准）
 vi .env                          # 按需改端口 D360_HOST_PORT、二级路由 D360_CONTEXT_PATH
 ./start.sh
 ```

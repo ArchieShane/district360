@@ -18,15 +18,19 @@ d360:
       username: <用户名>
       password: "<密码>"
 
-    # 宜居 / ADREC：配置了 url 对应模块才启用，不用就保持注释
-#    liveability:
-#      url: jdbc:postgresql://<IP>:<端口>/<库名>
-#      username: <用户名>
-#      password: "<密码>"
-#    adrec:
-#      url: jdbc:postgresql://<IP>:<端口>/<库名>
-#      username: <用户名>
-#      password: "<密码>"
+    # 宜居源库（宜居抽取用，只读）
+    liveability:
+      url: jdbc:postgresql://<宜居库IP>:<端口>/<宜居库名>
+      username: <用户名>
+      password: "<密码>"
+
+    # ADREC 源库（房地产抽取用，只读；表在 ods schema：ods_re_x_q21_matview_sale / mortgage / rent）
+    # source-srid：源表 longitude / latitude 的坐标系，以数据提供方确认的为准（经纬度一般是 4326）
+    adrec:
+      url: jdbc:postgresql://<ADREC库IP>:<端口>/<ADREC库名>
+      username: <用户名>
+      password: "<密码>"
+      source-srid: 4326
 
   # makani 源表位置：表全名 = <schema>.<table-prefix><表名>
   #   全量库 makani_sync_full / 生产库：schema = public，table-prefix = ""

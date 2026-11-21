@@ -29,6 +29,9 @@ echo "== 2/4 打包前端"
 echo "== 3/4 组装部署目录 $PKG"
 rm -rf "$PKG" && mkdir -p "$PKG/jar" "$PKG/static" "$PKG/logs" "$PKG/images"
 cp "$ROOT/backend/d360-app/target/district360.jar" "$PKG/jar/"
+# 开发库的地址和密码在 jar 内的 application-local.yml 里，不随部署包带出；
+# 部署环境的配置只放在部署目录的 config/ 下（profile=prod）
+zip -qd "$PKG/jar/district360.jar" "BOOT-INF/classes/application-local.yml"
 cp -R "$ROOT/frontend/dist/." "$PKG/static/"
 if [ -z "$SKIP_IMAGE" ]; then
   mkdir -p "$PKG/config"

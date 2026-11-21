@@ -30,6 +30,14 @@ case "$1" in
     exit 0 ;;
 esac
 
+# 先检查文件和配置，没填好就不用导入镜像了
+[ -f jar/district360.jar ] || { echo "缺少 jar/district360.jar" >&2; exit 1; }
+[ -f config/application-prod.yml ] || { echo "缺少 config/application-prod.yml" >&2; exit 1; }
+[ -f static/index.html ] || { echo "缺少 static/index.html（前端页面）" >&2; exit 1; }
+if grep -v '^[[:space:]]*#' config/application-prod.yml | grep -q '<[^>]*>'; then
+  echo "config/application-prod.yml 里还有 <...> 占位符没填，请先填好各库的地址和账号（统计库、makani、宜居、ADREC）" >&2; exit 1
+fi
+
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   TAR=$(ls images/*.tar.gz images/*.tar 2>/dev/null | head -1)
   [ -n "$TAR" ] || { echo "镜像 $IMAGE 不存在，images/ 下也没有镜像包" >&2; exit 1; }
@@ -37,12 +45,6 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   if [ "${TAR%.gz}" != "$TAR" ]; then gunzip -c "$TAR" | docker load; else docker load -i "$TAR"; fi
 fi
 
-[ -f jar/district360.jar ] || { echo "缺少 jar/district360.jar" >&2; exit 1; }
-[ -f config/application-prod.yml ] || { echo "缺少 config/application-prod.yml" >&2; exit 1; }
-[ -f static/index.html ] || { echo "缺少 static/index.html（前端页面）" >&2; exit 1; }
-if grep -q '<统计库IP>\|<makani库IP>' config/application-prod.yml; then
-  echo "config/application-prod.yml 里还有 <...> 占位符没填，请先填好数据库地址和账号" >&2; exit 1
-fi
 mkdir -p logs
 
 if [ -n "$COMPOSE" ]; then
