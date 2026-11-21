@@ -17,6 +17,14 @@ d360:
       url: jdbc:postgresql://10.255.254.109:5443/makani_sync_full
       username: postgres
       password: "freedo"
+    # ADREC 源库为只读。配置 URL 后启用抽取，坐标 SRID 以源方确认值为准。
+    # 对应环境变量为 D360_DATASOURCE_ADREC_URL、D360_DATASOURCE_ADREC_USERNAME、
+    # D360_DATASOURCE_ADREC_PASSWORD 和 D360_DATASOURCE_ADREC_SOURCESRID。
+    # adrec:
+    #   url: ${D360_DATASOURCE_ADREC_URL}
+    #   username: ${D360_DATASOURCE_ADREC_USERNAME}
+    #   password: ${D360_DATASOURCE_ADREC_PASSWORD}
+    #   source-srid: ${D360_DATASOURCE_ADREC_SOURCESRID}
   makani:
     schema: public
     table-prefix: ""

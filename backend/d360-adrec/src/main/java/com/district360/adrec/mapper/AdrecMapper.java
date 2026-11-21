@@ -1,24 +1,44 @@
 package com.district360.adrec.mapper;
 
+import com.district360.common.district.DistrictRef;
+import org.apache.ibatis.annotations.Param;
+
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
-/**
- * TODO(房地产同事)：按需改返回类型，SQL 写在 resources/mapper/adrec/AdrecMapper.xml。
- * <p>
- * 口径要求：<b>按统计范围做空间查询</b>（{@code DistrictRef#scopeEwkbHex()}，makani 原始区面），
- * 成交 / 按揭 / 租约记录的位置落在范围内即计入；不要按区名或区 ID 匹配。
- * 口径参考 docs/District360_数据字段对照_*.xlsx（仅供参考，以与数据治理确认的为准），接入步骤见 docs/同事接入指南_宜居与ADREC.md。
- */
+/** ADREC queries grouped by the supplied Makani district boundaries. */
 public interface AdrecMapper {
 
-    /** ADREC 里出现过的全部社区名，用来维护社区 → 区映射。 */
-    List<String> communityNames();
+    SourceDates sourceDates();
 
-    /** 按社区、按月汇总：成交额、宗数、均价等（区级汇总在 Java 里按映射表累加）。 */
-    List<Map<String, Object>> monthlyByCommunity();
+    List<SalesRow> salesStats(@Param("districts") List<DistrictRef> districts,
+                              @Param("sourceSrid") int sourceSrid,
+                              @Param("previousStartDate") LocalDate previousStartDate,
+                              @Param("periodStartDate") LocalDate periodStartDate,
+                              @Param("periodEndNextDate") LocalDate periodEndNextDate);
 
-    /** 数据日期，例如 _ingested_at 的最大值。 */
-    LocalDate dataDate();
+    List<MonthlyRow> salesMonthly(@Param("districts") List<DistrictRef> districts,
+                                  @Param("sourceSrid") int sourceSrid,
+                                  @Param("previousStartDate") LocalDate previousStartDate,
+                                  @Param("periodStartDate") LocalDate periodStartDate,
+                                  @Param("periodEndNextDate") LocalDate periodEndNextDate);
+
+    List<DistrictCount> mortgageCounts(@Param("districts") List<DistrictRef> districts,
+                                       @Param("sourceSrid") int sourceSrid,
+                                       @Param("periodStartDate") LocalDate periodStartDate,
+                                       @Param("periodEndNextDate") LocalDate periodEndNextDate);
+
+    List<DistrictCount> activeLeaseCounts(@Param("districts") List<DistrictRef> districts,
+                                          @Param("sourceSrid") int sourceSrid,
+                                          @Param("rentSnapshotDate") LocalDate rentSnapshotDate);
+
+    record SourceDates(LocalDate sourceAsOf, LocalDate rentSnapshotDate) {}
+
+    record SalesRow(String districtCode, BigDecimal salesAed, BigDecimal previousSalesAed,
+                    Integer transactions, BigDecimal avgPriceSqm) {}
+
+    record MonthlyRow(String districtCode, LocalDate month, int transactions) {}
+
+    record DistrictCount(String districtCode, Integer count) {}
 }
