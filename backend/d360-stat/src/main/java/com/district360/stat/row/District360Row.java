@@ -32,6 +32,8 @@ public class District360Row {
     public Integer parks;
     public BigDecimal parkAreaHa;
     public BigDecimal parkGapHa;
+    /** 是否在宜居评估范围；NULL 视为在范围内（旧数据） */
+    public Boolean livInScope;
     public Boolean livSample;
     public LocalDate livAsOf;
 

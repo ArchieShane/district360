@@ -18,6 +18,8 @@ public class DistrictListRow {
     public Double maxLat;
     public BigDecimal areaKm2;
     public BigDecimal scoreCurrent;
+    /** 是否在宜居评估范围；NULL 视为在范围内（旧数据） */
+    public Boolean livInScope;
     public Boolean livSample;
     public boolean livPresent;
 }

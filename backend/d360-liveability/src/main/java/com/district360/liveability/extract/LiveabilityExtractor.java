@@ -13,7 +13,8 @@ import java.util.List;
 
 /**
  * Liveability 抽取：每个区用 {@link DistrictRef#scopeEwkbHex()}（统计范围 = makani 原始区面）在源库做空间查询，
- * <b>不用区 ID</b>，保证与 makani、ADREC 口径一致。范围内没有宜居区或没有得分的区跳过 → 页面显示「未纳入评估」。
+ * <b>不用区 ID</b>，保证与 makani、ADREC 口径一致。范围内没有宜居区的区跳过 → 页面显示「没有查询到数据」；
+ * 不在宜居评估范围（param_district_scope.in_scope = false）的区照常写入并标 inScope = false → 页面不展示得分，显示「不在宜居评估范围」。
  * 计算版本取当前发布版本（dim_calc_versions.current_flag = true），没有发布版本时抽取失败、统计库保持原样。
  * <p>
  * 不捕获异常：抛出即记为失败，统计库保持原样。写统计库、日志、定时都由框架处理。
@@ -48,13 +49,16 @@ public class LiveabilityExtractor implements StatExtractor<LiveabilitySnapshot> 
                 continue;
             }
             LivDistrictRow r = mapper.districtStats(d.scopeEwkbHex(), version);
-            // 范围内找不到宜居区、或没有「目前」得分 → 不放进列表，页面显示「未纳入评估」
-            if (r == null || r.livDistrictId == null || r.scoreCurrent == null) {
+            // 范围内找不到宜居区 → 不放进列表，页面显示「没有查询到数据」
+            if (r == null || r.livDistrictId == null) {
                 continue;
             }
+            // 不在评估范围的区也放进来（inScope = false）：页面不展示得分，公园指标照常展示
             out.add(new LiveabilitySnapshot.District(
-                    d.code(), r.scoreExisting, r.scoreCurrent, r.scoreTarget, r.parks, r.parkAreaHa, r.parkGapHa));
+                    d.code(), r.inScope, r.scoreExisting, r.scoreCurrent, r.scoreTarget, r.parks, r.parkAreaHa, r.parkGapHa));
         }
+        log.info("Liveability 抽取 {} 个区，其中在评估范围内 {} 个",
+                out.size(), out.stream().filter(x -> Boolean.TRUE.equals(x.inScope())).count());
         return new LiveabilitySnapshot(mapper.dataDate(version), out);
     }
 }

@@ -8,6 +8,8 @@ import java.math.BigDecimal;
  */
 public class LivDistrictRow {
     public Integer livDistrictId;
+    /** 是否在宜居评估范围（param_district_scope.in_scope） */
+    public Boolean inScope;
     public BigDecimal scoreExisting;
     public BigDecimal scoreCurrent;
     public BigDecimal scoreTarget;

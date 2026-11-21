@@ -31,9 +31,9 @@ const zh = {
     plots: '地块',
   },
   block: { summary: '摘要', liveability: '宜居得分', land: '土地与建设', realEstate: '房地产 · 近 12 个月', facilities: '公共设施' },
-  status: { sample: '样例数值', notAssessed: '未纳入评估', unavailable: '没有查询到数据' },
+  status: { sample: '样例数值', notAssessed: '不在宜居评估范围', unavailable: '没有查询到数据' },
   src: { makani: 'makani', liveability: '宜居评估', adrec: 'ADREC' },
-  liv: { target: '目标', gap: '差距', existing: '现状', current: '目前' },
+  liv: { target: '目标', gap: '差距', existing: '现状', current: '目前', outOfScope: '该区不在宜居评估范围内，不展示宜居得分。' },
   land: {
     plots: '地块',
     buildings: '建筑',
@@ -51,7 +51,7 @@ const zh = {
     open: '点击查看列表', search: '搜索名称…', empty: '该区没有这类设施', close: '收起', locate: '在地图上定位',
     cat: { school: '学校', medical: '医疗设施', mosque: '清真寺' },
   },
-  tip: { liveability: '宜居', notAssessed: '宜居：没有查询到数据', click: '点击查看区情概览', selected: '已选中' },
+  tip: { liveability: '宜居', notAssessed: '宜居：没有查询到数据', outOfScope: '不在评估范围', click: '点击查看区情概览', selected: '已选中' },
   lineage: {
     page: '页面读取',
     source: '数据来源',
@@ -61,7 +61,7 @@ const zh = {
     copy: '复制',
     copied: '已复制',
     plannedNote: '该数据源尚未接入，页面不显示数值（显示「没有查询到数据」）；下面是接入后的计划口径。',
-    state: { ok: '实测', sample: '样例数值', planned: '计划口径', not_assessed: '未纳入评估', unavailable: '没有查询到数据' },
+    state: { ok: '实测', sample: '样例数值', planned: '计划口径', not_assessed: '不在宜居评估范围', unavailable: '没有查询到数据' },
   },
   foot: { dataDate: '数据日期', sample: '样例', notConnected: '未接入', loading: '加载中…', error: '数据加载失败：{msg}' },
 }
@@ -97,9 +97,9 @@ const en: typeof zh = {
     plots: 'plots',
   },
   block: { summary: 'Summary', liveability: 'Liveability', land: 'Land & construction', realEstate: 'Real estate · last 12 months', facilities: 'Public facilities' },
-  status: { sample: 'Sample values', notAssessed: 'Not assessed', unavailable: 'No data found' },
+  status: { sample: 'Sample values', notAssessed: 'Outside the Liveability assessment', unavailable: 'No data found' },
   src: { makani: 'makani', liveability: 'Liveability', adrec: 'ADREC' },
-  liv: { target: 'Target', gap: 'gap', existing: 'Existing', current: 'Current' },
+  liv: { target: 'Target', gap: 'gap', existing: 'Existing', current: 'Current', outOfScope: 'This district is outside the Liveability assessment; no score is shown.' },
   land: {
     plots: 'Plots',
     buildings: 'Buildings',
@@ -117,7 +117,7 @@ const en: typeof zh = {
     open: 'Click for the list', search: 'Search by name…', empty: 'No facilities of this type', close: 'Close', locate: 'Locate on map',
     cat: { school: 'Schools', medical: 'Health facilities', mosque: 'Mosques' },
   },
-  tip: { liveability: 'Liveability', notAssessed: 'Liveability: no data found', click: 'Click for the overview', selected: 'Selected' },
+  tip: { liveability: 'Liveability', notAssessed: 'Liveability: no data found', outOfScope: 'outside the assessment', click: 'Click for the overview', selected: 'Selected' },
   lineage: {
     page: 'Read from',
     source: 'Source',
@@ -127,7 +127,7 @@ const en: typeof zh = {
     copy: 'Copy',
     copied: 'Copied',
     plannedNote: 'This source is not connected yet, so no value is shown ("No data found"); below is the planned method.',
-    state: { ok: 'Live', sample: 'Sample', planned: 'Planned', not_assessed: 'Not assessed', unavailable: 'No data found' },
+    state: { ok: 'Live', sample: 'Sample', planned: 'Planned', not_assessed: 'Outside assessment', unavailable: 'No data found' },
   },
   foot: { dataDate: 'Data dates', sample: 'sample', notConnected: 'not connected', loading: 'Loading…', error: 'Failed to load data: {msg}' },
 }

@@ -103,7 +103,9 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
               {{ dateLabel('liveability', o.liveability.asOf) }}
             </span>
           </div>
-          <div class="lvr">
+          <!-- 不在宜居评估范围：不展示得分（源库里这些区的得分多为 0，没有意义） -->
+          <div v-if="o.liveability.status === 'not_assessed'" class="lvx" data-m="liv_in_scope">{{ t('liv.outOfScope') }}</div>
+          <div v-else class="lvr">
             <div>
               <div class="bigv"><b data-m="liv_current">{{ fv(has(o.liveability.status), o.liveability.current, 2) }}</b></div>
               <div class="subv">

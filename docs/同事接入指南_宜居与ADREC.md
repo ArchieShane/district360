@@ -103,7 +103,8 @@ new LiveabilitySnapshot(
 | `LiveabilitySnapshot.District` 字段 | 类型 | 参考口径（以数据治理确认为准） | → 接口字段 | → 页面位置 |
 |---|---|---|---|---|
 | `code` | String | `DistrictRef.code()` | — | — |
-| `scoreExisting` | BigDecimal | `overall_score`，stage = Existing，calc_version_id = 496 | `liveability.existing` | 宜居得分 · 现状 |
+| `inScope` | Boolean | 宜居库配置表 `param_district_scope.in_scope`（没有配置行按 false） | `liveability.status` = `not_assessed`，得分字段为 null | `false` 时宜居得分卡显示「该区不在宜居评估范围内」，不展示得分；公园照常 |
+| `scoreExisting` | BigDecimal | `overall_score`，stage = Existing，当前发布版本（`dim_calc_versions.current_flag = true`） | `liveability.existing` | 宜居得分 · 现状 |
 | `scoreCurrent` | BigDecimal | stage = Pipeline | `liveability.current` | 宜居得分主值「目前」、列表 / 地图悬停的宜居得分 |
 | `scoreTarget` | BigDecimal | stage = AP50 | `liveability.target` | 宜居得分 · 目标 |
 | （不用填） | — | 接口自动算 max(0, 目标 − 目前) | `liveability.gap` | 差距 |
@@ -145,7 +146,8 @@ new AdrecSnapshot(
 
 | 情况 | 怎么做 | 页面效果 |
 |---|---|---|
-| 某个区在你的源库里**完全没有数据** | **不要放进 `districts` 列表**（跳过） | 宜居：「未纳入评估」；ADREC：「没有查询到数据」 |
+| 某个区在你的源库里**完全没有数据** | **不要放进 `districts` 列表**（跳过） | 「没有查询到数据」 |
+| 宜居：区存在，但**不在宜居评估范围** | 照常放进列表，`inScope = false` | 宜居得分卡显示「该区不在宜居评估范围内」，不展示得分；公园照常 |
 | 某个指标查不到 | 字段填 `null` | 该数值显示 `NaN` |
 | 指标真实值就是 0 | 填 `0` | 显示 `0` |
 | 精度 | 得分、面积、金额统计库保留 2 位小数，多余的会四舍五入 | — |
@@ -243,20 +245,22 @@ public class LivDistrictRow {
 ```java
 @Override
 public LiveabilitySnapshot extract(List<DistrictRef> districts) {
+    Long version = mapper.publishedVersion();   // 当前发布版本（current_flag = true），整批共用
     List<LiveabilitySnapshot.District> out = new ArrayList<>();
     for (DistrictRef d : districts) {
         if (d.scopeEwkbHex() == null) {
             continue;
         }
-        LivDistrictRow r = mapper.districtStats(d.scopeEwkbHex());
-        // 范围内找不到宜居区、或没有得分 → 不放进列表，页面显示「未纳入评估」
-        if (r == null || r.livDistrictId == null || r.scoreCurrent == null) {
+        LivDistrictRow r = mapper.districtStats(d.scopeEwkbHex(), version);
+        // 范围内找不到宜居区 → 不放进列表，页面显示「没有查询到数据」
+        if (r == null || r.livDistrictId == null) {
             continue;
         }
+        // 不在评估范围的区也放进来（inScope = false），页面不展示得分
         out.add(new LiveabilitySnapshot.District(
-                d.code(), r.scoreExisting, r.scoreCurrent, r.scoreTarget, r.parks, r.parkAreaHa, r.parkGapHa));
+                d.code(), r.inScope, r.scoreExisting, r.scoreCurrent, r.scoreTarget, r.parks, r.parkAreaHa, r.parkGapHa));
     }
-    return new LiveabilitySnapshot(mapper.dataDate(), out);
+    return new LiveabilitySnapshot(mapper.dataDate(version), out);
 }
 ```
 
@@ -416,7 +420,7 @@ A：写入要整批替换、单事务，失败时保持旧数据不变，还要�
 A：宜居按示例 SQL 逐区查询，总体几十秒；如果你的源库更慢，可以先一次性把所有数据读出来，在 Java 里按范围归区，但口径必须仍然是「按范围」。
 
 **Q：我的库里有的区不在这 216 个里，或者 216 个里有的区我没有数据？**
-A：只返回能对上的区；对不上的跳过即可，页面会显示「未纳入评估 / 没有查询到数据」。
+A：只返回能对上的区；对不上的跳过即可，页面会显示「没有查询到数据」。宜居里能对上、但不在评估范围的区要返回，并标 `inScope = false`。
 
 **Q：怎么确认我返回的数据真的到了页面上？**
 A：按第 8 节：`etl_job_log` 成功 → `overview` 接口对应区块 `status = ok` → 页面不再是 `NaN`。

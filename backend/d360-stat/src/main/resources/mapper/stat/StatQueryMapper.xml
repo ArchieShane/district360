@@ -18,6 +18,7 @@
                ST_XMax(d.bbox) AS max_lon, ST_YMax(d.bbox) AS max_lat,
                m.area_km2,
                l.score_current,
+               l.in_scope AS liv_in_scope,
                l.is_sample AS liv_sample,
                (l.district_code IS NOT NULL) AS liv_present
         FROM stat.dim_district d
@@ -59,7 +60,8 @@
                            'municipality', d.municipality,
                            'makaniDistrictId', d.makani_district_id,
                            'areaKm2', m.area_km2,
-                           'liveabilityScore', l.score_current,
+                           'liveabilityScore', CASE WHEN l.in_scope IS FALSE THEN NULL ELSE l.score_current END,
+                           'livInScope', l.in_scope,
                            'livSample', l.is_sample,
                            'centroid', json_build_array(round(ST_X(d.centroid)::numeric, 6), round(ST_Y(d.centroid)::numeric, 6)),
                            'bbox', json_build_array(round(ST_XMin(d.bbox)::numeric, 6), round(ST_YMin(d.bbox)::numeric, 6),

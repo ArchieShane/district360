@@ -275,13 +275,29 @@ d360:
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
 
       # ---------------------------------------------------------------- Liveability
+      liv_in_scope:
+        name-zh: 宜居评估范围
+        name-en: Liveability assessment scope
+        source: liveability
+        stat-column: stat_district_liveability.in_scope
+        source-tables: ["dim_districts", "param_district_scope"]
+        logic-zh: 按统计范围（makani 区面）在 dim_districts 里找重合面积最大的区，读宜居库配置表 param_district_scope 的 in_scope（没有配置行按 false）。false 时页面不展示宜居得分，公园指标照常展示。
+        logic-en: Liveability district with the largest overlap with the scope (makani polygon); in_scope from the configuration table param_district_scope (false when no row). When false the scores are not shown; park figures still are.
+        sql: |
+          WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
+               l AS (SELECT d.district_id FROM dim_districts d, s
+                     WHERE d.geom && s.g
+                     ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
+          SELECT coalesce((SELECT in_scope FROM param_district_scope
+                           WHERE district_id = (SELECT district_id FROM l)), false)
+
       liv_current:
         name-zh: 宜居得分 · 目前
         name-en: Liveability · current
         source: liveability
         stat-column: stat_district_liveability.score_current
         source-tables: ["dim_calc_versions", "dim_districts", "fact_district_scores"]
-        logic-zh: 按统计范围（makani 区面）在 dim_districts 里找重合面积最大的区，取该区 stage = Pipeline、当前发布版本（dim_calc_versions.current_flag = true）的 overall_score。
+        logic-zh: 按统计范围（makani 区面）在 dim_districts 里找重合面积最大的区，取该区 stage = Pipeline、当前发布版本（dim_calc_versions.current_flag = true）的 overall_score。不在宜居评估范围（param_district_scope.in_scope = false）的区不展示得分。
         logic-en: Find the Liveability district that overlaps the scope (makani polygon) most, then overall_score with stage = Pipeline, published calc version (dim_calc_versions.current_flag = true).
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面

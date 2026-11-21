@@ -160,7 +160,9 @@ function applyHover(code: string | null) {
 }
 
 function tipHtml(d: DistrictFeatureProps): string {
-  const lv = `${t('tip.liveability')} ${d.liveabilityScore != null ? nf(d.liveabilityScore, 2) : 'NaN'}`
+  const lv = d.livInScope === false
+    ? `${t('tip.liveability')} ${t('tip.outOfScope')}`
+    : `${t('tip.liveability')} ${d.liveabilityScore != null ? nf(d.liveabilityScore, 2) : 'NaN'}`
   const area = d.areaKm2 != null ? `${nf(d.areaKm2, 2)} km² · ` : ''
   return `<b>${escapeHtml(d.nameEn)}</b>${area}${lv}<br>${d.code === store.selectedCode ? t('tip.selected') : t('tip.click')}`
 }
@@ -172,7 +174,9 @@ function renderSelectedMarker() {
   const d = store.selected
   if (!map || !d) return
   const code = escapeHtml(d.code)
-  const lv = d.liveabilityScore != null
+  const lv = d.livInScope === false
+    ? `<span data-m="liv_in_scope" data-code="${code}">${t('tip.liveability')} ${t('tip.outOfScope')}</span>`
+    : d.liveabilityScore != null
     ? `<span data-m="liv_current" data-code="${code}">${t('tip.liveability')} <b>${nf(d.liveabilityScore, 2)}</b></span>`
     : `<span data-m="liv_current" data-code="${code}">${t('tip.liveability')} <b>NaN</b></span>`
   const area = d.areaKm2 != null ? `<span data-m="area_km2" data-code="${code}"><b>${nf(d.areaKm2, 2)}</b> km²</span> · ` : ''

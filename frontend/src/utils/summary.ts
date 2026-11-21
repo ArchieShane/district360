@@ -30,7 +30,7 @@ export function buildSummary(o: DistrictOverview, lang: Lang): string {
     if (hasLand) {
       z.push(`${land.plotBuiltRatePct != null ? `已建成地块占 ${m('plot_built_rate', `<b>${nf(land.plotBuiltRatePct, 1)}%</b>`)}，` : ''}在建建筑 ${m('buildings_under_construction', `<b>${nf(land.buildingsUnderConstruction)}</b> 栋`)}${top && top.pct ? `，${m('land_use', `土地以${top.nameZh}为主（${nf(top.pct, 1)}%）`)}` : ''}。`)
     }
-    z.push(hasLv ? `宜居得分 ${m('liv_current', `<b>${nf(lv.current, 2)}</b>`)}，目标 ${m('liv_target', nf(lv.target, 2))}。` : lv.status === 'not_assessed' ? '该区未纳入宜居评估。' : '')
+    z.push(hasLv ? `宜居得分 ${m('liv_current', `<b>${nf(lv.current, 2)}</b>`)}，目标 ${m('liv_target', nf(lv.target, 2))}。` : lv.status === 'not_assessed' ? `${m('liv_in_scope', '该区不在宜居评估范围内')}。` : '')
     if (hasRe) {
       z.push(`近 12 个月房地产成交 ${m('re_sales', `<b>AED ${nf(re.salesAedBn, 1)} bn</b>`)}、${m('re_transactions', `${nf(re.transactions)} 宗`)}，均价 ${m('re_price', `AED ${nf(re.avgPriceSqm)}/m²`)}，同比 ${m('re_yoy', `${sg(re.salesYoyPct)}%`)}。`)
     }
@@ -46,7 +46,7 @@ export function buildSummary(o: DistrictOverview, lang: Lang): string {
   if (hasLand) {
     e.push(`${land.plotBuiltRatePct != null ? `${m('plot_built_rate', `<b>${nf(land.plotBuiltRatePct, 1)}%</b>`)} of plots are constructed and ` : ''}${m('buildings_under_construction', `<b>${nf(land.buildingsUnderConstruction)}</b> ${land.buildingsUnderConstruction === 1 ? 'building is' : 'buildings are'}`)} under construction${top && top.pct ? `; ${m('land_use', `${top.nameEn.toLowerCase()} is the main land use (${nf(top.pct, 1)}%)`)}` : ''}. `)
   }
-  e.push(hasLv ? `The liveability score is ${m('liv_current', `<b>${nf(lv.current, 2)}</b>`)} against a target of ${m('liv_target', nf(lv.target, 2))}. ` : lv.status === 'not_assessed' ? 'The district is outside the Liveability assessment. ' : '')
+  e.push(hasLv ? `The liveability score is ${m('liv_current', `<b>${nf(lv.current, 2)}</b>`)} against a target of ${m('liv_target', nf(lv.target, 2))}. ` : lv.status === 'not_assessed' ? `${m('liv_in_scope', 'The district is outside the Liveability assessment')}. ` : '')
   if (hasRe) {
     e.push(`Real-estate sales over the last 12 months were ${m('re_sales', `<b>AED ${nf(re.salesAedBn, 1)} bn</b>`)} across ${m('re_transactions', `${nf(re.transactions)} transactions`)}, at ${m('re_price', `AED ${nf(re.avgPriceSqm)}/m²`)} on average, ${m('re_yoy', `${sg(re.salesYoyPct)}%`)} year on year. `)
   }

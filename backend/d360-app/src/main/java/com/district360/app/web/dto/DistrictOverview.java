@@ -16,6 +16,7 @@ public record DistrictOverview(
                          BigDecimal areaKm2, Integer communities, Integer plots) {
     }
 
+    /** status = not_assessed：不在宜居评估范围，得分字段均为 null。 */
     public record Liveability(String status, LocalDate asOf, BigDecimal existing, BigDecimal current, BigDecimal target,
                               BigDecimal gap) {
     }
