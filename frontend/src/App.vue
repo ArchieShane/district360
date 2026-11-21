@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import DistrictList from './components/DistrictList.vue'
 import DistrictPanel from './components/DistrictPanel.vue'
 import IntroCard from './components/IntroCard.vue'
+import LineageTip from './components/LineageTip.vue'
 import MapView from './components/MapView.vue'
 import NotesModal from './components/NotesModal.vue'
 import { useDistrictStore } from './stores/district'
@@ -79,5 +80,6 @@ onBeforeUnmount(() => {
 
     <DistrictPanel />
     <NotesModal />
+    <LineageTip />
   </div>
 </template>

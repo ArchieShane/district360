@@ -15,6 +15,8 @@ export interface DistrictListItem {
   sortNo: number
   mappingConfirmed: boolean
   mappingNote: string | null
+  makaniDistrictId: number | null
+  livDistrictId: number | null
   centroid: [number, number] | null
   bbox: [number, number, number, number] | null
   areaKm2: number | null
@@ -109,4 +111,21 @@ export interface MetaInfo {
   districtCount: number
   blockCount: number
   sources: SourceInfo[]
+}
+
+export type SourceKey = 'makani' | 'liveability' | 'adrec'
+
+export interface LineageInfo {
+  statDb: string
+  sources: Record<SourceKey, { nameZh: string; nameEn: string; database: string; implemented: boolean }>
+  metrics: Record<string, {
+    nameZh: string
+    nameEn: string
+    source: SourceKey
+    statColumn: string
+    sourceTables: string[]
+    logicZh: string
+    logicEn: string
+    sql: string | null
+  }>
 }

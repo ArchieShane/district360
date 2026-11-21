@@ -45,6 +45,17 @@ const zh = {
   re: { sales: '成交额', yoy: '同比', tx: '成交宗数', mort: '按揭', price: '均价 AED/m²', lease: '在册租约', monthly: '月度成交宗数' },
   fac: { schools: '学校', health: '医疗', mosques: '清真寺', parks: '公园', gap: '公园缺口 ha' },
   tip: { liveability: '宜居', notAssessed: '宜居未评估', click: '点击查看区情概览', selected: '已选中' },
+  lineage: {
+    page: '页面读取',
+    source: '数据来源',
+    logic: '计算方式',
+    sql: 'SQL（已代入当前区）',
+    sqlPlanned: '计划 SQL（尚未接入）',
+    copy: '复制',
+    copied: '已复制',
+    plannedNote: '该数据源尚未接入：当前显示的是原型样例值，下面是接入后的计划口径。',
+    state: { ok: '实测', sample: '样例数值', planned: '计划口径', not_assessed: '未纳入评估', unavailable: '暂无数据' },
+  },
   foot: { dataDate: '数据日期', sample: '样例', loading: '加载中…', error: '数据加载失败：{msg}' },
 }
 
@@ -93,6 +104,17 @@ const en: typeof zh = {
   re: { sales: 'Sales value', yoy: 'YoY', tx: 'Transactions', mort: 'Mortgages', price: 'AED/m² average', lease: 'Leases', monthly: 'Monthly transactions' },
   fac: { schools: 'Schools', health: 'Health', mosques: 'Mosques', parks: 'Parks', gap: 'Park gap, ha' },
   tip: { liveability: 'Liveability', notAssessed: 'Liveability not assessed', click: 'Click for the overview', selected: 'Selected' },
+  lineage: {
+    page: 'Read from',
+    source: 'Source',
+    logic: 'Method',
+    sql: 'SQL (for this district)',
+    sqlPlanned: 'Planned SQL (not connected yet)',
+    copy: 'Copy',
+    copied: 'Copied',
+    plannedNote: 'This source is not connected yet: the value shown is a prototype sample; below is the planned method.',
+    state: { ok: 'Live', sample: 'Sample', planned: 'Planned', not_assessed: 'Not assessed', unavailable: 'No data' },
+  },
   foot: { dataDate: 'Data dates', sample: 'sample', loading: 'Loading…', error: 'Failed to load data: {msg}' },
 }
 

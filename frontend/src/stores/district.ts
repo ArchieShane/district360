@@ -1,13 +1,14 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api } from '../api/client'
-import type { DistrictListItem, DistrictOverview, MetaInfo } from '../api/types'
+import type { DistrictListItem, DistrictOverview, LineageInfo, MetaInfo } from '../api/types'
 import { i18n, type Lang } from '../i18n'
 
 /** 页面状态：区列表、选中 / 悬停的区、概览缓存、语言；与 URL hash（#d=reem&l=en）同步。 */
 export const useDistrictStore = defineStore('district', () => {
   const districts = ref<DistrictListItem[]>([])
   const meta = ref<MetaInfo | null>(null)
+  const lineage = ref<LineageInfo | null>(null)
   const selectedCode = ref<string | null>(null)
   const hoveredCode = ref<string | null>(null)
   const overviews = ref<Record<string, DistrictOverview>>({})
@@ -23,9 +24,10 @@ export const useDistrictStore = defineStore('district', () => {
 
   async function load() {
     try {
-      const [list, m] = await Promise.all([api.districts(), api.meta()])
+      const [list, m, lin] = await Promise.all([api.districts(), api.meta(), api.lineage()])
       districts.value = list
       meta.value = m
+      lineage.value = lin
       readHash()
     } catch (e) {
       error.value = (e as Error).message
@@ -84,7 +86,7 @@ export const useDistrictStore = defineStore('district', () => {
   }
 
   return {
-    districts, meta, selectedCode, hoveredCode, overviews, loadingOverview, error, lang, notesOpen, homeTick,
+    districts, meta, lineage, selectedCode, hoveredCode, overviews, loadingOverview, error, lang, notesOpen, homeTick,
     selected, overview, load, select, deselect, goHome, setLang, readHash,
   }
 })

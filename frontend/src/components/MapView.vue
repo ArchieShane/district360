@@ -105,8 +105,11 @@ function renderMarkers() {
     m.el.classList.toggle('dim', !on && !!store.selectedCode)
     m.el.classList.toggle('hv', !on && d.code === store.hoveredCode)
     if (on) {
-      const lv = d.liveabilityScore != null ? `${t('tip.liveability')} <b>${nf(d.liveabilityScore, 2)}</b>` : t('tip.notAssessed')
-      const area = d.areaKm2 != null ? `<b>${nf(d.areaKm2, 2)}</b> km² · ` : ''
+      const code = escapeHtml(d.code)
+      const lv = d.liveabilityScore != null
+        ? `<span data-m="liv_current" data-code="${code}">${t('tip.liveability')} <b>${nf(d.liveabilityScore, 2)}</b></span>`
+        : t('tip.notAssessed')
+      const area = d.areaKm2 != null ? `<span data-m="area_km2" data-code="${code}"><b>${nf(d.areaKm2, 2)}</b> km²</span> · ` : ''
       m.el.innerHTML = `${escapeHtml(d.nameEn)}<div class="m">${area}${lv}</div>`
     } else {
       m.el.textContent = d.nameEn

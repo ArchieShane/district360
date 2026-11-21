@@ -78,9 +78,16 @@ cd frontend && npm install && npm run dev
 | `GET /api/v1/map/districts.geojson` | 区边界（EPSG:4326，已简化） |
 | `GET /api/v1/map/tiles/buildings/{z}/{x}/{y}.pbf` | 建筑体块矢量瓦片（图层 `buildings`，属性 `code`、`height`、`uc`） |
 | `GET /api/v1/meta` | 区数量、各源数据日期、是否样例、最近一次抽取状态 |
+| `GET /api/v1/lineage` | 指标血缘：每个指标读哪个库 / 表、怎么算、对应 SQL（页面悬浮提示用） |
 | `POST /api/v1/admin/etl/{makani\|liveability\|adrec\|all}` | 手动触发抽取，请求头 `X-Admin-Token`（配置项 `d360.admin.token`，为空时禁用） |
 
 区块 `status`：`ok` 正常 · `sample` 样例数值 · `not_assessed` 未纳入宜居评估 · `unavailable` 暂无数据。
+
+## 指标来源（悬浮提示）
+
+页面上每个数值鼠标悬浮都会显示：页面读的是统计库哪一列、源头是哪个库哪张表、计算方式、对应 SQL（已代入当前区的 ID，可复制）。
+
+说明写在 `backend/d360-app/src/main/resources/metric-lineage.yml`，库名、表名占位符在运行时按实际配置替换。**改了取数逻辑请同步改这个文件**；前端给数值加 `data-m="<指标键>"` 即可接入提示。
 
 ## 宜居组 / 房地产组怎么接入
 
@@ -96,8 +103,7 @@ cd frontend && npm install && npm run dev
 
 ## 待确认
 
-见 `docs/接口设计与协作方案_v0.2.md` 第 8 节。影响当前数值的主要有：
+见 `docs/接口设计与协作方案_v0.2.md` 第 8 节。页面数值以各源库当前实际数据为准；影响口径的主要有：
 
-- `makani_1119.ods_makani_udm_plot` 目前只有 1 万行（全量 41 万），地块数、建成率、地块状态、土地利用都偏小；
 - Al Mina / Al Wahda / Hudayriyat / Saadiyat 与 makani 区的对应关系（区字典里标了 `mapping-confirmed: false`，页面显示 TBC）；
-- 土地利用「混合」的归类（暂按 makani 的 Investment，配置项 `d360.land-use.groups`）。
+- 土地利用「混合」：makani 的地块用途里没有 Mixed 这一类，归类规则待定（暂按 Investment，配置项 `d360.land-use.groups`；Investment 地块实际多为别墅 / 联排住宅）。

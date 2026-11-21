@@ -38,7 +38,7 @@ function enter() {
         <i></i>
         <span class="n">{{ d.nameEn }}</span>
         <span v-if="!d.mappingConfirmed" class="tbc" :title="d.mappingNote ?? ''">TBC</span>
-        <span class="p">{{ d.areaKm2 != null ? nf(d.areaKm2, 2) + ' km²' : '—' }}</span>
+        <span class="p" data-m="area_km2" :data-code="d.code">{{ d.areaKm2 != null ? nf(d.areaKm2, 2) + ' km²' : '—' }}</span>
       </button>
       <div v-if="!list.length" class="empty">{{ t('list.noMatch') }}</div>
     </div>

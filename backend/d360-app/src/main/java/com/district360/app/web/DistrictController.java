@@ -1,5 +1,7 @@
 package com.district360.app.web;
 
+import com.district360.app.lineage.LineageInfo;
+import com.district360.app.lineage.LineageService;
 import com.district360.app.service.DistrictService;
 import com.district360.app.web.dto.DistrictListItem;
 import com.district360.app.web.dto.DistrictOverview;
@@ -17,9 +19,11 @@ import java.util.List;
 public class DistrictController {
 
     private final DistrictService service;
+    private final LineageService lineage;
 
-    public DistrictController(DistrictService service) {
+    public DistrictController(DistrictService service, LineageService lineage) {
         this.service = service;
+        this.lineage = lineage;
     }
 
     /** 区列表：首页介绍卡、左侧列表、地图悬停。 */
@@ -38,5 +42,11 @@ public class DistrictController {
     @GetMapping("/meta")
     public ApiResponse<MetaInfo> meta() {
         return ApiResponse.ok(service.meta());
+    }
+
+    /** 指标血缘：每个指标读哪个库、哪张表、怎么算（前端悬浮提示用）。 */
+    @GetMapping("/lineage")
+    public ApiResponse<LineageInfo> lineage() {
+        return ApiResponse.ok(lineage.lineage());
     }
 }

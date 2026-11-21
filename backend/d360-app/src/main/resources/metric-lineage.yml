@@ -1,0 +1,443 @@
+# 指标血缘：页面上每个数值读的是哪个库、哪张表、怎么算出来的。
+# 前端鼠标悬浮在数值上时展示（GET /api/v1/lineage）。
+#
+# 占位符在运行时替换成实际配置：
+#   {makani.db}          makani 源库（取自 d360.datasource.makani.url）
+#   {makani.district} 等 makani 源表全名（schema + 前缀 + 表名，取自 d360.makani.*）
+#   {makani.municipality}、{makani.medicalExclude}
+#   {landuse.mapping}    土地利用归类规则（取自 d360.land-use.groups）
+#   {stat.db}            统计库（取自 d360.datasource.stat.url）
+# 以冒号开头的参数在前端按当前选中的区替换：
+#   :makani_district_id  makani udm_district.districtid
+#   :liv_district_id     Liveability dim_districts.district_id
+#   :district_code       页面区编码
+#
+# implemented 由后端按「该源的抽取器是否已启用」自动判断：未启用的源显示为「计划口径」。
+d360:
+  lineage:
+    sources:
+      makani:
+        name-zh: makani
+        name-en: makani
+        planned-db: "makani_1119 @ 10.255.254.109:5443"
+      liveability:
+        name-zh: 宜居评估
+        name-en: Liveability
+        planned-db: "liveability_data_20260730 @ 10.255.254.109:5443（待宜居组接入）"
+      adrec:
+        name-zh: ADREC
+        name-en: ADREC
+        planned-db: "待房地产组提供连接信息"
+
+    metrics:
+      # ---------------------------------------------------------------- makani · 区面
+      area_km2:
+        name-zh: 面积
+        name-en: Area
+        source: makani
+        stat-column: stat_district_makani.area_km2
+        source-tables: ["{makani.district}"]
+        logic-zh: 区面投影到 UTM 40N（EPSG:32640）后求面积，÷ 1,000,000 换算成 km²，保留 3 位小数。
+        logic-en: District polygon projected to UTM 40N (EPSG:32640), area ÷ 1,000,000 → km², 3 decimals.
+        sql: |
+          SELECT round((ST_Area(ST_Transform(shape, 32640)) / 1e6)::numeric, 3) AS area_km2
+          FROM {makani.district}
+          WHERE municipalityname = '{makani.municipality}'
+            AND districtid = :makani_district_id
+
+      municipality:
+        name-zh: 所属市政
+        name-en: Municipality
+        source: makani
+        stat-column: 固定值（区字典只收录 ADM 的区）
+        source-tables: ["{makani.district}"]
+        logic-zh: 区面按 municipalityname = '{makani.municipality}' 过滤；districtid 在不同市政之间会重复，所以所有查询都带这个条件。
+        logic-en: Districts are filtered by municipalityname = '{makani.municipality}'; districtid repeats across municipalities, so every query carries this filter.
+        sql: |
+          SELECT municipalityname
+          FROM {makani.district}
+          WHERE municipalityname = '{makani.municipality}'
+            AND districtid = :makani_district_id
+
+      communities:
+        name-zh: 社区数
+        name-en: Communities
+        source: makani
+        stat-column: stat_district_makani.communities
+        source-tables: ["{makani.district}", "{makani.community}"]
+        logic-zh: 社区面的中心点落在区面内即计入（按区面做空间汇总，不依赖社区表里的区字段）。
+        logic-en: A community counts when its centroid falls inside the district polygon (spatial summary).
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.community} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+
+      # ---------------------------------------------------------------- makani · 地块
+      plots:
+        name-zh: 地块数
+        name-en: Plots
+        source: makani
+        stat-column: stat_district_makani.plots
+        source-tables: ["{makani.district}", "{makani.plot}"]
+        logic-zh: 地块中心点落在区面内即计入。数值以 makani 源表当前实际数据为准。
+        logic-en: A plot counts when its centroid falls inside the district polygon. Reflects the current makani source table as is.
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.plot} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+
+      plots_constructed:
+        name-zh: 地块 · 已建成
+        name-en: Plots · built
+        source: makani
+        stat-column: stat_district_makani.plots_constructed
+        source-tables: ["{makani.district}", "{makani.plot}"]
+        logic-zh: 区内地块中 construction_status = 'Constructed' 的数量。
+        logic-en: Plots in the district with construction_status = 'Constructed'.
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.plot} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+          WHERE x.construction_status = 'Constructed'
+
+      plots_under_construction:
+        name-zh: 地块 · 在建
+        name-en: Plots · under construction
+        source: makani
+        stat-column: stat_district_makani.plots_under_construction
+        source-tables: ["{makani.district}", "{makani.plot}"]
+        logic-zh: 区内地块中 construction_status = 'Under Construction' 的数量。
+        logic-en: Plots in the district with construction_status = 'Under Construction'.
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.plot} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+          WHERE x.construction_status = 'Under Construction'
+
+      plots_vacant_serviced:
+        name-zh: 地块 · 空置·已通市政
+        name-en: Plots · vacant, serviced
+        source: makani
+        stat-column: stat_district_makani.plots_vacant_serviced
+        source-tables: ["{makani.district}", "{makani.plot}"]
+        logic-zh: 区内地块中 construction_status = 'Not Constructed' 且 servicestatus = 'available' 的数量。
+        logic-en: Plots with construction_status = 'Not Constructed' and servicestatus = 'available'.
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.plot} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+          WHERE x.construction_status = 'Not Constructed'
+            AND x.servicestatus = 'available'
+
+      plots_vacant_unserviced:
+        name-zh: 地块 · 空置·未通市政
+        name-en: Plots · vacant, unserviced
+        source: makani
+        stat-column: stat_district_makani.plots_vacant_unserviced
+        source-tables: ["{makani.district}", "{makani.plot}"]
+        logic-zh: 区内地块中 construction_status = 'Not Constructed' 且 servicestatus 为 notAvailable / notAvailableHaveConsNOC 的数量（servicestatus = undefined 的不计入任何一类）。
+        logic-en: Plots with construction_status = 'Not Constructed' and servicestatus in (notAvailable, notAvailableHaveConsNOC); 'undefined' is not counted in any class.
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.plot} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+          WHERE x.construction_status = 'Not Constructed'
+            AND x.servicestatus IN ('notAvailable', 'notAvailableHaveConsNOC')
+
+      plot_built_rate:
+        name-zh: 地块建成率
+        name-en: Plot built rate
+        source: makani
+        stat-column: 接口计算：stat_district_makani.plots_constructed ÷ plots
+        source-tables: ["{makani.district}", "{makani.plot}"]
+        logic-zh: 已建成地块数 ÷ 地块总数 × 100%，保留 1 位小数。
+        logic-en: Built plots ÷ all plots × 100%, 1 decimal.
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT round(100.0 * count(*) FILTER (WHERE x.construction_status = 'Constructed') / count(*), 1)
+          FROM d JOIN {makani.plot} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+
+      land_use:
+        name-zh: 土地利用占比
+        name-en: Land-use share
+        source: makani
+        stat-column: stat_district_landuse（区 × primaryuseengdesc 地块数），归类与占比在接口里计算
+        source-tables: ["{makani.district}", "{makani.plot}"]
+        logic-zh: "按地块主用途 primaryuseengdesc 分组计数，再按配置归为页面类别：{landuse.mapping}；未列出的用途归入「公用与其他」。占比 = 该类地块数 ÷ 区内地块总数。"
+        logic-en: "Plots grouped by primaryuseengdesc, then mapped to page classes: {landuse.mapping}; unlisted uses go to 'Utilities & other'. Share = class plots ÷ all plots in the district."
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT coalesce(nullif(trim(x.primaryuseengdesc), ''), 'Undefined') AS use_desc, count(*) AS plot_count
+          FROM d JOIN {makani.plot} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+          GROUP BY 1
+
+      # ---------------------------------------------------------------- makani · 建筑
+      buildings:
+        name-zh: 建筑数
+        name-en: Buildings
+        source: makani
+        stat-column: stat_district_makani.buildings
+        source-tables: ["{makani.district}", "{makani.building}"]
+        logic-zh: 建筑轮廓中心点落在区面内即计入（含 existing / underConstruction / abandoned）。
+        logic-en: A building counts when its footprint centroid falls inside the district polygon (all physical statuses).
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.building} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+
+      buildings_under_construction:
+        name-zh: 在建建筑
+        name-en: Buildings under construction
+        source: makani
+        stat-column: stat_district_makani.buildings_under_construction
+        source-tables: ["{makani.district}", "{makani.building}"]
+        logic-zh: 区内建筑中 physicalstatus 为 underConstruction / Under Construction 的数量。
+        logic-en: Buildings in the district with physicalstatus underConstruction / Under Construction.
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.building} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+          WHERE x.physicalstatus IN ('underConstruction', 'Under Construction')
+
+      # ---------------------------------------------------------------- makani · 公共设施
+      schools:
+        name-zh: 学校
+        name-en: Schools
+        source: makani
+        stat-column: stat_district_makani.schools
+        source-tables: ["{makani.district}", "{makani.school}"]
+        logic-zh: ADEK 学校点位落在区面内即计入。
+        logic-en: ADEK school points inside the district polygon.
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.school} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+
+      medical:
+        name-zh: 医疗设施
+        name-en: Health facilities
+        source: makani
+        stat-column: stat_district_makani.medical
+        source-tables: ["{makani.district}", "{makani.doh}"]
+        logic-zh: DOH 设施中 facility_category = 'Medical'、且英文名不匹配 {makani.medicalExclude}（去掉测试数据）的点位，落在区面内即计入。
+        logic-en: DOH facilities with facility_category = 'Medical' whose English name does not match {makani.medicalExclude} (test records), inside the district polygon.
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.doh} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+          WHERE x.facility_category = 'Medical'
+            AND NOT (coalesce(x.facility_name_in_english, '') ILIKE ANY (ARRAY[{makani.medicalExcludeSql}]))
+
+      mosques:
+        name-zh: 清真寺
+        name-en: Mosques
+        source: makani
+        stat-column: stat_district_makani.mosques
+        source-tables: ["{makani.district}", "{makani.mosque}"]
+        logic-zh: Awqaf 清真寺点位落在区面内即计入（全部清真寺）。
+        logic-en: Awqaf mosque points inside the district polygon (all mosques).
+        sql: |
+          WITH d AS (SELECT shape FROM {makani.district}
+                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+          SELECT count(*)
+          FROM d JOIN {makani.mosque} x
+            ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
+
+      # ---------------------------------------------------------------- Liveability
+      liv_current:
+        name-zh: 宜居得分 · 目前
+        name-en: Liveability · current
+        source: liveability
+        stat-column: stat_district_liveability.score_current
+        source-tables: ["fact_district_scores"]
+        logic-zh: stage = Pipeline、calc_version_id = 496（已发布版本）的 overall_score。
+        logic-en: overall_score with stage = Pipeline and calc_version_id = 496 (published).
+        sql: |
+          SELECT overall_score FROM fact_district_scores
+          WHERE district_id = :liv_district_id AND calc_version_id = 496 AND stage = 'Pipeline'
+
+      liv_existing:
+        name-zh: 宜居得分 · 现状
+        name-en: Liveability · existing
+        source: liveability
+        stat-column: stat_district_liveability.score_existing
+        source-tables: ["fact_district_scores"]
+        logic-zh: stage = Existing、calc_version_id = 496 的 overall_score。
+        logic-en: overall_score with stage = Existing and calc_version_id = 496.
+        sql: |
+          SELECT overall_score FROM fact_district_scores
+          WHERE district_id = :liv_district_id AND calc_version_id = 496 AND stage = 'Existing'
+
+      liv_target:
+        name-zh: 宜居得分 · 目标
+        name-en: Liveability · target
+        source: liveability
+        stat-column: stat_district_liveability.score_target
+        source-tables: ["fact_district_scores"]
+        logic-zh: stage = AP50、calc_version_id = 496 的 overall_score。
+        logic-en: overall_score with stage = AP50 and calc_version_id = 496.
+        sql: |
+          SELECT overall_score FROM fact_district_scores
+          WHERE district_id = :liv_district_id AND calc_version_id = 496 AND stage = 'AP50'
+
+      liv_gap:
+        name-zh: 宜居得分 · 差距
+        name-en: Liveability · gap
+        source: liveability
+        stat-column: 接口计算：max(0, score_target − score_current)
+        source-tables: ["fact_district_scores"]
+        logic-zh: 目标（AP50）− 目前（Pipeline），小于 0 记 0。
+        logic-en: Target (AP50) − current (Pipeline), floored at 0.
+        sql: |
+          SELECT greatest(0, max(overall_score) FILTER (WHERE stage = 'AP50')
+                            - max(overall_score) FILTER (WHERE stage = 'Pipeline'))
+          FROM fact_district_scores
+          WHERE district_id = :liv_district_id AND calc_version_id = 496
+
+      parks:
+        name-zh: 公园数
+        name-en: Parks
+        source: liveability
+        stat-column: stat_district_liveability.parks
+        source-tables: ["dim_facilities"]
+        logic-zh: 公园类设施（Park_Local / Park_Neighbourhoud / Park_District / Park_Other）中 stage = Existing 的数量。来源仍待产品确认（新原型把它列在 makani 下）。
+        logic-en: Park facilities (Park_Local / Park_Neighbourhoud / Park_District / Park_Other) with stage = Existing. Source still to be confirmed.
+        sql: |
+          SELECT count(*) FROM dim_facilities
+          WHERE district_id = :liv_district_id AND stage = 'Existing'
+            AND facility_type IN ('Park_Local', 'Park_Neighbourhoud', 'Park_District', 'Park_Other')
+
+      park_area_ha:
+        name-zh: 公园面积
+        name-en: Park area
+        source: liveability
+        stat-column: stat_district_liveability.park_area_ha
+        source-tables: ["fact_parks_demand"]
+        logic-zh: existing_sqm ÷ 10,000 换算成公顷（calc_version_id = 496）。
+        logic-en: existing_sqm ÷ 10,000 → hectares (calc_version_id = 496).
+        sql: |
+          SELECT existing_sqm / 10000.0 FROM fact_parks_demand
+          WHERE district_id = :liv_district_id AND calc_version_id = 496
+
+      park_gap_ha:
+        name-zh: 公园缺口
+        name-en: Park gap
+        source: liveability
+        stat-column: stat_district_liveability.park_gap_ha
+        source-tables: ["fact_parks_demand"]
+        logic-zh: (area_required_sqm − existing_sqm) ÷ 10,000，小于 0 记 0（calc_version_id = 496）。
+        logic-en: (area_required_sqm − existing_sqm) ÷ 10,000, floored at 0 (calc_version_id = 496).
+        sql: |
+          SELECT greatest(area_required_sqm - existing_sqm, 0) / 10000.0 FROM fact_parks_demand
+          WHERE district_id = :liv_district_id AND calc_version_id = 496
+
+      # ---------------------------------------------------------------- ADREC
+      re_sales:
+        name-zh: 成交额（近 12 个月）
+        name-en: Sales value (12 months)
+        source: adrec
+        stat-column: stat_district_adrec.sales_aed（页面 ÷ 10 亿显示为 bn）
+        source-tables: ["x_q21_matview_sale", "stat.map_adrec_community"]
+        logic-zh: 近 12 个月 sale_contract_date 内 sale_property_price_aed 求和；ADREC 是社区粒度，先按社区 → 区映射再汇总。
+        logic-en: Sum of sale_property_price_aed with sale_contract_date in the last 12 months, summed by district via the community → district mapping.
+        sql: |
+          SELECT sum(s.sale_property_price_aed)
+          FROM x_q21_matview_sale s
+          JOIN map_adrec_community m ON m.adrec_community_name = s.<社区字段>
+          WHERE m.district_code = ':district_code'
+            AND s.sale_contract_date >= <期末月往前 12 个月> AND s.sale_contract_date < <期末月次月>
+
+      re_yoy:
+        name-zh: 成交额同比
+        name-en: Sales YoY
+        source: adrec
+        stat-column: stat_district_adrec.sales_yoy_pct
+        source-tables: ["x_q21_matview_sale", "stat.map_adrec_community"]
+        logic-zh: （近 12 个月成交额 ÷ 上一个 12 个月成交额 − 1）× 100%。
+        logic-en: (last-12-month sales ÷ previous-12-month sales − 1) × 100%.
+        sql: |
+          SELECT 100.0 * (sum(price) FILTER (WHERE 近 12 个月) / sum(price) FILTER (WHERE 上一个 12 个月) - 1)
+          FROM x_q21_matview_sale ...   -- 同上，按社区 → 区映射
+
+      re_transactions:
+        name-zh: 成交宗数
+        name-en: Transactions
+        source: adrec
+        stat-column: stat_district_adrec.transactions
+        source-tables: ["x_q21_matview_sale", "stat.map_adrec_community"]
+        logic-zh: 近 12 个月 sale_application_id 计数。
+        logic-en: Count of sale_application_id in the last 12 months.
+        sql: |
+          SELECT count(s.sale_application_id)
+          FROM x_q21_matview_sale s ...   -- 近 12 个月，按社区 → 区映射
+
+      re_mortgages:
+        name-zh: 按揭
+        name-en: Mortgages
+        source: adrec
+        stat-column: stat_district_adrec.mortgages
+        source-tables: ["x_q21_matview_mortgage", "stat.map_adrec_community"]
+        logic-zh: 近 12 个月 mortgage_start_date 内的按揭数。
+        logic-en: Mortgages with mortgage_start_date in the last 12 months.
+        sql: |
+          SELECT count(*) FROM x_q21_matview_mortgage ...   -- 近 12 个月，按社区 → 区映射
+
+      re_price:
+        name-zh: 均价 AED/m²
+        name-en: Average price AED/m²
+        source: adrec
+        stat-column: stat_district_adrec.avg_price_sqm
+        source-tables: ["x_q21_matview_sale", "stat.map_adrec_community"]
+        logic-zh: 近 12 个月 property_sale_rate_aed_sqm 平均值。
+        logic-en: Average property_sale_rate_aed_sqm over the last 12 months.
+        sql: |
+          SELECT avg(s.property_sale_rate_aed_sqm) FROM x_q21_matview_sale s ...   -- 近 12 个月，按社区 → 区映射
+
+      re_leases:
+        name-zh: 在册租约
+        name-en: Active leases
+        source: adrec
+        stat-column: stat_district_adrec.active_leases
+        source-tables: ["x_q21_matview_rent", "stat.map_adrec_community"]
+        logic-zh: rent_contract_current_status = 有效 的租约数。
+        logic-en: Leases with rent_contract_current_status = active.
+        sql: |
+          SELECT count(*) FROM x_q21_matview_rent
+          WHERE rent_contract_current_status = '<有效>' ...   -- 按社区 → 区映射
+
+      re_monthly:
+        name-zh: 月度成交宗数
+        name-en: Monthly transactions
+        source: adrec
+        stat-column: stat_district_adrec_monthly.transactions
+        source-tables: ["x_q21_matview_sale", "stat.map_adrec_community"]
+        logic-zh: 按 sale_contract_date 所在月份统计 sale_application_id 数量，共 12 个月。
+        logic-en: Count of sale_application_id by month of sale_contract_date, 12 months.
+        sql: |
+          SELECT date_trunc('month', s.sale_contract_date) AS month, count(s.sale_application_id)
+          FROM x_q21_matview_sale s ...   -- 按社区 → 区映射
+          GROUP BY 1 ORDER BY 1

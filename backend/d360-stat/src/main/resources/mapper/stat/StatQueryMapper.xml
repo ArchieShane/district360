@@ -4,6 +4,7 @@
 
     <select id="listDistricts" resultType="com.district360.stat.row.DistrictListRow">
         SELECT d.code, d.name_en, d.name_ar, d.sort_no, d.mapping_confirmed, d.mapping_note,
+               d.makani_district_id, d.liv_district_id,
                ST_X(d.centroid) AS centroid_lon, ST_Y(d.centroid) AS centroid_lat,
                ST_XMin(d.bbox) AS min_lon, ST_YMin(d.bbox) AS min_lat,
                ST_XMax(d.bbox) AS max_lon, ST_YMax(d.bbox) AS max_lat,

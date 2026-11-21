@@ -226,3 +226,7 @@ button, input { font-family: inherit; }
   .dr { padding: 5px 9px; }
   .tb { top: 16px; }
 }
+
+/* 可查看指标来源的数值：悬浮出现虚线下划线 */
+[data-m] { cursor: help; border-radius: 3px; }
+[data-m]:hover { background: rgba(127, 183, 240, 0.12); box-shadow: 0 1px 0 0 rgba(169, 208, 247, 0.6); }

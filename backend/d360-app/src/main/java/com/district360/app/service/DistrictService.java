@@ -47,6 +47,7 @@ public class DistrictService {
         boolean livLoaded = rowCount("liveability") > 0;
         return query.listDistricts().stream().map(r -> new DistrictListItem(
                 r.code, r.nameEn, r.nameAr, r.sortNo, r.mappingConfirmed, r.mappingNote,
+                r.makaniDistrictId, r.livDistrictId,
                 r.centroidLon == null ? null : new double[]{r.centroidLon, r.centroidLat},
                 r.minLon == null ? null : new double[]{r.minLon, r.minLat, r.maxLon, r.maxLat},
                 r.areaKm2,

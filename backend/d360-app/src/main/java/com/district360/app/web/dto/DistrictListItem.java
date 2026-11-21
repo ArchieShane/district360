@@ -16,6 +16,8 @@ public record DistrictListItem(
         int sortNo,
         boolean mappingConfirmed,
         String mappingNote,
+        Integer makaniDistrictId,
+        Integer livDistrictId,
         double[] centroid,
         double[] bbox,
         BigDecimal areaKm2,

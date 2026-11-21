@@ -10,6 +10,8 @@ public class DistrictListRow {
     public int sortNo;
     public boolean mappingConfirmed;
     public String mappingNote;
+    public Integer makaniDistrictId;
+    public Integer livDistrictId;
     public Double centroidLon;
     public Double centroidLat;
     public Double minLon;

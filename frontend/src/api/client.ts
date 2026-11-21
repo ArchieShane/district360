@@ -1,4 +1,4 @@
-import type { ApiResponse, DistrictListItem, DistrictOverview, MetaInfo } from './types'
+import type { ApiResponse, DistrictListItem, DistrictOverview, LineageInfo, MetaInfo } from './types'
 
 const BASE = '/api/v1'
 
@@ -15,6 +15,7 @@ export const api = {
   districts: () => get<DistrictListItem[]>('/districts'),
   overview: (code: string) => get<DistrictOverview>(`/districts/${encodeURIComponent(code)}/overview`),
   meta: () => get<MetaInfo>('/meta'),
+  lineage: () => get<LineageInfo>('/lineage'),
   boundariesUrl: () => `${location.origin}${BASE}/map/districts.geojson`,
   buildingTilesUrl: () => `${location.origin}${BASE}/map/tiles/buildings/{z}/{x}/{y}.pbf`,
 }
