@@ -7,7 +7,7 @@ import { useDistrictStore } from '../stores/district'
 /**
  * 指标血缘悬浮提示：页面上任何带 data-m="<指标键>" 的元素，鼠标悬浮时显示
  * 该值读的是哪个库 / 表、源头是哪个库 / 表、怎么算的、对应 SQL（已代入当前区的 ID）。
- * 可选 data-code="<区编码>"，默认取当前选中的区。
+ * 可选 data-code="<区编码>"，默认取当前选中的区。鼠标停留 3 秒后才显示。
  */
 const store = useDistrictStore()
 const { t, locale } = useI18n()
@@ -59,22 +59,46 @@ function scopeLabel(name: string, makaniId: number | null) {
   return zh.value ? `<${name} 的统计范围：makani 区面${id}>` : `<scope of ${name}: makani polygon${id}>`
 }
 
+/** 鼠标在数值上停留多久才显示（毫秒） */
+const SHOW_DELAY_MS = 3000
+let showTimer: number | undefined
+/** 正在等待显示 / 已经显示的那个数值元素 */
+let hoverEl: HTMLElement | null = null
+
 function onOver(e: MouseEvent) {
   const target = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-m]')
-  if (!target) return
+  if (!target || target === hoverEl) return
   const key = target.dataset.m!
   if (!store.lineage?.metrics[key]) return
-  window.clearTimeout(hideTimer)
-  active.value = { key, code: target.dataset.code ?? null, rect: target.getBoundingClientRect() }
-  copied.value = false
-  void nextTick(place)
+  // 换到了另一个数值：重新计时，停留满 SHOW_DELAY_MS 才显示
+  hoverEl = target
+  window.clearTimeout(showTimer)
+  if (active.value) scheduleHide()
+  showTimer = window.setTimeout(() => {
+    if (hoverEl !== target || !target.isConnected) return
+    window.clearTimeout(hideTimer)
+    active.value = { key, code: target.dataset.code ?? null, rect: target.getBoundingClientRect() }
+    copied.value = false
+    void nextTick(place)
+  }, SHOW_DELAY_MS)
 }
 
 function onOut(e: MouseEvent) {
-  const from = (e.target as HTMLElement | null)?.closest('[data-m]')
+  const from = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-m]')
   if (!from) return
   const to = e.relatedTarget as Node | null
   if (to && (from.contains(to) || box.value?.contains(to))) return
+  // 没停够就移开：取消计时；已显示：稍后收起（允许把鼠标移进提示框里复制 SQL）
+  if (from === hoverEl) {
+    hoverEl = null
+    window.clearTimeout(showTimer)
+  }
+  scheduleHide()
+}
+
+function onBoxLeave() {
+  hoverEl = null
+  window.clearTimeout(showTimer)
   scheduleHide()
 }
 
@@ -115,6 +139,8 @@ onMounted(() => {
   document.addEventListener('mouseout', onOut)
 })
 onBeforeUnmount(() => {
+  window.clearTimeout(showTimer)
+  window.clearTimeout(hideTimer)
   document.removeEventListener('mouseover', onOver)
   document.removeEventListener('mouseout', onOut)
 })
@@ -127,7 +153,7 @@ onBeforeUnmount(() => {
     class="ltip"
     :style="{ left: pos.left + 'px', top: pos.top + 'px' }"
     @mouseenter="keepOpen"
-    @mouseleave="scheduleHide"
+    @mouseleave="onBoxLeave"
   >
     <div class="lt-h">
       <b>{{ zh ? metric.nameZh : metric.nameEn }}</b>
