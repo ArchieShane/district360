@@ -8,9 +8,9 @@ const PAGE_SIZE = 30
 
 /**
  * 页面状态。
- * - 地图数据（ADM 全部区的边界 + 属性）一次性加载，用于地图、悬停提示、选中区；
+ * - 地图数据（makani 全部区的边界 + 属性）一次性加载，用于地图、悬停提示、选中区；
  * - 左侧列表分页加载：滚动到底再取下一页，搜索交给后端；
- * - 选中区、语言与 URL hash（#d=al-reem-island&l=en）同步。
+ * - 选中区、语言与 URL hash（#d=adm-al-reem-island&l=en）同步。
  */
 export const useDistrictStore = defineStore('district', () => {
   const boundaries = ref<DistrictFeatureCollection | null>(null)
@@ -44,14 +44,16 @@ export const useDistrictStore = defineStore('district', () => {
   })
   const selected = computed(() => (selectedCode.value ? features.value.get(selectedCode.value) ?? null : null))
   const overview = computed(() => (selectedCode.value ? overviews.value[selectedCode.value] ?? null : null))
+  /** 数据版本：最近一次 makani 抽取完成时间，用于地图数据和建筑瓦片的缓存失效 */
+  const dataVersion = computed(() => meta.value?.sources.find(s => s.source === 'makani')?.lastFinishedAt ?? 'init')
 
   async function load() {
     const listReady = resetList('') // 列表第一页与地图数据并行加载
     try {
-      const [b, m, lin] = await Promise.all([api.boundaries(), api.meta(), api.lineage()])
-      boundaries.value = b
+      const [m, lin] = await Promise.all([api.meta(), api.lineage()])
       meta.value = m
       lineage.value = lin
+      boundaries.value = await api.boundaries(dataVersion.value)
       readHash()
     } catch (e) {
       error.value = (e as Error).message
@@ -145,6 +147,6 @@ export const useDistrictStore = defineStore('district', () => {
   return {
     boundaries, features, meta, lineage, selectedCode, hoveredCode, overviews, loadingOverview, error, lang, notesOpen, homeTick,
     list, listTotal, listHasMore, listLoading, listQuery,
-    selected, overview, load, resetList, loadMore, select, deselect, goHome, setLang, readHash,
+    selected, overview, dataVersion, load, resetList, loadMore, select, deselect, goHome, setLang, readHash,
   }
 })

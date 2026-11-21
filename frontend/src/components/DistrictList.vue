@@ -72,6 +72,7 @@ onBeforeUnmount(() => {
       >
         <i></i>
         <span class="n">{{ d.nameEn }}</span>
+        <span class="mu" data-m="municipality" :data-code="d.code">{{ d.municipality }}</span>
         <span class="p" data-m="area_km2" :data-code="d.code">{{ d.areaKm2 != null ? nf(d.areaKm2, 2) + ' km²' : '—' }}</span>
       </button>
       <div ref="sentinel" class="sentinel"></div>

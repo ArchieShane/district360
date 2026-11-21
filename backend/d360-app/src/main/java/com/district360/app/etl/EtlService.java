@@ -92,7 +92,7 @@ public class EtlService {
     }
 
     /**
-     * makani 抽取器自己从 makani 产出区列表（传空列表）；其他源拿到 ADM 全部区及其统计范围（makani 原始区面），
+     * makani 抽取器自己从 makani 产出区列表（传空列表）；其他源拿到全部区及其统计范围（makani 原始区面），
      * 按范围做空间查询，不依赖各库自己的区 ID / 区名。
      */
     private List<DistrictRef> districtsFor(String source) {
@@ -100,7 +100,7 @@ public class EtlService {
             return List.of();
         }
         List<DistrictRef> districts = query.listScopes().stream()
-                .map(r -> new DistrictRef(r.code, r.nameEn, r.makaniDistrictId, r.scopeHex))
+                .map(r -> new DistrictRef(r.code, r.nameEn, r.municipality, r.makaniDistrictId, r.scopeHex))
                 .toList();
         if (districts.isEmpty()) {
             throw new IllegalStateException("统计库里还没有区，请先执行 makani 抽取");

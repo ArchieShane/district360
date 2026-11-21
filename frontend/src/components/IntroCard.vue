@@ -5,7 +5,7 @@ import { useDistrictStore } from '../stores/district'
 
 const store = useDistrictStore()
 const { t } = useI18n()
-const first = computed(() => store.features.get('al-reem-island') ?? store.boundaries?.features[0]?.properties ?? null)
+const first = computed(() => store.features.get('adm-al-reem-island') ?? store.boundaries?.features[0]?.properties ?? null)
 </script>
 
 <template>

@@ -8,7 +8,7 @@ import { useDistrictStore } from '../stores/district'
 import { escapeHtml, nf } from '../utils/format'
 
 /**
- * 在线底图（MapLibre，默认 CARTO dark-matter）+ ADM 全部区的边界与名称标签 + 建筑 MVT 3D 拉伸。
+ * 在线底图（MapLibre，默认 CARTO dark-matter）+ makani 全部区的边界与名称标签 + 建筑 MVT 3D 拉伸。
  * 区名用文字图层（自动避让重叠）；选中区：边界光墙、建筑提亮、区外压暗、卡片式标签、飞行定位。
  */
 const props = defineProps<{ panelWidth: number; listWidth: number }>()
@@ -120,7 +120,7 @@ function addLayers(fc: DistrictFeatureCollection) {
   map.addSource('districts', { type: 'geojson', data: fc as unknown as GeoJSON.FeatureCollection })
   map.addSource('district-points', { type: 'geojson', data: points(fc) })
   map.addSource('buildings', {
-    type: 'vector', tiles: [api.buildingTilesUrl()], minzoom: 12, maxzoom: 16, attribution: 'Buildings © makani',
+    type: 'vector', tiles: [api.buildingTilesUrl(store.dataVersion)], minzoom: 12, maxzoom: 16, attribution: 'Buildings © makani',
   })
 
   map.addLayer({

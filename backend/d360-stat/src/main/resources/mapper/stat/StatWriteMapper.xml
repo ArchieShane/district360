@@ -5,8 +5,8 @@
     <delete id="deleteAllDistricts">DELETE FROM stat.dim_district</delete>
 
     <insert id="insertDistrict">
-        INSERT INTO stat.dim_district (code, name_en, name_ar, sort_no, makani_district_id, makani_name, centroid, bbox, boundary, scope, updated_at)
-        VALUES (#{d.code}, #{d.nameEn}, #{d.nameAr}, #{d.sortNo}, #{d.makaniDistrictId}, #{d.makaniName},
+        INSERT INTO stat.dim_district (code, name_en, name_ar, sort_no, municipality, makani_district_id, makani_name, centroid, bbox, boundary, scope, updated_at)
+        VALUES (#{d.code}, #{d.nameEn}, #{d.nameAr}, #{d.sortNo}, #{d.municipality}, #{d.makaniDistrictId}, #{d.makaniName},
                 ST_SetSRID(ST_MakePoint(#{d.centroidLon}, #{d.centroidLat}), 4326),
                 ST_MakeEnvelope(#{d.minLon}, #{d.minLat}, #{d.maxLon}, #{d.maxLat}, 4326),
                 ST_Multi(ST_GeomFromEWKB(decode(#{d.boundaryEwkbHex}, 'hex'))),

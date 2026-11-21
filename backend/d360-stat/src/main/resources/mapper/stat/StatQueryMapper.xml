@@ -6,12 +6,13 @@
         <where>
             <if test="q != null and q != ''">
                 d.name_en ILIKE '%' || #{q} || '%' OR d.makani_name ILIKE '%' || #{q} || '%' OR d.name_ar ILIKE '%' || #{q} || '%'
+                OR d.municipality ILIKE #{q}
             </if>
         </where>
     </sql>
 
     <select id="listDistricts" resultType="com.district360.stat.row.DistrictListRow">
-        SELECT d.code, d.name_en, d.name_ar, d.sort_no, d.makani_district_id,
+        SELECT d.code, d.name_en, d.name_ar, d.sort_no, d.municipality, d.makani_district_id,
                ST_X(d.centroid) AS centroid_lon, ST_Y(d.centroid) AS centroid_lat,
                ST_XMin(d.bbox) AS min_lon, ST_YMin(d.bbox) AS min_lat,
                ST_XMax(d.bbox) AS max_lon, ST_YMax(d.bbox) AS max_lat,
@@ -55,6 +56,7 @@
                            'nameEn', d.name_en,
                            'nameAr', d.name_ar,
                            'sortNo', d.sort_no,
+                           'municipality', d.municipality,
                            'makaniDistrictId', d.makani_district_id,
                            'areaKm2', m.area_km2,
                            'liveabilityScore', l.score_current,
@@ -107,7 +109,7 @@
     </select>
 
     <select id="listScopes" resultType="com.district360.stat.row.ScopeRow">
-        SELECT code, name_en, makani_district_id, encode(ST_AsEWKB(scope), 'hex') AS scope_hex
+        SELECT code, name_en, municipality, makani_district_id, encode(ST_AsEWKB(scope), 'hex') AS scope_hex
         FROM stat.dim_district WHERE scope IS NOT NULL ORDER BY sort_no
     </select>
 </mapper>

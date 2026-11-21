@@ -29,7 +29,6 @@ import java.util.NoSuchElementException;
 public class DistrictService {
 
     private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyy-MM");
-    private static final String MUNICIPALITY = "ADM";
 
     private final StatQueryMapper query;
     private final LandUseProperties landUse;
@@ -48,7 +47,7 @@ public class DistrictService {
         boolean livReal = livSourceReal();
         int total = query.countDistricts(filter);
         List<DistrictListItem> items = query.listDistricts(filter, p * n, n).stream().map(r -> new DistrictListItem(
-                r.code, r.nameEn, r.nameAr, r.sortNo, r.makaniDistrictId,
+                r.code, r.nameEn, r.nameAr, r.sortNo, r.municipality, r.makaniDistrictId,
                 r.centroidLon == null ? null : new double[]{r.centroidLon, r.centroidLat},
                 r.minLon == null ? null : new double[]{r.minLon, r.minLat, r.maxLon, r.maxLat},
                 r.areaKm2,
@@ -72,7 +71,7 @@ public class DistrictService {
         String adrecStatus = !adrecPresent ? BlockStatus.UNAVAILABLE
                 : Boolean.TRUE.equals(r.adrecSample) ? BlockStatus.SAMPLE : BlockStatus.OK;
 
-        var header = new DistrictOverview.Header(r.code, r.nameEn, r.nameAr, MUNICIPALITY, r.makaniDistrictId, r.areaKm2,
+        var header = new DistrictOverview.Header(r.code, r.nameEn, r.nameAr, r.municipality, r.makaniDistrictId, r.areaKm2,
                 r.communities, r.plots);
 
         BigDecimal gap = (r.scoreTarget != null && r.scoreCurrent != null)

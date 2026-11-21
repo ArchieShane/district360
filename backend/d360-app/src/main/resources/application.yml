@@ -39,7 +39,6 @@ d360:
   makani:
     schema: ods
     table-prefix: ods_makani_
-    municipality: ADM
     boundary-simplify-tolerance: 0.00003
     medical-exclude-name-patterns: ["%test%"]
 

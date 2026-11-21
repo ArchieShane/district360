@@ -4,6 +4,7 @@ package com.district360.stat.row;
 public class ScopeRow {
     public String code;
     public String nameEn;
+    public String municipality;
     public Integer makaniDistrictId;
     public String scopeHex;
 }

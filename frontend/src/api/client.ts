@@ -17,13 +17,14 @@ export const api = {
     if (q) p.set('q', q)
     return get<PageResult<DistrictListItem>>(`/districts?${p}`)
   },
-  boundaries: async (): Promise<DistrictFeatureCollection> => {
-    const res = await fetch(`${BASE}/map/districts.geojson`)
+  /** v = 数据版本（最近一次 makani 抽取完成时间），数据重新抽取后地址变化，避免浏览器用到旧缓存 */
+  boundaries: async (v: string): Promise<DistrictFeatureCollection> => {
+    const res = await fetch(`${BASE}/map/districts.geojson?v=${encodeURIComponent(v)}`)
     if (!res.ok) throw new Error(`请求失败：${res.status}`)
     return res.json()
   },
   overview: (code: string) => get<DistrictOverview>(`/districts/${encodeURIComponent(code)}/overview`),
   meta: () => get<MetaInfo>('/meta'),
   lineage: () => get<LineageInfo>('/lineage'),
-  buildingTilesUrl: () => `${location.origin}${BASE}/map/tiles/buildings/{z}/{x}/{y}.pbf`,
+  buildingTilesUrl: (v: string) => `${location.origin}${BASE}/map/tiles/buildings/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,
 }

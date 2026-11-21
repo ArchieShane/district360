@@ -11,7 +11,7 @@ const zh = {
   intro: {
     title: '每个区，一页看清',
     text: '点击地图上的任意一个区，或从左侧列表选择，查看该区的宜居、土地与建设、房地产和公共设施。',
-    districts: '个区（阿布扎比市政 ADM）',
+    districts: '个区（makani 全部区）',
     blocks: '类区情信息',
     go: '从 {name} 开始',
   },
@@ -23,14 +23,14 @@ const zh = {
     outside: '区外压暗',
     esc: 'Esc 关闭 · 点击其他区切换',
   },
-  panel: { kicker: 'District 360 · ADM', close: '关闭' },
+  panel: { kicker: 'District 360', close: '关闭' },
+  muni: { ADM: '阿布扎比市政', AAM: '艾因市政', WRM: '宰夫拉地区市政' },
   chips: {
     communities: '个社区',
     plots: '地块',
-    muni: '阿布扎比市政 ADM',
   },
   block: { summary: '摘要', liveability: '宜居得分', land: '土地与建设', realEstate: '房地产 · 近 12 个月', facilities: '公共设施' },
-  status: { sample: '样例数值', notAssessed: '未纳入评估', unavailable: '暂无数据' },
+  status: { sample: '样例数值', notAssessed: '未纳入评估', unavailable: '没有查询到数据' },
   src: { makani: 'makani', liveability: '宜居评估', adrec: 'ADREC' },
   liv: { target: '目标', gap: '差距', existing: '现状', current: '目前' },
   land: {
@@ -42,7 +42,7 @@ const zh = {
   },
   re: { sales: '成交额', yoy: '同比', tx: '成交宗数', mort: '按揭', price: '均价 AED/m²', lease: '在册租约', monthly: '月度成交宗数' },
   fac: { schools: '学校', health: '医疗', mosques: '清真寺', parks: '公园', gap: '公园缺口 ha' },
-  tip: { liveability: '宜居', notAssessed: '宜居未评估', click: '点击查看区情概览', selected: '已选中' },
+  tip: { liveability: '宜居', notAssessed: '宜居：没有查询到数据', click: '点击查看区情概览', selected: '已选中' },
   lineage: {
     page: '页面读取',
     source: '数据来源',
@@ -51,10 +51,10 @@ const zh = {
     sqlPlanned: '计划 SQL（尚未接入）',
     copy: '复制',
     copied: '已复制',
-    plannedNote: '该数据源尚未接入：当前显示的是原型样例值，下面是接入后的计划口径。',
-    state: { ok: '实测', sample: '样例数值', planned: '计划口径', not_assessed: '未纳入评估', unavailable: '暂无数据' },
+    plannedNote: '该数据源尚未接入，页面不显示数值（显示「没有查询到数据」）；下面是接入后的计划口径。',
+    state: { ok: '实测', sample: '样例数值', planned: '计划口径', not_assessed: '未纳入评估', unavailable: '没有查询到数据' },
   },
-  foot: { dataDate: '数据日期', sample: '样例', loading: '加载中…', error: '数据加载失败：{msg}' },
+  foot: { dataDate: '数据日期', sample: '样例', notConnected: '未接入', loading: '加载中…', error: '数据加载失败：{msg}' },
 }
 
 const en: typeof zh = {
@@ -68,7 +68,7 @@ const en: typeof zh = {
   intro: {
     title: 'Every district on one page',
     text: 'Click any district on the map, or pick one from the list, to see its liveability, land and construction, real estate and public facilities.',
-    districts: 'districts in Abu Dhabi City Municipality',
+    districts: 'districts (all makani districts)',
     blocks: 'information blocks',
     go: 'Start with {name}',
   },
@@ -80,14 +80,14 @@ const en: typeof zh = {
     outside: 'Outside dimmed',
     esc: 'Esc to close · click another district to switch',
   },
-  panel: { kicker: 'District 360 · ADM', close: 'Close' },
+  panel: { kicker: 'District 360', close: 'Close' },
+  muni: { ADM: 'Abu Dhabi City Municipality', AAM: 'Al Ain City Municipality', WRM: 'Al Dhafra Region Municipality' },
   chips: {
     communities: 'communities',
     plots: 'plots',
-    muni: 'Abu Dhabi City Municipality',
   },
   block: { summary: 'Summary', liveability: 'Liveability', land: 'Land & construction', realEstate: 'Real estate · last 12 months', facilities: 'Public facilities' },
-  status: { sample: 'Sample values', notAssessed: 'Not assessed', unavailable: 'No data yet' },
+  status: { sample: 'Sample values', notAssessed: 'Not assessed', unavailable: 'No data found' },
   src: { makani: 'makani', liveability: 'Liveability', adrec: 'ADREC' },
   liv: { target: 'Target', gap: 'gap', existing: 'Existing', current: 'Current' },
   land: {
@@ -99,7 +99,7 @@ const en: typeof zh = {
   },
   re: { sales: 'Sales value', yoy: 'YoY', tx: 'Transactions', mort: 'Mortgages', price: 'AED/m² average', lease: 'Leases', monthly: 'Monthly transactions' },
   fac: { schools: 'Schools', health: 'Health', mosques: 'Mosques', parks: 'Parks', gap: 'Park gap, ha' },
-  tip: { liveability: 'Liveability', notAssessed: 'Liveability not assessed', click: 'Click for the overview', selected: 'Selected' },
+  tip: { liveability: 'Liveability', notAssessed: 'Liveability: no data found', click: 'Click for the overview', selected: 'Selected' },
   lineage: {
     page: 'Read from',
     source: 'Source',
@@ -108,10 +108,10 @@ const en: typeof zh = {
     sqlPlanned: 'Planned SQL (not connected yet)',
     copy: 'Copy',
     copied: 'Copied',
-    plannedNote: 'This source is not connected yet: the value shown is a prototype sample; below is the planned method.',
-    state: { ok: 'Live', sample: 'Sample', planned: 'Planned', not_assessed: 'Not assessed', unavailable: 'No data' },
+    plannedNote: 'This source is not connected yet, so no value is shown ("No data found"); below is the planned method.',
+    state: { ok: 'Live', sample: 'Sample', planned: 'Planned', not_assessed: 'Not assessed', unavailable: 'No data found' },
   },
-  foot: { dataDate: 'Data dates', sample: 'sample', loading: 'Loading…', error: 'Failed to load data: {msg}' },
+  foot: { dataDate: 'Data dates', sample: 'sample', notConnected: 'not connected', loading: 'Loading…', error: 'Failed to load data: {msg}' },
 }
 
 export type Lang = 'zh' | 'en'

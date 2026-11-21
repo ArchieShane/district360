@@ -13,6 +13,7 @@ export interface DistrictListItem {
   nameEn: string
   nameAr: string | null
   sortNo: number
+  municipality: string
   makaniDistrictId: number | null
   centroid: [number, number] | null
   bbox: [number, number, number, number] | null
@@ -35,6 +36,7 @@ export interface DistrictFeatureProps {
   nameEn: string
   nameAr: string | null
   sortNo: number
+  municipality: string
   makaniDistrictId: number | null
   areaKm2: number | null
   liveabilityScore: number | null

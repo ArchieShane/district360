@@ -72,7 +72,6 @@ public class LineageService {
         Map<String, String> v = new LinkedHashMap<>();
         v.put("stat.db", describe(env.getProperty("d360.datasource.stat.url", "")));
         v.put("makani.db", describe(env.getProperty("d360.datasource.makani.url", "")));
-        v.put("makani.municipality", env.getProperty("d360.makani.municipality", "ADM"));
         v.put("makani.district", schema + "." + prefix + "udm_district");
         v.put("makani.community", schema + "." + prefix + "udm_community");
         v.put("makani.plot", schema + "." + prefix + "udm_plot");

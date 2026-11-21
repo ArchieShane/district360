@@ -9,7 +9,10 @@ public final class MakaniRows {
     }
 
     public static class District {
+        /** udm_district.objectid：区的唯一键 */
+        public Integer districtKey;
         public Integer makaniId;
+        public String municipality;
         public String makaniName;
         public String nameAr;
         public BigDecimal areaKm2;
@@ -24,12 +27,12 @@ public final class MakaniRows {
     }
 
     public static class Count {
-        public Integer makaniId;
+        public Integer districtKey;
         public int n;
     }
 
     public static class Plot {
-        public Integer makaniId;
+        public Integer districtKey;
         public int total;
         public int constructed;
         public int underConstruction;
@@ -38,19 +41,19 @@ public final class MakaniRows {
     }
 
     public static class BuildingStat {
-        public Integer makaniId;
+        public Integer districtKey;
         public int total;
         public int underConstruction;
     }
 
     public static class LandUse {
-        public Integer makaniId;
+        public Integer districtKey;
         public String useDesc;
         public int plotCount;
     }
 
     public static class Building {
-        public Integer makaniId;
+        public Integer districtKey;
         public String buildingId;
         public BigDecimal height;
         public boolean underConstruction;

@@ -2,6 +2,9 @@ import type { DistrictOverview } from '../api/types'
 import type { Lang } from '../i18n'
 import { escapeHtml, nf, sg } from './format'
 
+const MUNI_ZH: Record<string, string> = { ADM: '阿布扎比市政', AAM: '艾因市政', WRM: '宰夫拉地区市政' }
+const MUNI_EN: Record<string, string> = { ADM: 'Abu Dhabi City Municipality', AAM: 'Al Ain City Municipality', WRM: 'Al Dhafra Region Municipality' }
+
 /** 给数值包一层 data-m，鼠标悬浮可看指标来源（见 LineageTip.vue）。 */
 const m = (key: string, html: string) => `<span data-m="${key}">${html}</span>`
 
@@ -23,9 +26,9 @@ export function buildSummary(o: DistrictOverview, lang: Lang): string {
 
   if (lang === 'zh') {
     const z: string[] = []
-    z.push(`${name} 隶属阿布扎比市政（ADM）${d.areaKm2 != null ? `，面积 ${m('area_km2', `${nf(d.areaKm2, 2)} km²`)}` : ''}${hasLand ? `，含 ${m('communities', `${nf(d.communities)} 个社区`)}、${m('plots', `${nf(d.plots)} 个地块`)}` : ''}。`)
+    z.push(`${name} 隶属${m('municipality', `${MUNI_ZH[d.municipality] ?? d.municipality}（${d.municipality}）`)}${d.areaKm2 != null ? `，面积 ${m('area_km2', `${nf(d.areaKm2, 2)} km²`)}` : ''}${hasLand ? `，含 ${m('communities', `${nf(d.communities)} 个社区`)}、${m('plots', `${nf(d.plots)} 个地块`)}` : ''}。`)
     if (hasLand) {
-      z.push(`已建成地块占 ${m('plot_built_rate', `<b>${nf(land.plotBuiltRatePct, 1)}%</b>`)}，在建建筑 ${m('buildings_under_construction', `<b>${nf(land.buildingsUnderConstruction)}</b> 栋`)}${top && top.pct ? `，${m('land_use', `土地以${top.nameZh}为主（${nf(top.pct, 1)}%）`)}` : ''}。`)
+      z.push(`${land.plotBuiltRatePct != null ? `已建成地块占 ${m('plot_built_rate', `<b>${nf(land.plotBuiltRatePct, 1)}%</b>`)}，` : ''}在建建筑 ${m('buildings_under_construction', `<b>${nf(land.buildingsUnderConstruction)}</b> 栋`)}${top && top.pct ? `，${m('land_use', `土地以${top.nameZh}为主（${nf(top.pct, 1)}%）`)}` : ''}。`)
     }
     z.push(hasLv ? `宜居得分 ${m('liv_current', `<b>${nf(lv.current, 2)}</b>`)}，目标 ${m('liv_target', nf(lv.target, 2))}。` : lv.status === 'not_assessed' ? '该区未纳入宜居评估。' : '')
     if (hasRe) {
@@ -39,9 +42,9 @@ export function buildSummary(o: DistrictOverview, lang: Lang): string {
 
   const pl = (n: number | null, one: string, many: string) => `${nf(n)} ${n === 1 ? one : many}`
   const e: string[] = []
-  e.push(`${name} is in Abu Dhabi City Municipality (ADM)${d.areaKm2 != null ? `, covering ${m('area_km2', `${nf(d.areaKm2, 2)} km²`)}` : ''}${hasLand ? ` with ${m('communities', pl(d.communities, 'community', 'communities'))} and ${m('plots', pl(d.plots, 'plot', 'plots'))}` : ''}. `)
+  e.push(`${name} is in ${m('municipality', `${MUNI_EN[d.municipality] ?? d.municipality} (${d.municipality})`)}${d.areaKm2 != null ? `, covering ${m('area_km2', `${nf(d.areaKm2, 2)} km²`)}` : ''}${hasLand ? ` with ${m('communities', pl(d.communities, 'community', 'communities'))} and ${m('plots', pl(d.plots, 'plot', 'plots'))}` : ''}. `)
   if (hasLand) {
-    e.push(`${m('plot_built_rate', `<b>${nf(land.plotBuiltRatePct, 1)}%</b>`)} of plots are constructed and ${m('buildings_under_construction', `<b>${nf(land.buildingsUnderConstruction)}</b> ${land.buildingsUnderConstruction === 1 ? 'building is' : 'buildings are'}`)} under construction${top && top.pct ? `; ${m('land_use', `${top.nameEn.toLowerCase()} is the main land use (${nf(top.pct, 1)}%)`)}` : ''}. `)
+    e.push(`${land.plotBuiltRatePct != null ? `${m('plot_built_rate', `<b>${nf(land.plotBuiltRatePct, 1)}%</b>`)} of plots are constructed and ` : ''}${m('buildings_under_construction', `<b>${nf(land.buildingsUnderConstruction)}</b> ${land.buildingsUnderConstruction === 1 ? 'building is' : 'buildings are'}`)} under construction${top && top.pct ? `; ${m('land_use', `${top.nameEn.toLowerCase()} is the main land use (${nf(top.pct, 1)}%)`)}` : ''}. `)
   }
   e.push(hasLv ? `The liveability score is ${m('liv_current', `<b>${nf(lv.current, 2)}</b>`)} against a target of ${m('liv_target', nf(lv.target, 2))}. ` : lv.status === 'not_assessed' ? 'The district is outside the Liveability assessment. ' : '')
   if (hasRe) {

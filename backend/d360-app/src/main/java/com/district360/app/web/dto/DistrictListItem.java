@@ -14,6 +14,7 @@ public record DistrictListItem(
         String nameEn,
         String nameAr,
         int sortNo,
+        String municipality,
         Integer makaniDistrictId,
         double[] centroid,
         double[] bbox,

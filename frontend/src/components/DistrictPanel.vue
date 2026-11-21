@@ -45,7 +45,7 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
 <template>
   <aside class="pn">
     <div class="pnh">
-      <div class="pk"><span>{{ t('panel.kicker') }}</span></div>
+      <div class="pk"><span>{{ t('panel.kicker') }}{{ o ? ' · ' + o.district.municipality : '' }}</span></div>
       <div class="ptl">
         <h2>{{ store.selected?.nameEn ?? o?.district.nameEn }}</h2>
         <button type="button" :aria-label="t('panel.close')" @click="store.deselect()">×</button>
@@ -54,7 +54,7 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
         <span v-if="o.district.areaKm2 != null" class="chip" data-m="area_km2"><b>{{ nf(o.district.areaKm2, 2) }}</b> km²</span>
         <span v-if="o.district.communities != null" class="chip" data-m="communities"><b>{{ nf(o.district.communities) }}</b> {{ t('chips.communities') }}</span>
         <span v-if="o.district.plots != null" class="chip" data-m="plots"><b>{{ nf(o.district.plots) }}</b> {{ t('chips.plots') }}</span>
-        <span class="chip" data-m="municipality">{{ t('chips.muni') }}</span>
+        <span class="chip" data-m="municipality">{{ t('muni.' + o.district.municipality) }} {{ o.district.municipality }}</span>
       </div>
     </div>
 
@@ -155,13 +155,17 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
             <div data-m="schools"><b>{{ has(o.facilities.status) ? nf(o.facilities.schools) : '—' }}</b>{{ t('fac.schools') }}</div>
             <div data-m="medical"><b>{{ has(o.facilities.status) ? nf(o.facilities.medical) : '—' }}</b>{{ t('fac.health') }}</div>
             <div data-m="mosques"><b>{{ has(o.facilities.status) ? nf(o.facilities.mosques) : '—' }}</b>{{ t('fac.mosques') }}</div>
-            <div>
-              <span data-m="parks"><b>{{ has(o.facilities.parks.status) ? nf(o.facilities.parks.count) : '—' }}</b>{{ t('fac.parks') }}</span>
-              <small data-m="park_area_ha">{{ has(o.facilities.parks.status) ? nf(o.facilities.parks.areaHa, 1) + ' ha' : ' ' }}</small>
-            </div>
-            <div data-m="park_gap_ha">
-              <b>{{ has(o.facilities.parks.status) ? nf(o.facilities.parks.gapHa, 1) : '—' }}</b>{{ t('fac.gap') }}
-              <small>{{ o.facilities.parks.status === 'not_assessed' ? t('status.notAssessed') : ' ' }}</small>
+            <template v-if="has(o.facilities.parks.status)">
+              <div>
+                <span data-m="parks"><b>{{ nf(o.facilities.parks.count) }}</b>{{ t('fac.parks') }}</span>
+                <small data-m="park_area_ha">{{ nf(o.facilities.parks.areaHa, 1) }} ha</small>
+              </div>
+              <div data-m="park_gap_ha"><b>{{ nf(o.facilities.parks.gapHa, 1) }}</b>{{ t('fac.gap') }}</div>
+            </template>
+            <!-- 宜居未接入：公园两项不显示数值 -->
+            <div v-else class="nodata2" data-m="parks">
+              {{ t('fac.parks') }} / {{ t('fac.gap') }}
+              <small>{{ o.facilities.parks.status === 'not_assessed' ? t('status.notAssessed') : t('status.unavailable') }}</small>
             </div>
           </div>
         </div>

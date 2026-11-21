@@ -1,6 +1,6 @@
 # District 360 · 区情概览
 
-阿布扎比市政（ADM）全部 101 个区的单页区情概览（区列表以 makani 数据库为准）：点击地图上的区，3D 场景高亮该区，右侧弹出一页概览（宜居、土地与建设、房地产、公共设施）。
+阿布扎比酋长国 makani 全部 216 个区（ADM 101、AAM 69、WRM 46）的单页区情概览（区列表以数据库为准）：点击地图上的区，3D 场景高亮该区，右侧弹出一页概览（宜居、土地与建设、房地产、公共设施）。
 
 - 原型：`docs/District_360_区情概览_单页__20261121更新.html`
 - 字段口径：`docs/District360_数据字段对照_2026112101.xlsx`
@@ -20,7 +20,9 @@ ADREC ───────┘ AdrecExtractor        （房地产组）
      Spring Boot REST /api/v1  ──►  Vue3 + MapLibre（在线底图 + 建筑 3D 瓦片）
 ```
 
-**区列表以数据库为准**：makani `udm_district` 中 `municipalityname = 'ADM'` 的全部区（101 个），区编码由区名生成（如 `AL REEM ISLAND` → `al-reem-island`，页面链接 `#d=al-reem-island`）。不再维护区清单配置。
+**区列表以数据库为准**：makani `udm_district` 中的全部区（216 个，所有市政），按区名排序。区名跨市政会重复（如 AAM 和 ADM 都有 AL BATEEN），所以区编码是「市政 + 区名」，如 `adm-al-reem-island`（页面链接 `#d=adm-al-reem-island`）。不维护区清单配置。
+
+**没有数据就不显示数值**：某个数据源还没接入（或该区在源库里没有数据）时，对应区块显示「没有查询到数据」，不显示任何样例数值，便于区分哪些数据已经做完。
 
 **统计口径：三个库都按「统计范围」做空间查询。** 统计范围 = 每个区的 makani 原始区面（存于 `stat.dim_district.scope`）。各库的区 ID / 区名可能不一致，但范围一致；已验证 Liveability 的区面与 makani 区面基本重合（IoU ≥ 0.997）。
 
@@ -32,7 +34,7 @@ ADREC ───────┘ AdrecExtractor        （房地产组）
 backend/                      Spring Boot 3.5 · JDK 17 · MyBatis · Flyway
 ├─ d360-common                契约：统一返回体、DistrictRef（区 + 统计范围）、StatExtractor 接口、三个源的快照类型
 ├─ d360-stat                  统计库：数据源、Flyway 建表（db/migration）、写入、读查询
-├─ d360-makani                makani 抽取：产出区列表（ADM 全部区）、区面，并按区面做空间汇总
+├─ d360-makani                makani 抽取：产出区列表（全部区，所有市政）、区面，并按区面做空间汇总
 ├─ d360-liveability           宜居抽取（骨架，待宜居组实现）
 ├─ d360-adrec                 ADREC 抽取（骨架，待房地产组实现）
 └─ d360-app                   启动类、接口、定时调度；配置 application.yml、指标来源 metric-lineage.yml
@@ -53,8 +55,8 @@ cd backend && mvn -B -DskipTests package && java -jar d360-app/target/district36
 ```
 
 启动时会自动：
-1. Flyway 在统计库建表（`stat` schema），并写入宜居 / ADREC 的样例数据（`is_sample = true`）；
-2. 如果 makani 统计表还是空的，后台跑一次 makani 抽取：从 makani 读出 ADM 全部 101 个区（区名、区面）及各项计数、14.6 万栋建筑，约 35 秒。
+1. Flyway 在统计库建表（`stat` schema）；
+2. 如果 makani 统计表还是空的，后台跑一次 makani 抽取：从 makani 读出全部 216 个区（区名、区面）及各项计数、38.3 万栋建筑，约 80 秒。
 
 ### 前端
 
@@ -80,7 +82,7 @@ cd frontend && npm install && npm run dev
 
 | 接口 | 用途 |
 |---|---|
-| `GET /api/v1/districts?page=0&size=30&q=` | 区列表分页（ADM 全部区，按英文名排序）：左侧列表滚动到底加载下一页，`q` 按区名搜索 |
+| `GET /api/v1/districts?page=0&size=30&q=` | 区列表分页（全部区，按区名排序）：左侧列表滚动到底加载下一页，`q` 按区名或市政（ADM / AAM / WRM）搜索 |
 | `GET /api/v1/districts/{code}/overview` | 右侧面板：标题 + 宜居 / 土地与建设 / 房地产 / 公共设施，每块带 `status` 和 `asOf` |
 | `GET /api/v1/map/districts.geojson` | 全部区边界（EPSG:4326，已简化）及标签 / 悬停所需属性（中心点、外包框、面积、宜居得分），地图一次性加载 |
 | `GET /api/v1/map/tiles/buildings/{z}/{x}/{y}.pbf` | 建筑体块矢量瓦片（图层 `buildings`，属性 `code`、`height`、`uc`） |
@@ -88,7 +90,7 @@ cd frontend && npm install && npm run dev
 | `GET /api/v1/lineage` | 指标血缘：每个指标读哪个库 / 表、怎么算、对应 SQL（页面悬浮提示用） |
 | `POST /api/v1/admin/etl/{makani\|liveability\|adrec\|all}` | 手动触发抽取，请求头 `X-Admin-Token`（配置项 `d360.admin.token`，为空时禁用） |
 
-区块 `status`：`ok` 正常 · `sample` 样例数值 · `not_assessed` 未纳入宜居评估 · `unavailable` 暂无数据。
+区块 `status`：`ok` 正常 · `not_assessed` 未纳入宜居评估（宜居接入真实数据后才会出现）· `unavailable` 没有查询到数据。
 
 ## 指标来源（悬浮提示）
 
@@ -106,7 +108,7 @@ cd frontend && npm install && npm run dev
 4. 本地验证：`POST /api/v1/admin/etl/liveability`（或 `adrec`），看 `stat.etl_job_log` 和页面对应区块；
 5. 分支 `feature/liveability-*` / `feature/adrec-*`，PR 到 `main`。
 
-第一次成功抽取会整批替换掉该源的样例数据。统计表结构、快照类型、`StatExtractor` 接口由 makani 组维护，需要改动请提 PR。
+接入前页面对应区块显示「没有查询到数据」；第一次成功抽取后显示真实数值。统计表结构、快照类型、`StatExtractor` 接口由 makani 组维护，需要改动请提 PR。
 
 ## 待确认
 

@@ -8,6 +8,7 @@ public class DistrictListRow {
     public String nameEn;
     public String nameAr;
     public int sortNo;
+    public String municipality;
     public Integer makaniDistrictId;
     public Double centroidLon;
     public Double centroidLat;

@@ -4,11 +4,12 @@
 # 占位符在运行时替换成实际配置：
 #   {makani.db}          makani 源库名（取自 d360.datasource.makani.url，只显示库名）
 #   {makani.district} 等 makani 源表全名（schema + 前缀 + 表名，取自 d360.makani.*）
-#   {makani.municipality}、{makani.medicalExclude}
+#   {makani.medicalExclude}
 #   {landuse.mapping}    土地利用归类规则（取自 d360.land-use.groups）
 #   {stat.db}            统计库名（取自 d360.datasource.stat.url，只显示库名）
 # 以冒号开头的参数在前端按当前选中的区替换：
-#   :makani_district_id  makani udm_district.districtid
+#   :municipality        makani udm_district.municipalityname（ADM / AAM / WRM）
+#   :makani_district_id  makani udm_district.districtid（跨市政重复，须与 :municipality 一起用）
 #   :district_scope      统计范围 = 该区 makani 原始区面（EWKB）。宜居 / ADREC 都按这个范围做空间查询，
 #                        不用各库自己的区 ID，保证三个库口径一致
 #   :district_code       页面区编码
@@ -43,21 +44,21 @@ d360:
         sql: |
           SELECT round((ST_Area(ST_Transform(shape, 32640)) / 1e6)::numeric, 3) AS area_km2
           FROM {makani.district}
-          WHERE municipalityname = '{makani.municipality}'
+          WHERE municipalityname = ':municipality'
             AND districtid = :makani_district_id
 
       municipality:
         name-zh: 所属市政
         name-en: Municipality
         source: makani
-        stat-column: 固定值（区列表只含 makani 中 ADM 的区）
+        stat-column: dim_district.municipality
         source-tables: ["{makani.district}"]
-        logic-zh: 区面按 municipalityname = '{makani.municipality}' 过滤；districtid 在不同市政之间会重复，所以所有查询都带这个条件。
-        logic-en: Districts are filtered by municipalityname = '{makani.municipality}'; districtid repeats across municipalities, so every query carries this filter.
+        logic-zh: 取区面所在记录的 municipalityname（ADM 阿布扎比市政 / AAM 艾因市政 / WRM 宰夫拉地区市政）。districtid 在不同市政之间会重复，所以区按「市政 + districtid」唯一确定。
+        logic-en: municipalityname of the district record (ADM / AAM / WRM). districtid repeats across municipalities, so a district is identified by municipality + districtid.
         sql: |
           SELECT municipalityname
           FROM {makani.district}
-          WHERE municipalityname = '{makani.municipality}'
+          WHERE municipalityname = ':municipality'
             AND districtid = :makani_district_id
 
       communities:
@@ -70,7 +71,7 @@ d360:
         logic-en: A community counts when its centroid falls inside the district polygon (spatial summary).
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.community} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -86,7 +87,7 @@ d360:
         logic-en: A plot counts when its centroid falls inside the district polygon. Reflects the current makani source table as is.
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.plot} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -101,7 +102,7 @@ d360:
         logic-en: Plots in the district with construction_status = 'Constructed'.
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.plot} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -117,7 +118,7 @@ d360:
         logic-en: Plots in the district with construction_status = 'Under Construction'.
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.plot} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -133,7 +134,7 @@ d360:
         logic-en: Plots with construction_status = 'Not Constructed' and servicestatus = 'available'.
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.plot} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -150,7 +151,7 @@ d360:
         logic-en: Plots with construction_status = 'Not Constructed' and servicestatus in (notAvailable, notAvailableHaveConsNOC); 'undefined' is not counted in any class.
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.plot} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -167,7 +168,7 @@ d360:
         logic-en: Built plots ÷ all plots × 100%, 1 decimal.
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT round(100.0 * count(*) FILTER (WHERE x.construction_status = 'Constructed') / count(*), 1)
           FROM d JOIN {makani.plot} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -182,7 +183,7 @@ d360:
         logic-en: "Plots grouped by primaryuseengdesc, then mapped to page classes: {landuse.mapping}; unlisted uses (e.g. Investment, Utility, Industrial, Undefined) go to 'Utilities & other'. Share = class plots ÷ all plots in the district. Shown on the panel: {landuse.highlight}."
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT coalesce(nullif(trim(x.primaryuseengdesc), ''), 'Undefined') AS use_desc, count(*) AS plot_count
           FROM d JOIN {makani.plot} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -199,7 +200,7 @@ d360:
         logic-en: A building counts when its footprint centroid falls inside the district polygon (all physical statuses).
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.building} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -214,7 +215,7 @@ d360:
         logic-en: Buildings in the district with physicalstatus underConstruction / Under Construction.
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.building} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -231,7 +232,7 @@ d360:
         logic-en: ADEK school points inside the district polygon.
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.school} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -246,7 +247,7 @@ d360:
         logic-en: DOH facilities with facility_category = 'Medical' whose English name does not match {makani.medicalExclude} (test records), inside the district polygon.
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.doh} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))
@@ -263,7 +264,7 @@ d360:
         logic-en: Awqaf mosque points inside the district polygon (all mosques).
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
-                     WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
+                     WHERE municipalityname = ':municipality' AND districtid = :makani_district_id)
           SELECT count(*)
           FROM d JOIN {makani.mosque} x
             ON x.shape && d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))

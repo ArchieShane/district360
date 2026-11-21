@@ -20,7 +20,7 @@ const listWidth = computed(() => (vw.value <= 1400 ? 214 : vw.value <= 1600 ? 23
 const onResize = () => (vw.value = window.innerWidth)
 
 const footSources = computed(() =>
-  (store.meta?.sources ?? []).map(s => `${t('src.' + s.source)} ${s.sample ? t('foot.sample') : dmy(s.sourceAsOf)}`).join(' · '),
+  (store.meta?.sources ?? []).map(s => `${t('src.' + s.source)} ${s.rowCount > 0 && !s.sample ? dmy(s.sourceAsOf) : t('foot.notConnected')}`).join(' · '),
 )
 
 const onHash = () => store.readHash()

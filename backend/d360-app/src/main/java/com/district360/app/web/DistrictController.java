@@ -27,7 +27,7 @@ public class DistrictController {
         this.lineage = lineage;
     }
 
-    /** 区列表（ADM 全部区，按英文名排序），分页：左侧列表滚动到底加载下一页；q 按区名搜索。 */
+    /** 区列表（makani 全部区，按区名排序），分页：左侧列表滚动到底加载下一页；q 按区名或市政搜索。 */
     @GetMapping("/districts")
     public ApiResponse<PageResult<DistrictListItem>> districts(@RequestParam(defaultValue = "0") int page,
                                                               @RequestParam(defaultValue = "30") int size,

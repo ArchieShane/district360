@@ -9,6 +9,7 @@ public class District360Row {
     public String nameEn;
     public String nameAr;
     public int sortNo;
+    public String municipality;
     public Integer makaniDistrictId;
 
     public BigDecimal areaKm2;

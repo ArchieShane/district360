@@ -25,19 +25,19 @@ const district = computed(() => {
 })
 const source = computed(() => (metric.value ? store.lineage?.sources[metric.value.source] ?? null : null))
 
-/** 当前值的状态：实测 / 样例 / 未纳入评估 / 暂无数据 */
+/** 当前值的状态：实测 / 未纳入评估 / 没有查询到数据 */
 const state = computed<BlockStatus | 'planned'>(() => {
   const m = metric.value
   if (!m) return 'unavailable'
   const o = store.overview && store.overview.district.code === district.value?.code ? store.overview : null
   const block: Record<SourceKey, BlockStatus | undefined> = {
     makani: o?.land.status,
-    liveability: o?.liveability.status ?? (district.value?.livSample ? 'sample' : undefined),
+    liveability: o?.liveability.status,
     adrec: o?.realEstate.status,
   }
   const s = block[m.source]
   if (s) return s
-  return source.value?.implemented ? 'ok' : 'sample'
+  return source.value?.implemented ? 'ok' : 'unavailable'
 })
 
 const sql = computed(() => {
@@ -45,6 +45,7 @@ const sql = computed(() => {
   if (!m?.sql) return null
   const d = district.value
   return m.sql
+    .replaceAll(':municipality', d?.municipality ?? ':municipality')
     .replaceAll(':makani_district_id', d?.makaniDistrictId != null ? String(d.makaniDistrictId) : ':makani_district_id')
     .replaceAll(':district_code', d?.code ?? ':district_code')
     .replaceAll(':district_scope', d ? scopeLabel(d.nameEn, d.makaniDistrictId) : ':district_scope')
