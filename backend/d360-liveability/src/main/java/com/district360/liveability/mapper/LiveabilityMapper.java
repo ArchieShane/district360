@@ -10,7 +10,8 @@ import java.util.Map;
  * <p>
  * 口径要求：<b>按统计范围做空间查询，不用区 ID</b>。参数 scope 是该区 makani 原始区面（EWKB hex，
  * 来自 {@code DistrictRef#scopeEwkbHex()}），已验证与 dim_districts.geom 基本重合（IoU ≥ 0.997）。
- * 指标口径见 docs/District360_数据字段对照_2026112101-2.xlsx 与 metric-lineage.yml。
+ * 指标口径参考 docs/District360_数据字段对照_*.xlsx（仅供参考，以与数据治理确认的为准）；确认后的取数方式写进 metric-lineage.yml，
+ * 页面悬停会展示。接入步骤见 docs/同事接入指南_宜居与ADREC.md。
  */
 public interface LiveabilityMapper {
 
