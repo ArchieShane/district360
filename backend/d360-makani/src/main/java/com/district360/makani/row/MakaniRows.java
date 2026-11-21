@@ -20,6 +20,7 @@ public final class MakaniRows {
         public double maxLon;
         public double maxLat;
         public String boundaryHex;
+        public String scopeHex;
     }
 
     public static class Count {

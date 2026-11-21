@@ -20,6 +20,8 @@ ADREC ───────┘ AdrecExtractor        （房地产组）
      Spring Boot REST /api/v1  ──►  Vue3 + MapLibre（在线底图 + 建筑 3D 瓦片）
 ```
 
+**统计口径：三个库都按「统计范围」做空间查询。** 统计范围 = 每个区的 makani 原始区面（存于 `stat.dim_district.scope`）。各库的区 ID / 区名可能不一致，但范围一致；已验证 Liveability 的区面与 makani 区面基本重合（IoU ≥ 0.997）。
+
 页面只有区级汇总数，没有明细，所以接口只读统计库：哪个源慢了、断了或者还没接入，页面都照常显示（显示上次抽取的结果，或者标「样例数值」/「暂无数据」）。
 
 ## 目录
@@ -99,7 +101,7 @@ cd frontend && npm install && npm run dev
 
 1. 在 `application-local.yml` 里配置自己的源库 `d360.datasource.liveability.*` 或 `d360.datasource.adrec.*`（配置了 `url` 模块才会启用）；
 2. 在 `resources/mapper/<模块>/*.xml` 写取数 SQL，实现 `LiveabilityExtractor` / `AdrecExtractor` 的 `extract()`，返回 `LiveabilitySnapshot` / `AdrecSnapshot`（定义在 `d360-common`，字段含义见类注释）；
-3. 区的对应关系用 `DistrictRef`：宜居用 `livDistrictId()`（为空表示不在评估范围，跳过即可）；ADREC 是社区粒度，把社区 → 区映射放进快照的 `communityMappings`；
+3. **按统计范围做空间查询，不用区 ID / 区名**：框架传进来的 `DistrictRef.scopeEwkbHex()` 就是该区的 makani 原始区面，SQL 里用 `ST_GeomFromEWKB(decode(#{scope}, 'hex'))`。区级表（如宜居得分）先用范围找重合面积最大的区，点位 / 记录按位置落在范围内计数。示例见 `LiveabilityMapper.xml` 和 `metric-lineage.yml`；
 4. 本地验证：`POST /api/v1/admin/etl/liveability`（或 `adrec`），看 `stat.etl_job_log` 和页面对应区块；
 5. 分支 `feature/liveability-*` / `feature/adrec-*`，PR 到 `main`。
 

@@ -44,7 +44,7 @@ public record AdrecSnapshot(
     public record Monthly(String code, YearMonth month, int transactions) {
     }
 
-    /** districtCode 为 null 表示该 ADREC 社区还没映射到页面的区。 */
+    /** 可选（可为空列表）：只能按社区匹配时，记录社区 → 区对应以便核对；districtCode 为 null 表示没落进任何区。 */
     public record CommunityMapping(String adrecCommunityName, String districtCode, String remark) {
     }
 }

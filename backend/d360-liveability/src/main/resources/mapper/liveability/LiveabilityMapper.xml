@@ -1,16 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <!--
-  TODO(宜居同事)：补全 SQL。
+  TODO(宜居同事)：补全 SQL。口径要求：按统计范围（makani 区面）做空间查询，不用区 ID。
+
+  可直接复用的两个片段：
+  1) 区级表（fact_district_scores、fact_parks_demand）：用范围找 dim_districts 里重合面积最大的区
+       <include refid="livDistrictByScope"/>  → 得到 district_id
+  2) 点位表（dim_facilities）：点落在范围内
+       ST_Intersects(ST_GeomFromEWKB(decode(#{scope}, 'hex')), f.geom)
+
+  指标：
   - 得分：fact_district_scores.overall_score，calc_version_id = 496，stage ∈ {Existing, Pipeline, AP50}
-  - 公园面积 / 缺口：fact_parks_demand.existing_sqm、area_required_sqm（calc_version_id = 496），单位换算成 ha，缺口小于 0 记 0
-  - 公园数：dim_facilities（facility_type ∈ Park_*，stage = Existing）——来源还在和产品确认
-  - 新原型不再显示人口，不要抽 fact_population
+  - 公园面积 / 缺口：fact_parks_demand.existing_sqm、area_required_sqm（calc_version_id = 496），换算成 ha，缺口小于 0 记 0
+  - 公园数：dim_facilities（facility_type ∈ Park_*，stage = Existing），点位落在范围内
+  - 新原型不显示人口，不要抽 fact_population
 -->
 <mapper namespace="com.district360.liveability.mapper.LiveabilityMapper">
 
+    <sql id="livDistrictByScope">
+        (SELECT d.district_id
+         FROM dim_districts d
+         WHERE d.geom &amp;&amp; ST_GeomFromEWKB(decode(#{scope}, 'hex'))
+         ORDER BY ST_Area(ST_Intersection(d.geom, ST_GeomFromEWKB(decode(#{scope}, 'hex')))) DESC
+         LIMIT 1)
+    </sql>
+
     <select id="districtStats" resultType="map">
-        SELECT NULL::int AS district_id WHERE false
+        SELECT <include refid="livDistrictByScope"/> AS district_id
     </select>
 
     <select id="dataDate" resultType="java.time.LocalDate">

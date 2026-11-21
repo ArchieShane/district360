@@ -48,9 +48,16 @@ const sql = computed(() => {
     .replaceAll(':makani_district_id', d?.makaniDistrictId != null ? String(d.makaniDistrictId) : ':makani_district_id')
     .replaceAll(':liv_district_id', d?.livDistrictId != null ? String(d.livDistrictId) : ':liv_district_id')
     .replaceAll(':district_code', d?.code ?? ':district_code')
+    .replaceAll(':district_scope', d ? scopeLabel(d.nameEn, d.makaniDistrictId) : ':district_scope')
 })
 
 const zh = computed(() => locale.value === 'zh')
+
+/** SQL 里的统计范围参数：说明它是哪个区的 makani 区面（实际执行时传入该区面的 EWKB） */
+function scopeLabel(name: string, makaniId: number | null) {
+  const id = makaniId != null ? ` districtid=${makaniId}` : ''
+  return zh.value ? `<${name} 的统计范围：makani 区面${id}>` : `<scope of ${name}: makani polygon${id}>`
+}
 
 function onOver(e: MouseEvent) {
   const target = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-m]')

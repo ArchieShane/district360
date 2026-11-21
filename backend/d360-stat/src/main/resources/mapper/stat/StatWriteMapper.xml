@@ -16,7 +16,7 @@
     </insert>
 
     <update id="clearMakaniGeometry">
-        UPDATE stat.dim_district SET makani_name = NULL, name_ar = NULL, centroid = NULL, bbox = NULL, boundary = NULL, updated_at = now()
+        UPDATE stat.dim_district SET makani_name = NULL, name_ar = NULL, centroid = NULL, bbox = NULL, boundary = NULL, scope = NULL, updated_at = now()
     </update>
 
     <update id="updateMakaniGeometry">
@@ -26,6 +26,7 @@
             centroid = ST_SetSRID(ST_MakePoint(#{d.centroidLon}, #{d.centroidLat}), 4326),
             bbox = ST_MakeEnvelope(#{d.minLon}, #{d.minLat}, #{d.maxLon}, #{d.maxLat}, 4326),
             boundary = ST_Multi(ST_GeomFromEWKB(decode(#{d.boundaryEwkbHex}, 'hex'))),
+            scope = ST_Multi(ST_GeomFromEWKB(decode(#{d.scopeEwkbHex}, 'hex'))),
             updated_at = now()
         WHERE code = #{d.code}
     </update>

@@ -9,7 +9,8 @@
 #   {stat.db}            统计库名（取自 d360.datasource.stat.url，只显示库名）
 # 以冒号开头的参数在前端按当前选中的区替换：
 #   :makani_district_id  makani udm_district.districtid
-#   :liv_district_id     Liveability dim_districts.district_id
+#   :district_scope      统计范围 = 该区 makani 原始区面（EWKB）。宜居 / ADREC 都按这个范围做空间查询，
+#                        不用各库自己的区 ID，保证三个库口径一致
 #   :district_code       页面区编码
 #
 # implemented 由后端按「该源的抽取器是否已启用」自动判断：未启用的源显示为「计划口径」。
@@ -273,50 +274,66 @@ d360:
         name-en: Liveability · current
         source: liveability
         stat-column: stat_district_liveability.score_current
-        source-tables: ["fact_district_scores"]
-        logic-zh: stage = Pipeline、calc_version_id = 496（已发布版本）的 overall_score。
-        logic-en: overall_score with stage = Pipeline and calc_version_id = 496 (published).
+        source-tables: ["dim_districts", "fact_district_scores"]
+        logic-zh: 按统计范围（makani 区面）在 dim_districts 里找重合面积最大的区，取该区 stage = Pipeline、calc_version_id = 496（已发布版本）的 overall_score。
+        logic-en: Find the Liveability district that overlaps the scope (makani polygon) most, then overall_score with stage = Pipeline, calc_version_id = 496.
         sql: |
+          WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
+               l AS (SELECT d.district_id FROM dim_districts d, s
+                     WHERE d.geom && s.g
+                     ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT overall_score FROM fact_district_scores
-          WHERE district_id = :liv_district_id AND calc_version_id = 496 AND stage = 'Pipeline'
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496 AND stage = 'Pipeline'
 
       liv_existing:
         name-zh: 宜居得分 · 现状
         name-en: Liveability · existing
         source: liveability
         stat-column: stat_district_liveability.score_existing
-        source-tables: ["fact_district_scores"]
-        logic-zh: stage = Existing、calc_version_id = 496 的 overall_score。
-        logic-en: overall_score with stage = Existing and calc_version_id = 496.
+        source-tables: ["dim_districts", "fact_district_scores"]
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），取 stage = Existing、calc_version_id = 496 的 overall_score。
+        logic-en: Match the Liveability district by scope (as above), then overall_score with stage = Existing, calc_version_id = 496.
         sql: |
+          WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
+               l AS (SELECT d.district_id FROM dim_districts d, s
+                     WHERE d.geom && s.g
+                     ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT overall_score FROM fact_district_scores
-          WHERE district_id = :liv_district_id AND calc_version_id = 496 AND stage = 'Existing'
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496 AND stage = 'Existing'
 
       liv_target:
         name-zh: 宜居得分 · 目标
         name-en: Liveability · target
         source: liveability
         stat-column: stat_district_liveability.score_target
-        source-tables: ["fact_district_scores"]
-        logic-zh: stage = AP50、calc_version_id = 496 的 overall_score。
-        logic-en: overall_score with stage = AP50 and calc_version_id = 496.
+        source-tables: ["dim_districts", "fact_district_scores"]
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），取 stage = AP50、calc_version_id = 496 的 overall_score。
+        logic-en: Match the Liveability district by scope (as above), then overall_score with stage = AP50, calc_version_id = 496.
         sql: |
+          WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
+               l AS (SELECT d.district_id FROM dim_districts d, s
+                     WHERE d.geom && s.g
+                     ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT overall_score FROM fact_district_scores
-          WHERE district_id = :liv_district_id AND calc_version_id = 496 AND stage = 'AP50'
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496 AND stage = 'AP50'
 
       liv_gap:
         name-zh: 宜居得分 · 差距
         name-en: Liveability · gap
         source: liveability
         stat-column: 接口计算：max(0, score_target − score_current)
-        source-tables: ["fact_district_scores"]
-        logic-zh: 目标（AP50）− 目前（Pipeline），小于 0 记 0。
-        logic-en: Target (AP50) − current (Pipeline), floored at 0.
+        source-tables: ["dim_districts", "fact_district_scores"]
+        logic-zh: 目标（AP50）− 目前（Pipeline），小于 0 记 0；区按统计范围匹配（同上）。
+        logic-en: Target (AP50) − current (Pipeline), floored at 0; district matched by scope (as above).
         sql: |
+          WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
+               l AS (SELECT d.district_id FROM dim_districts d, s
+                     WHERE d.geom && s.g
+                     ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT greatest(0, max(overall_score) FILTER (WHERE stage = 'AP50')
                             - max(overall_score) FILTER (WHERE stage = 'Pipeline'))
           FROM fact_district_scores
-          WHERE district_id = :liv_district_id AND calc_version_id = 496
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496
 
       parks:
         name-zh: 公园数
@@ -324,51 +341,59 @@ d360:
         source: liveability
         stat-column: stat_district_liveability.parks
         source-tables: ["dim_facilities"]
-        logic-zh: 公园类设施（Park_Local / Park_Neighbourhoud / Park_District / Park_Other）中 stage = Existing 的数量。来源仍待产品确认（新原型把它列在 makani 下）。
-        logic-en: Park facilities (Park_Local / Park_Neighbourhoud / Park_District / Park_Other) with stage = Existing. Source still to be confirmed.
+        logic-zh: 公园类设施点位（Park_Local / Park_Neighbourhoud / Park_District / Park_Other，stage = Existing）落在统计范围（makani 区面）内即计入。
+        logic-en: Park facility points (Park_Local / Park_Neighbourhoud / Park_District / Park_Other, stage = Existing) inside the scope (makani polygon).
         sql: |
-          SELECT count(*) FROM dim_facilities
-          WHERE district_id = :liv_district_id AND stage = 'Existing'
-            AND facility_type IN ('Park_Local', 'Park_Neighbourhoud', 'Park_District', 'Park_Other')
+          WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g)  -- 统计范围 = makani 区面
+          SELECT count(*) FROM dim_facilities f, s
+          WHERE f.geom && s.g AND ST_Intersects(s.g, f.geom)
+            AND f.stage = 'Existing'
+            AND f.facility_type IN ('Park_Local', 'Park_Neighbourhoud', 'Park_District', 'Park_Other')
 
       park_area_ha:
         name-zh: 公园面积
         name-en: Park area
         source: liveability
         stat-column: stat_district_liveability.park_area_ha
-        source-tables: ["fact_parks_demand"]
-        logic-zh: existing_sqm ÷ 10,000 换算成公顷（calc_version_id = 496）。
-        logic-en: existing_sqm ÷ 10,000 → hectares (calc_version_id = 496).
+        source-tables: ["dim_districts", "fact_parks_demand"]
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），existing_sqm ÷ 10,000 换算成公顷（calc_version_id = 496）。
+        logic-en: District matched by scope (as above); existing_sqm ÷ 10,000 → hectares (calc_version_id = 496).
         sql: |
+          WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
+               l AS (SELECT d.district_id FROM dim_districts d, s
+                     WHERE d.geom && s.g
+                     ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT existing_sqm / 10000.0 FROM fact_parks_demand
-          WHERE district_id = :liv_district_id AND calc_version_id = 496
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496
 
       park_gap_ha:
         name-zh: 公园缺口
         name-en: Park gap
         source: liveability
         stat-column: stat_district_liveability.park_gap_ha
-        source-tables: ["fact_parks_demand"]
-        logic-zh: (area_required_sqm − existing_sqm) ÷ 10,000，小于 0 记 0（calc_version_id = 496）。
-        logic-en: (area_required_sqm − existing_sqm) ÷ 10,000, floored at 0 (calc_version_id = 496).
+        source-tables: ["dim_districts", "fact_parks_demand"]
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），(area_required_sqm − existing_sqm) ÷ 10,000，小于 0 记 0（calc_version_id = 496）。
+        logic-en: District matched by scope (as above); (area_required_sqm − existing_sqm) ÷ 10,000, floored at 0 (calc_version_id = 496).
         sql: |
+          WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
+               l AS (SELECT d.district_id FROM dim_districts d, s
+                     WHERE d.geom && s.g
+                     ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT greatest(area_required_sqm - existing_sqm, 0) / 10000.0 FROM fact_parks_demand
-          WHERE district_id = :liv_district_id AND calc_version_id = 496
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496
 
-      # ---------------------------------------------------------------- ADREC
       re_sales:
         name-zh: 成交额（近 12 个月）
         name-en: Sales value (12 months)
         source: adrec
         stat-column: stat_district_adrec.sales_aed（页面 ÷ 10 亿显示为 bn）
-        source-tables: ["x_q21_matview_sale", "stat.map_adrec_community"]
-        logic-zh: 近 12 个月 sale_contract_date 内 sale_property_price_aed 求和；ADREC 是社区粒度，先按社区 → 区映射再汇总。
-        logic-en: Sum of sale_property_price_aed with sale_contract_date in the last 12 months, summed by district via the community → district mapping.
+        source-tables: ["x_q21_matview_sale"]
+        logic-zh: 近 12 个月 sale_contract_date 内 sale_property_price_aed 求和。按统计范围（makani 区面）做空间汇总：成交 / 按揭 / 租约记录的位置（坐标或地块）落在范围内即计入；如果 ADREC 只有社区名，先用 makani 社区面与范围做空间匹配。
+        logic-en: Sum of sale_property_price_aed with sale_contract_date in the last 12 months, for records located inside the scope (makani polygon).
         sql: |
           SELECT sum(s.sale_property_price_aed)
           FROM x_q21_matview_sale s
-          JOIN map_adrec_community m ON m.adrec_community_name = s.<社区字段>
-          WHERE m.district_code = ':district_code'
+          WHERE ST_Intersects(ST_GeomFromEWKB(:district_scope), <成交记录位置>)  -- 统计范围 = makani 区面
             AND s.sale_contract_date >= <期末月往前 12 个月> AND s.sale_contract_date < <期末月次月>
 
       re_yoy:
@@ -376,68 +401,68 @@ d360:
         name-en: Sales YoY
         source: adrec
         stat-column: stat_district_adrec.sales_yoy_pct
-        source-tables: ["x_q21_matview_sale", "stat.map_adrec_community"]
+        source-tables: ["x_q21_matview_sale"]
         logic-zh: （近 12 个月成交额 ÷ 上一个 12 个月成交额 − 1）× 100%。
         logic-en: (last-12-month sales ÷ previous-12-month sales − 1) × 100%.
         sql: |
           SELECT 100.0 * (sum(price) FILTER (WHERE 近 12 个月) / sum(price) FILTER (WHERE 上一个 12 个月) - 1)
-          FROM x_q21_matview_sale ...   -- 同上，按社区 → 区映射
+          FROM x_q21_matview_sale ...   -- 同上，位置落在统计范围内
 
       re_transactions:
         name-zh: 成交宗数
         name-en: Transactions
         source: adrec
         stat-column: stat_district_adrec.transactions
-        source-tables: ["x_q21_matview_sale", "stat.map_adrec_community"]
+        source-tables: ["x_q21_matview_sale"]
         logic-zh: 近 12 个月 sale_application_id 计数。
         logic-en: Count of sale_application_id in the last 12 months.
         sql: |
           SELECT count(s.sale_application_id)
-          FROM x_q21_matview_sale s ...   -- 近 12 个月，按社区 → 区映射
+          FROM x_q21_matview_sale s ...   -- 近 12 个月，位置落在统计范围内
 
       re_mortgages:
         name-zh: 按揭
         name-en: Mortgages
         source: adrec
         stat-column: stat_district_adrec.mortgages
-        source-tables: ["x_q21_matview_mortgage", "stat.map_adrec_community"]
+        source-tables: ["x_q21_matview_mortgage"]
         logic-zh: 近 12 个月 mortgage_start_date 内的按揭数。
         logic-en: Mortgages with mortgage_start_date in the last 12 months.
         sql: |
-          SELECT count(*) FROM x_q21_matview_mortgage ...   -- 近 12 个月，按社区 → 区映射
+          SELECT count(*) FROM x_q21_matview_mortgage ...   -- 近 12 个月，位置落在统计范围内
 
       re_price:
         name-zh: 均价 AED/m²
         name-en: Average price AED/m²
         source: adrec
         stat-column: stat_district_adrec.avg_price_sqm
-        source-tables: ["x_q21_matview_sale", "stat.map_adrec_community"]
+        source-tables: ["x_q21_matview_sale"]
         logic-zh: 近 12 个月 property_sale_rate_aed_sqm 平均值。
         logic-en: Average property_sale_rate_aed_sqm over the last 12 months.
         sql: |
-          SELECT avg(s.property_sale_rate_aed_sqm) FROM x_q21_matview_sale s ...   -- 近 12 个月，按社区 → 区映射
+          SELECT avg(s.property_sale_rate_aed_sqm) FROM x_q21_matview_sale s ...   -- 近 12 个月，位置落在统计范围内
 
       re_leases:
         name-zh: 在册租约
         name-en: Active leases
         source: adrec
         stat-column: stat_district_adrec.active_leases
-        source-tables: ["x_q21_matview_rent", "stat.map_adrec_community"]
+        source-tables: ["x_q21_matview_rent"]
         logic-zh: rent_contract_current_status = 有效 的租约数。
         logic-en: Leases with rent_contract_current_status = active.
         sql: |
           SELECT count(*) FROM x_q21_matview_rent
-          WHERE rent_contract_current_status = '<有效>' ...   -- 按社区 → 区映射
+          WHERE rent_contract_current_status = '<有效>' ...   -- 位置落在统计范围内
 
       re_monthly:
         name-zh: 月度成交宗数
         name-en: Monthly transactions
         source: adrec
         stat-column: stat_district_adrec_monthly.transactions
-        source-tables: ["x_q21_matview_sale", "stat.map_adrec_community"]
+        source-tables: ["x_q21_matview_sale"]
         logic-zh: 按 sale_contract_date 所在月份统计 sale_application_id 数量，共 12 个月。
         logic-en: Count of sale_application_id by month of sale_contract_date, 12 months.
         sql: |
           SELECT date_trunc('month', s.sale_contract_date) AS month, count(s.sale_application_id)
-          FROM x_q21_matview_sale s ...   -- 按社区 → 区映射
+          FROM x_q21_matview_sale s ...   -- 位置落在统计范围内
           GROUP BY 1 ORDER BY 1

@@ -5,7 +5,10 @@
   - 成交额 / 宗数 / 均价：x_q21_matview_sale（sale_contract_date 近 12 个月；同比对比上一个 12 个月）
   - 按揭：x_q21_matview_mortgage（mortgage_start_date 近 12 个月）
   - 在册租约：x_q21_matview_rent（rent_contract_current_status = 有效）
-  - ADREC 是社区粒度，需要先维护社区 → 区映射（写进快照的 communityMappings）
+  - 口径要求：按统计范围（makani 区面，参数 EWKB hex）做空间查询：记录位置落在范围内即计入
+      ST_Intersects(ST_GeomFromEWKB(decode(#{scope}, 'hex')), <记录位置>)
+    如果 ADREC 只有社区名、没有坐标 / 地块，先用 makani 社区面与范围做空间匹配，
+    并把用到的社区 → 区对应写进快照的 communityMappings 以便核对
 -->
 <mapper namespace="com.district360.adrec.mapper.AdrecMapper">
 

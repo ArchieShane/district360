@@ -4,6 +4,7 @@ import com.district360.stat.row.District360Row;
 import com.district360.stat.row.DistrictListRow;
 import com.district360.stat.row.LandUseRow;
 import com.district360.stat.row.MonthlyRow;
+import com.district360.stat.row.ScopeRow;
 import com.district360.stat.row.SourceStatusRow;
 import com.district360.stat.row.TileRow;
 import org.apache.ibatis.annotations.Param;
@@ -26,4 +27,7 @@ public interface StatQueryMapper {
     TileRow buildingTile(@Param("z") int z, @Param("x") int x, @Param("y") int y);
 
     List<SourceStatusRow> listSourceStatus();
+
+    /** 各区统计范围，供宜居 / ADREC 抽取器做空间查询。 */
+    List<ScopeRow> listScopes();
 }

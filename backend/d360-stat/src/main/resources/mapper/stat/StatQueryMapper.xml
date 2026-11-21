@@ -78,4 +78,8 @@
             LIMIT 1
             ) j ON true
     </select>
+
+    <select id="listScopes" resultType="com.district360.stat.row.ScopeRow">
+        SELECT code, encode(ST_AsEWKB(scope), 'hex') AS scope_hex FROM stat.dim_district WHERE scope IS NOT NULL
+    </select>
 </mapper>

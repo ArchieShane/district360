@@ -64,7 +64,7 @@ public class MakaniExtractor implements StatExtractor<MakaniSnapshot> {
             MakaniRows.BuildingStat b = buildingStats.getOrDefault(r.makaniId, new MakaniRows.BuildingStat());
             out.add(new MakaniSnapshot.District(
                     codeById.get(r.makaniId), r.makaniId, r.makaniName, r.nameAr, r.areaKm2,
-                    r.centroidLon, r.centroidLat, r.minLon, r.minLat, r.maxLon, r.maxLat, r.boundaryHex,
+                    r.centroidLon, r.centroidLat, r.minLon, r.minLat, r.maxLon, r.maxLat, r.boundaryHex, r.scopeHex,
                     communities.getOrDefault(r.makaniId, 0),
                     p.total, p.constructed, p.underConstruction, p.vacantServiced, p.vacantUnserviced,
                     b.total, b.underConstruction,

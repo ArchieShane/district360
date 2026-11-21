@@ -1,9 +1,10 @@
 # 统一区字典：页面 17 个区 ↔ 各数据源的区编码。
 # - code：页面区编码，全系统主键（与原型 #d=<code> 一致）
 # - makani-district-id：makani udm_district.districtid（必须与 municipalityname = ADM 一起用）
-# - liv-district-id：Liveability dim_districts.district_id；为空 = 不在宜居评估范围
+# - liv-district-id：Liveability dim_districts.district_id，仅作参考（抽取统一按统计范围 = makani 区面做空间查询，
+#   已验证按范围匹配出的 Liveability 区与此处一致）
 # - mapping-confirmed = false 的几行是待产品确认的对应关系
-# ADREC 是社区粒度，映射单独放在统计库 stat.map_adrec_community，不在这里维护。
+# 三个库的区 ID / 区名可能不一致，但范围一致：所有抽取都以 makani 区面为统计范围。
 d360:
   districts:
     - { code: reem,       name-en: "Al Reem Island",       sort-no: 1,  makani-district-id: 57,   liv-district-id: 185, mapping-confirmed: true }

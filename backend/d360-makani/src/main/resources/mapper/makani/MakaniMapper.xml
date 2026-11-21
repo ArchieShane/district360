@@ -24,7 +24,8 @@
                ST_Y(ST_PointOnSurface(shape))                               AS centroid_lat,
                ST_XMin(shape) AS min_lon, ST_YMin(shape) AS min_lat,
                ST_XMax(shape) AS max_lon, ST_YMax(shape) AS max_lat,
-               encode(ST_AsEWKB(ST_Multi(ST_SimplifyPreserveTopology(ST_Force2D(shape), #{tol}))), 'hex') AS boundary_hex
+               encode(ST_AsEWKB(ST_Multi(ST_SimplifyPreserveTopology(ST_Force2D(shape), #{tol}))), 'hex') AS boundary_hex,
+               encode(ST_AsEWKB(ST_Multi(ST_Force2D(shape))), 'hex')                                    AS scope_hex
         FROM ${t.district}
         WHERE municipalityname = #{muni}
           AND districtid IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
