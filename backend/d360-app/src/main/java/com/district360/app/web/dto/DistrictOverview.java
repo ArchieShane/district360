@@ -27,7 +27,8 @@ public record DistrictOverview(
     public record PlotStatus(Integer constructed, Integer underConstruction, Integer vacantServiced, Integer vacantUnserviced) {
     }
 
-    public record LandUseShare(String key, String nameZh, String nameEn, int plotCount, BigDecimal pct) {
+    /** @param highlight 是否显示在面板「土地利用」一行；fallback 为「未列出用途」的兜底类别 */
+    public record LandUseShare(String key, String nameZh, String nameEn, int plotCount, BigDecimal pct, boolean highlight, boolean fallback) {
     }
 
     public record RealEstate(String status, LocalDate asOf, String periodStart, String periodEnd, BigDecimal salesAedBn,

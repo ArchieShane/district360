@@ -86,6 +86,10 @@ public class LineageService {
                 .filter(g -> g.uses() != null && !g.uses().isEmpty())
                 .map(g -> g.nameZh() + "/" + g.nameEn() + " ← " + String.join(", ", g.uses()))
                 .collect(Collectors.joining("；")));
+        v.put("landuse.highlight", landUse.getGroups().stream()
+                .filter(LandUseProperties.Group::highlight)
+                .map(g -> g.nameZh() + "/" + g.nameEn())
+                .collect(Collectors.joining("、")));
         return v;
     }
 

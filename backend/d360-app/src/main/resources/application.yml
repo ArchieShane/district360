@@ -55,15 +55,15 @@ d360:
     # 手动触发抽取的口令（请求头 X-Admin-Token）；为空则禁用该接口
     token: ${D360_ADMIN_TOKEN:}
 
-  # 土地利用归类：makani udm_plot.primaryuseengdesc → 页面类别（顺序即页面顺序，页面显示前 3 类）
-  # TODO: 「混合」的归类规则待产品确认，目前暂按 Investment 计入
+  # 土地利用归类：makani udm_plot.primaryuseengdesc → 页面类别
+  # - 顺序即页面顺序；没被任何一组列出的用途（如 Investment、Utility、Industrial、Undefined）归入最后一组
+  # - highlight: true 的类别显示在面板「土地利用」一行（目前只显示居住、商业；「混合」已按业务要求删除）
   land-use:
     groups:
-      - { key: residential, name-zh: 居住,     name-en: Residential,         uses: [Residential] }
-      - { key: commercial,  name-zh: 商业,     name-en: Commercial,          uses: [Commercial] }
-      - { key: mixed,       name-zh: 混合,     name-en: Mixed use,           uses: [Investment] }
-      - { key: community,   name-zh: 社区设施, name-en: Community,           uses: [Educational, Health, Religious, Public, Governmental, Cultural, Diplomatic] }
-      - { key: open_space,  name-zh: 开放空间, name-en: Open space,          uses: [Recreational] }
+      - { key: residential, name-zh: 居住,       name-en: Residential,       highlight: true, uses: [Residential] }
+      - { key: commercial,  name-zh: 商业,       name-en: Commercial,        highlight: true, uses: [Commercial] }
+      - { key: community,   name-zh: 社区设施,   name-en: Community,         uses: [Educational, Health, Religious, Public, Governmental, Cultural, Diplomatic] }
+      - { key: open_space,  name-zh: 开放空间,   name-en: Open space,        uses: [Recreational] }
       - { key: other,       name-zh: 公用与其他, name-en: Utilities & other, uses: [] }
 
 logging:

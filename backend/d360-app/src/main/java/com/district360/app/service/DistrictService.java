@@ -145,7 +145,7 @@ public class DistrictService {
         List<DistrictOverview.LandUseShare> out = new ArrayList<>();
         for (LandUseProperties.Group g : groups) {
             int n = counts.getOrDefault(g.key(), 0);
-            out.add(new DistrictOverview.LandUseShare(g.key(), g.nameZh(), g.nameEn(), n, pct(n, total)));
+            out.add(new DistrictOverview.LandUseShare(g.key(), g.nameZh(), g.nameEn(), n, pct(n, total), g.highlight(), g.key().equals(fallback)));
         }
         return out;
     }

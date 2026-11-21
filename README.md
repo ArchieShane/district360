@@ -110,4 +110,4 @@ cd frontend && npm install && npm run dev
 见 `docs/接口设计与协作方案_v0.2.md` 第 8 节。页面数值以各源库当前实际数据为准；影响口径的主要有：
 
 - Al Mina / Al Wahda / Hudayriyat / Saadiyat 与 makani 区的对应关系（区字典里标了 `mapping-confirmed: false`，页面显示 TBC）；
-- 土地利用「混合」：makani 的地块用途里没有 Mixed 这一类，归类规则待定（暂按 Investment，配置项 `d360.land-use.groups`；Investment 地块实际多为别墅 / 联排住宅）。
+- 土地利用：按业务要求已删除「混合」，面板只显示居住、商业；Investment 等未列出的用途计入「公用与其他」（配置项 `d360.land-use.groups`）。

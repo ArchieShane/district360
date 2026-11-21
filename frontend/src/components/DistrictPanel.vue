@@ -21,7 +21,7 @@ const PS = [
   { key: 'vacantUnserviced', color: '#6B7785', metric: 'plots_vacant_unserviced' },
 ] as const
 const LU_COLORS: Record<string, string> = {
-  residential: '#E8C77A', commercial: '#6FB2FF', mixed: '#C792EA', community: '#5FE0A0', open_space: '#4FBF85', other: '#9AA6B2',
+  residential: '#E8C77A', commercial: '#6FB2FF', community: '#5FE0A0', open_space: '#4FBF85', other: '#9AA6B2',
 }
 
 const plotParts = computed(() => {
@@ -108,7 +108,7 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
             </div>
             <div class="lur">
               {{ t('land.landUse') }}：
-              <span v-for="u in o.land.landUse.slice(0, 3)" :key="u.key" data-m="land_use">
+              <span v-for="u in o.land.landUse.filter(x => x.highlight)" :key="u.key" data-m="land_use">
                 <i :style="{ background: LU_COLORS[u.key] ?? '#9AA6B2' }"></i>{{ locale === 'zh' ? u.nameZh : u.nameEn }} <b>{{ nf(u.pct, 1) }}%</b>
               </span>
             </div>

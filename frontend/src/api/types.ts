@@ -30,6 +30,8 @@ export interface LandUseShare {
   nameEn: string
   plotCount: number
   pct: number | null
+  highlight: boolean
+  fallback: boolean
 }
 
 export interface DistrictOverview {

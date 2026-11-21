@@ -18,8 +18,8 @@ export function buildSummary(o: DistrictOverview, lang: Lang): string {
   const hasRe = re.status === 'ok' || re.status === 'sample'
   const parksOk = f.parks.status === 'ok' || f.parks.status === 'sample'
 
-  // 主导用地：前 5 类里占比最大的
-  const top = hasLand ? land.landUse.slice(0, 5).reduce<typeof land.landUse[number] | null>((a, b) => (!a || (b.pct ?? 0) > (a.pct ?? 0) ? b : a), null) : null
+  // 主导用地：除「公用与其他」兜底类别外占比最大的一类
+  const top = hasLand ? land.landUse.filter(u => !u.fallback).reduce<typeof land.landUse[number] | null>((a, b) => (!a || (b.pct ?? 0) > (a.pct ?? 0) ? b : a), null) : null
 
   if (lang === 'zh') {
     const z: string[] = []

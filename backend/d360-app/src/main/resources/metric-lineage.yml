@@ -177,8 +177,8 @@ d360:
         source: makani
         stat-column: stat_district_landuse（区 × primaryuseengdesc 地块数），归类与占比在接口里计算
         source-tables: ["{makani.district}", "{makani.plot}"]
-        logic-zh: "按地块主用途 primaryuseengdesc 分组计数，再按配置归为页面类别：{landuse.mapping}；未列出的用途归入「公用与其他」。占比 = 该类地块数 ÷ 区内地块总数。"
-        logic-en: "Plots grouped by primaryuseengdesc, then mapped to page classes: {landuse.mapping}; unlisted uses go to 'Utilities & other'. Share = class plots ÷ all plots in the district."
+        logic-zh: "按地块主用途 primaryuseengdesc 分组计数，再按配置归为页面类别：{landuse.mapping}；未列出的用途（如 Investment、Utility、Industrial、Undefined）归入「公用与其他」。占比 = 该类地块数 ÷ 区内地块总数。面板显示：{landuse.highlight}。"
+        logic-en: "Plots grouped by primaryuseengdesc, then mapped to page classes: {landuse.mapping}; unlisted uses (e.g. Investment, Utility, Industrial, Undefined) go to 'Utilities & other'. Share = class plots ÷ all plots in the district. Shown on the panel: {landuse.highlight}."
         sql: |
           WITH d AS (SELECT shape FROM {makani.district}
                      WHERE municipalityname = '{makani.municipality}' AND districtid = :makani_district_id)
