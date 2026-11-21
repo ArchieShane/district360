@@ -17,6 +17,10 @@ d360:
       url: jdbc:postgresql://10.255.254.109:5443/makani_sync_full
       username: postgres
       password: "freedo"
+    liveability:
+      url: jdbc:postgresql://10.255.254.109:5443/liveability_data_20260730
+      username: postgres
+      password: "freedo"
   makani:
     schema: public
     table-prefix: ""
