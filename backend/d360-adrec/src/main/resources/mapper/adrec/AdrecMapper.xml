@@ -2,15 +2,26 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.district360.adrec.mapper.AdrecMapper">
 
+    <!--
+      区面（统计范围）转换到源坐标系，并预先算好外包框。
+      必须 MATERIALIZED：PostgreSQL 12+ 会把只引用一次的 CTE 展开进主查询，d.geom 就变成
+      ST_Transform(ST_GeomFromEWKB(decode(...))) 这一长串表达式，在「点 × 区」的每一对里都重新解析一遍多边形，
+      数据量大时会慢几个数量级。
+    -->
     <sql id="districtScopes">
-        districts AS (
-            SELECT refs.district_code,
-                   ST_Transform(ST_GeomFromEWKB(decode(refs.scope_hex, 'hex')), #{sourceSrid}) AS geom
-            FROM (VALUES
-                <foreach collection="districts" item="district" separator=",">
-                    (#{district.code}::text, #{district.scopeEwkbHex}::text)
-                </foreach>
-            ) AS refs(district_code, scope_hex)
+        districts AS MATERIALIZED (
+            SELECT g.district_code, g.geom,
+                   ST_XMin(g.geom) AS xmin, ST_XMax(g.geom) AS xmax,
+                   ST_YMin(g.geom) AS ymin, ST_YMax(g.geom) AS ymax
+            FROM (
+                SELECT refs.district_code,
+                       ST_Transform(ST_GeomFromEWKB(decode(refs.scope_hex, 'hex')), #{sourceSrid}) AS geom
+                FROM (VALUES
+                    <foreach collection="districts" item="district" separator=",">
+                        (#{district.code}::text, #{district.scopeEwkbHex}::text)
+                    </foreach>
+                ) AS refs(district_code, scope_hex)
+            ) AS g
         )
     </sql>
 
@@ -25,8 +36,8 @@
                    s.sale_property_price_aed, s.property_sold_area_sqm, s.property_sale_rate_aed_sqm
             FROM ods.ods_re_x_q21_matview_sale AS s
             JOIN districts AS d
-              ON s.longitude BETWEEN ST_XMin(d.geom) AND ST_XMax(d.geom)
-             AND s.latitude BETWEEN ST_YMin(d.geom) AND ST_YMax(d.geom)
+              ON s.longitude BETWEEN d.xmin AND d.xmax
+             AND s.latitude BETWEEN d.ymin AND d.ymax
              AND ST_Intersects(d.geom, ST_SetSRID(ST_MakePoint(s.longitude, s.latitude), #{sourceSrid}))
             WHERE s.sale_contract_date >= #{previousStartDate}
               AND s.sale_contract_date < #{periodEndNextDate}
@@ -126,7 +137,7 @@
 
     <select id="mortgageCounts" resultType="com.district360.adrec.mapper.AdrecMapper$DistrictCount">
         WITH <include refid="districtScopes"/>,
-        mortgage_points AS (
+        mortgage_points AS MATERIALIZED (
             SELECT m.orientational_mortgage_contract_id AS contract_id,
                    <include refid="adrecValidPoint"><property name="coordinates" value="m"/></include> AS point
             FROM ods.ods_re_x_q21_matview_mortgage m
@@ -137,7 +148,7 @@
         )
         SELECT d.district_code, COUNT(DISTINCT m.contract_id)::integer AS count
         FROM mortgage_points m
-        JOIN districts d ON ST_Intersects(d.geom, m.point)
+        JOIN districts d ON m.point &amp;&amp; d.geom AND ST_Intersects(d.geom, m.point)
         GROUP BY d.district_code
     </select>
 
@@ -189,7 +200,7 @@
             WHERE contract_version = 1
             GROUP BY source_system, contract_number
         ),
-        property_points AS (
+        property_points AS MATERIALIZED (
             SELECT r.source_system, r.contract_number,
                    <include refid="adrecValidPoint"><property name="coordinates" value="r"/></include> AS point
             FROM versioned r
@@ -198,7 +209,7 @@
         SELECT d.district_code,
                (COUNT(DISTINCT (r.source_system, r.contract_number)) FILTER (WHERE c.active))::integer AS count
         FROM property_points r
-        JOIN districts d ON ST_Intersects(d.geom, r.point)
+        JOIN districts d ON r.point &amp;&amp; d.geom AND ST_Intersects(d.geom, r.point)
         JOIN contract_status c USING (source_system, contract_number)
         GROUP BY d.district_code
     </select>

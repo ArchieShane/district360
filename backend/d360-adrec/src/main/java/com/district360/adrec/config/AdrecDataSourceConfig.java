@@ -37,9 +37,14 @@ public class AdrecDataSourceConfig {
 
     @Bean
     @ConfigurationProperties("d360.datasource.adrec.hikari")
-    public HikariDataSource adrecDataSource(@Qualifier("adrecDataSourceProperties") DataSourceProperties properties) {
+    public HikariDataSource adrecDataSource(
+            @Qualifier("adrecDataSourceProperties") DataSourceProperties properties,
+            @Value("${d360.datasource.adrec.statement-timeout-seconds:1800}") int statementTimeoutSeconds) {
         HikariDataSource ds = properties.initializeDataSourceBuilder().type(HikariDataSource.class).build();
         ds.setReadOnly(true);
+        // 兜底：连接中途静默断开时，驱动在语句超时之后再多等 2 分钟就放弃，不会让抽取线程一直占着抽取锁
+        ds.addDataSourceProperty("socketTimeout", String.valueOf(statementTimeoutSeconds + 120));
+        ds.addDataSourceProperty("connectTimeout", "15");
         ds.setConnectionInitSql("SET TIME ZONE 'Asia/Dubai'");
         ds.setMaximumPoolSize(2);
         ds.setMinimumIdle(0);
@@ -47,12 +52,16 @@ public class AdrecDataSourceConfig {
     }
 
     @Bean
-    public SqlSessionFactory adrecSqlSessionFactory(@Qualifier("adrecDataSource") DataSource dataSource) throws Exception {
+    public SqlSessionFactory adrecSqlSessionFactory(
+            @Qualifier("adrecDataSource") DataSource dataSource,
+            @Value("${d360.datasource.adrec.statement-timeout-seconds:1800}") int statementTimeoutSeconds) throws Exception {
         SqlSessionFactoryBean factory = new SqlSessionFactoryBean();
         factory.setDataSource(dataSource);
         factory.setMapperLocations(new PathMatchingResourcePatternResolver().getResources("classpath*:mapper/adrec/*.xml"));
         org.apache.ibatis.session.Configuration configuration = new org.apache.ibatis.session.Configuration();
         configuration.setMapUnderscoreToCamelCase(true);
+        // 单条语句最长执行时间（秒），超时抛错、抽取记为失败；可用 d360.datasource.adrec.statement-timeout-seconds 调整
+        configuration.setDefaultStatementTimeout(statementTimeoutSeconds);
         factory.setConfiguration(configuration);
         return factory.getObject();
     }
