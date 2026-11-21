@@ -85,6 +85,13 @@
         SELECT coalesce(ST_AsMVT(mvt.*, 'buildings', 4096, 'geom'), ''::bytea) AS mvt FROM mvt
     </select>
 
+    <select id="listPois" resultType="com.district360.stat.row.PoiRow">
+        SELECT source_id, category, name_en, name_ar, subtype, lon, lat
+        FROM stat.map_poi
+        WHERE district_code = #{code} AND category = #{category}
+        ORDER BY lower(coalesce(name_en, name_ar)), source_id
+    </select>
+
     <select id="plotTile" resultType="com.district360.stat.row.TileRow">
         WITH bounds AS (SELECT ST_TileEnvelope(#{z}, #{x}, #{y}) AS env),
              mvt AS (

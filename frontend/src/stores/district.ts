@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api } from '../api/client'
-import type { DistrictFeatureCollection, DistrictFeatureProps, DistrictListItem, DistrictOverview, LineageInfo, MetaInfo } from '../api/types'
+import type { DistrictFeatureCollection, DistrictFeatureProps, DistrictListItem, DistrictOverview, FacilityCategory, FacilityItem, LineageInfo, MetaInfo } from '../api/types'
 import { i18n, type Lang } from '../i18n'
 
 const PAGE_SIZE = 30
@@ -20,6 +20,12 @@ export const useDistrictStore = defineStore('district', () => {
   const hoveredCode = ref<string | null>(null)
   /** 面板「地块状态」图例悬停时高亮的状态：constructed / under_construction / vacant_serviced / vacant_unserviced */
   const highlightPlotStatus = ref<string | null>(null)
+  /** 面板展开的公共设施类别及其列表；focusedPoiId = 地图定位到的设施 */
+  const facilityCategory = ref<FacilityCategory | null>(null)
+  const facilityList = ref<FacilityItem[]>([])
+  const facilityLoading = ref(false)
+  const focusedPoiId = ref<string | null>(null)
+  const hoveredPoiId = ref<string | null>(null)
   const overviews = ref<Record<string, DistrictOverview>>({})
   const loadingOverview = ref(false)
   const error = ref<string | null>(null)
@@ -95,8 +101,42 @@ export const useDistrictStore = defineStore('district', () => {
     }
   }
 
+  function clearFacilities() {
+    facilityCategory.value = null
+    facilityList.value = []
+    focusedPoiId.value = null
+    hoveredPoiId.value = null
+  }
+
+  /** 点击面板里学校 / 医疗 / 清真寺：展开该类设施列表（再点一次收起） */
+  async function toggleFacilities(category: FacilityCategory) {
+    const code = selectedCode.value
+    if (!code) return
+    if (facilityCategory.value === category) {
+      clearFacilities()
+      return
+    }
+    facilityCategory.value = category
+    facilityList.value = []
+    focusedPoiId.value = null
+    facilityLoading.value = true
+    try {
+      const list = await api.facilities(code, category)
+      if (facilityCategory.value === category && selectedCode.value === code) facilityList.value = list
+    } catch (e) {
+      error.value = (e as Error).message
+    } finally {
+      facilityLoading.value = false
+    }
+  }
+
+  function focusPoi(id: string | null) {
+    focusedPoiId.value = id
+  }
+
   async function select(code: string) {
     if (!features.value.has(code)) return
+    if (code !== selectedCode.value) clearFacilities()
     selectedCode.value = code
     writeHash()
     if (!overviews.value[code]) {
@@ -114,6 +154,7 @@ export const useDistrictStore = defineStore('district', () => {
   function deselect() {
     selectedCode.value = null
     highlightPlotStatus.value = null
+    clearFacilities()
     writeHash()
     homeTick.value++
   }
@@ -148,8 +189,8 @@ export const useDistrictStore = defineStore('district', () => {
   }
 
   return {
-    boundaries, features, meta, lineage, selectedCode, hoveredCode, highlightPlotStatus, overviews, loadingOverview, error, lang, notesOpen, homeTick,
+    boundaries, features, meta, lineage, selectedCode, hoveredCode, highlightPlotStatus, facilityCategory, facilityList, facilityLoading, focusedPoiId, hoveredPoiId, overviews, loadingOverview, error, lang, notesOpen, homeTick,
     list, listTotal, listHasMore, listLoading, listQuery,
-    selected, overview, dataVersion, load, resetList, loadMore, select, deselect, goHome, setLang, readHash,
+    selected, overview, dataVersion, toggleFacilities, focusPoi, clearFacilities, load, resetList, loadMore, select, deselect, goHome, setLang, readHash,
   }
 })

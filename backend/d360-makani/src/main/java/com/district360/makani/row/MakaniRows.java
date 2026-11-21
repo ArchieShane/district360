@@ -60,6 +60,17 @@ public final class MakaniRows {
         public String geomHex;
     }
 
+    public static class PoiRow {
+        public Integer districtKey;
+        public String category;
+        public String sourceId;
+        public String nameEn;
+        public String nameAr;
+        public String subtype;
+        public double lon;
+        public double lat;
+    }
+
     public static class Building {
         public Integer districtKey;
         public String buildingId;

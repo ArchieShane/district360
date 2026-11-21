@@ -60,6 +60,15 @@
         ) AS v(code, plot_id, status, use_desc, hex)
     </insert>
 
+    <delete id="deleteAllPois">DELETE FROM stat.map_poi</delete>
+
+    <insert id="insertPois">
+        INSERT INTO stat.map_poi (district_code, category, source_id, name_en, name_ar, subtype, lon, lat) VALUES
+        <foreach collection="list" item="p" separator=",">
+            (#{p.code}, #{p.category}, #{p.sourceId}, #{p.nameEn}, #{p.nameAr}, #{p.subtype}, #{p.lon}, #{p.lat})
+        </foreach>
+    </insert>
+
     <delete id="deleteAllLiveability">DELETE FROM stat.stat_district_liveability</delete>
 
     <insert id="insertLiveability">

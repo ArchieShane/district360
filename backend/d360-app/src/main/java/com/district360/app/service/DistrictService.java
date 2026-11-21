@@ -5,6 +5,7 @@ import com.district360.app.etl.EtlService;
 import com.district360.app.web.dto.BlockStatus;
 import com.district360.app.web.dto.DistrictListItem;
 import com.district360.app.web.dto.DistrictOverview;
+import com.district360.app.web.dto.FacilityItem;
 import com.district360.app.web.dto.MetaInfo;
 import com.district360.app.web.dto.PageResult;
 import com.district360.stat.mapper.StatQueryMapper;
@@ -95,6 +96,19 @@ public class DistrictService {
         var facilities = new DistrictOverview.Facilities(makaniStatus, r.makaniAsOf, r.schools, r.medical, r.mosques, parks);
 
         return new DistrictOverview(header, liveability, land, realEstate, facilities);
+    }
+
+    /** 某区某类公共设施（school / medical / mosque），与面板上的计数同一口径。 */
+    public List<FacilityItem> facilities(String code, String category) {
+        if (!List.of("school", "medical", "mosque").contains(category)) {
+            throw new IllegalArgumentException("不支持的设施类别: " + category);
+        }
+        if (query.findDistrict360(code) == null) {
+            throw new NoSuchElementException("没有这个区: " + code);
+        }
+        return query.listPois(code, category).stream()
+                .map(p -> new FacilityItem(p.sourceId, p.category, p.nameEn, p.nameAr, p.subtype, new double[]{p.lon, p.lat}))
+                .toList();
     }
 
     public String boundaries() {

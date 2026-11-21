@@ -3,7 +3,7 @@ import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type LngL
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api/client'
-import type { DistrictFeatureCollection, DistrictFeatureProps } from '../api/types'
+import type { DistrictFeatureCollection, DistrictFeatureProps, FacilityItem } from '../api/types'
 import { useDistrictStore } from '../stores/district'
 import { escapeHtml, nf } from '../utils/format'
 
@@ -22,6 +22,7 @@ let ready = false
 let hoverId: number | null = null
 let selectedId: number | null = null
 let selectedMarker: maplibregl.Marker | null = null
+let poiMarker: maplibregl.Marker | null = null
 
 const STYLE = import.meta.env.VITE_BASEMAP_STYLE || 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 /** 「全景」视角：默认阿布扎比岛及周边；可用 VITE_HOME_BOUNDS=minLon,minLat,maxLon,maxLat 覆盖 */
@@ -38,6 +39,43 @@ const PLOT_COLOR: ExpressionSpecification = ['match', ['get', 'status'],
   'vacant_serviced', '#7FB7F0',
   'vacant_unserviced', '#6B7785',
   '#9AA6B2']
+const POI_COLOR: ExpressionSpecification = ['match', ['get', 'category'], 'school', '#E8C77A', 'medical', '#FF8A7A', 'mosque', '#5FE0A0', '#CFE5FA']
+
+function poiCollection(list: FacilityItem[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: list.map(f => ({
+      type: 'Feature',
+      properties: { id: f.id, category: f.category, name: f.nameEn || f.nameAr || f.id },
+      geometry: { type: 'Point', coordinates: f.location },
+    })),
+  }
+}
+
+/** 列表悬停 / 定位的设施放大显示 */
+function applyPoiEmphasis() {
+  if (!map || !map.getLayer('pois')) return
+  const hot = ['any', ['==', ['get', 'id'], store.focusedPoiId ?? NONE], ['==', ['get', 'id'], store.hoveredPoiId ?? NONE]]
+  map.setPaintProperty('pois', 'circle-radius', ['case', hot, 9, 5.5])
+  map.setPaintProperty('pois', 'circle-stroke-width', ['case', hot, 3, 1.5])
+}
+
+/** 定位到某个设施：飞过去并显示名称标签 */
+function focusPoi(id: string | null) {
+  poiMarker?.remove()
+  poiMarker = null
+  const f = id ? store.facilityList.find(x => x.id === id) : undefined
+  if (!map || !f) return
+  map.flyTo({ center: f.location, zoom: Math.max(map.getZoom(), 16.5), pitch: 55, duration: 1100 })
+  // 标签 + 连接线 + 定位点都放在标记里：设施常在 3D 建筑内部，地图上的圆点会被楼体挡住
+  const div = document.createElement('div')
+  div.className = 'poi-mk ' + f.category
+  const sub = f.nameEn && f.nameAr ? `<small dir="auto">${escapeHtml(f.nameAr)}</small>` : ''
+  div.innerHTML = `<div class="poi-pin"><span dir="auto">${escapeHtml(f.nameEn || f.nameAr || f.id)}</span>${sub}</div>`
+    + '<div class="poi-stem"></div><div class="poi-dot"></div>'
+  poiMarker = new maplibregl.Marker({ element: div, anchor: 'bottom' }).setLngLat(f.location).addTo(map)
+}
+
 const PLOT_STATUS_KEY: Record<string, string> = {
   constructed: 'constructed', under_construction: 'underConstruction',
   vacant_serviced: 'vacantServiced', vacant_unserviced: 'vacantUnserviced', other: 'other',
@@ -209,6 +247,32 @@ function addLayers(fc: DistrictFeatureCollection) {
     },
   })
 
+  // 公共设施点：面板展开某类设施列表时显示（放在最上层，避免被区名、建筑遮挡）
+  map.addSource('pois', { type: 'geojson', data: poiCollection([]) })
+  map.addLayer({
+    id: 'pois', type: 'circle', source: 'pois',
+    paint: {
+      'circle-color': POI_COLOR,
+      'circle-radius': 5.5,
+      'circle-stroke-color': '#0B1118',
+      'circle-stroke-width': 1.5,
+      'circle-pitch-alignment': 'viewport',
+    },
+  })
+  map.on('click', 'pois', e => {
+    const id = e.features?.[0]?.properties?.id as string | undefined
+    if (id) store.focusPoi(String(id))
+  })
+  map.on('mouseenter', 'pois', e => {
+    const id = e.features?.[0]?.properties?.id
+    store.hoveredPoiId = id != null ? String(id) : null
+    map!.getCanvas().style.cursor = 'pointer'
+  })
+  map.on('mouseleave', 'pois', () => {
+    store.hoveredPoiId = null
+    map!.getCanvas().style.cursor = ''
+  })
+
   const onHover = (code: string | undefined, point: maplibregl.Point) => {
     store.hoveredCode = code ?? null
     const d = code ? store.features.get(code) : undefined
@@ -295,6 +359,15 @@ watch(() => store.selectedCode, () => {
 
 watch(() => store.hoveredCode, code => applyHover(code))
 watch(() => store.highlightPlotStatus, () => applyPlotHighlight())
+watch(() => store.facilityList, list => {
+  ;(map?.getSource('pois') as GeoJSONSource | undefined)?.setData(poiCollection(list))
+  if (!list.length) focusPoi(null)
+})
+watch(() => store.focusedPoiId, id => {
+  focusPoi(id)
+  applyPoiEmphasis()
+})
+watch(() => store.hoveredPoiId, () => applyPoiEmphasis())
 watch(() => store.homeTick, () => flyHome())
 watch(() => store.lang, () => renderSelectedMarker())
 </script>

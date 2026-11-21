@@ -120,6 +120,31 @@
         WHERE x.shape IS NOT NULL
     </select>
 
+    <!-- 公共设施点位：与 schools / medical / mosques 计数同一口径（中心点落在区面内；医疗排除测试数据） -->
+    <select id="pois" resultType="com.district360.makani.row.MakaniRows$PoiRow">
+        <include refid="districtCte"/>
+        SELECT d.objectid AS district_key, 'school' AS category, x.objectid::text AS source_id,
+               x.adek_sch_name_en AS name_en, x.adek_sch_name_ar AS name_ar, x.adek_sch_education_type_en AS subtype,
+               ST_X(ST_Centroid(x.shape)) AS lon, ST_Y(ST_Centroid(x.shape)) AS lat
+        FROM d JOIN ${t.school} x ON <include refid="inDistrict"/>
+        UNION ALL
+        SELECT d.objectid, 'medical', x.objectid::text,
+               x.facility_name_in_english, x.facility_name_in_arabic, x.facility_type,
+               ST_X(ST_Centroid(x.shape)), ST_Y(ST_Centroid(x.shape))
+        FROM d JOIN ${t.doh} x ON <include refid="inDistrict"/>
+        WHERE x.facility_category = 'Medical'
+        <if test="exclude != null and exclude.size() > 0">
+            AND NOT (coalesce(x.facility_name_in_english, '') ILIKE ANY (ARRAY[
+            <foreach collection="exclude" item="p" separator=",">#{p}</foreach>
+            ]::text[]))
+        </if>
+        UNION ALL
+        SELECT d.objectid, 'mosque', x.objectid::text,
+               NULL, coalesce(nullif(trim(x."اسم_المسجد"), ''), 'مسجد ' || coalesce(x."رقم_المسجد", x.objectid::text)), x."صفة_المسجد_1",
+               ST_X(ST_Centroid(x.shape)), ST_Y(ST_Centroid(x.shape))
+        FROM d JOIN ${t.mosque} x ON <include refid="inDistrict"/>
+    </select>
+
     <select id="plotDataDate" resultType="java.time.LocalDate">
         SELECT max(datareceiveddate)::date FROM ${t.plot}
     </select>

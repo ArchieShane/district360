@@ -52,6 +52,8 @@ public class StatWriter {
             chunked(s.buildings(), mapper::insertBuildings);
             mapper.deleteAllPlots();
             chunked(s.plots(), mapper::insertPlots);
+            mapper.deleteAllPois();
+            chunked(s.pois(), mapper::insertPois);
         });
     }
 

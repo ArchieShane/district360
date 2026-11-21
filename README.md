@@ -48,7 +48,12 @@ docs/                         原型、字段对照、方案文档
 
 需要 JDK 17、Maven 3.9。
 
-内网开发库的账号密码已写在 `backend/d360-app/src/main/resources/application-local.yml`（默认激活 `local` profile），拉下代码即可直接运行。需要连别的库时，改这个文件或用环境变量覆盖（`D360_STAT_DB_URL`、`D360_MAKANI_DB_URL`、`D360_*_DB_USER`、`D360_*_DB_PASSWORD`）。
+内网开发库的地址和账号密码都写在 `backend/d360-app/src/main/resources/application-local.yml`（默认激活 `local` profile），拉下代码即可直接运行：
+
+- 统计库 `d360.datasource.stat`：当前为 `10.255.254.101:15432/district360`（PostgreSQL 12 + PostGIS 3.4）；
+- makani 源库 `d360.datasource.makani` + `d360.makani.schema / table-prefix`：当前为 109 上的 `makani_sync_full`。
+
+新建统计库时先执行 `CREATE DATABASE district360;` 并在库里 `CREATE EXTENSION postgis;`，表由 Flyway 在后端启动时自动创建。也可以用环境变量覆盖（`D360_STAT_DB_URL`、`D360_MAKANI_DB_URL`、`D360_*_DB_USER`、`D360_*_DB_PASSWORD`、`D360_MAKANI_SCHEMA`、`D360_MAKANI_TABLE_PREFIX`）。
 
 ```bash
 cd backend && mvn -B -DskipTests package && java -jar d360-app/target/district360.jar
@@ -93,6 +98,8 @@ makani 源表的位置全部由配置决定，表全名 = `<schema>.<table-prefi
 | `GET /api/v1/districts/{code}/overview` | 右侧面板：标题 + 宜居 / 土地与建设 / 房地产 / 公共设施，每块带 `status` 和 `asOf` |
 | `GET /api/v1/map/districts.geojson` | 全部区边界（EPSG:4326，已简化）及标签 / 悬停所需属性（中心点、外包框、面积、宜居得分），地图一次性加载 |
 | `GET /api/v1/map/tiles/buildings/{z}/{x}/{y}.pbf` | 建筑体块矢量瓦片（图层 `buildings`，属性 `code`、`height`、`uc`） |
+| `GET /api/v1/districts/{code}/facilities/{school\|medical\|mosque}` | 某区公共设施列表（与面板计数同一口径）：面板点击学校 / 医疗 / 清真寺展开，点击条目地图定位 |
+| `GET /api/v1/map/tiles/plots/{z}/{x}/{y}.pbf` | 地块矢量瓦片（选中区后按建设状态高亮） |
 | `GET /api/v1/meta` | 区数量、各源数据日期、是否样例、最近一次抽取状态 |
 | `GET /api/v1/lineage` | 指标血缘：每个指标读哪个库 / 表、怎么算、对应 SQL（页面悬浮提示用） |
 | `POST /api/v1/admin/etl/{makani\|liveability\|adrec\|all}` | 手动触发抽取，请求头 `X-Admin-Token`（配置项 `d360.admin.token`，为空时禁用） |

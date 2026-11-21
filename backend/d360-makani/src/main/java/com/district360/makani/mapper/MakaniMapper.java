@@ -33,5 +33,8 @@ public interface MakaniMapper {
 
     List<MakaniRows.PlotShape> plotShapes(@Param("t") MakaniTables t);
 
+    /** 学校 / 医疗 / 清真寺点位，筛选条件与 schools / medical / mosques 计数一致。 */
+    List<MakaniRows.PoiRow> pois(@Param("t") MakaniTables t, @Param("exclude") List<String> excludeNamePatterns);
+
     LocalDate plotDataDate(@Param("t") MakaniTables t);
 }

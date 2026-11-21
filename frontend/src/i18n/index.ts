@@ -46,7 +46,11 @@ const zh = {
     otherDesc: '地块主用途（primaryuseengdesc）不是 Residential（居住）或 Commercial（商业）的地块合计，例如 Private、Investment、Industrial、Utility、Recreational、Educational、Health、Religious、Undefined 等。占比 = 这些地块数 ÷ 区内地块总数。其中：',
   },
   re: { sales: '成交额', yoy: '同比', tx: '成交宗数', mort: '按揭', price: '均价 AED/m²', lease: '在册租约', monthly: '月度成交宗数' },
-  fac: { schools: '学校', health: '医疗', mosques: '清真寺', parks: '公园', gap: '公园缺口 ha' },
+  fac: {
+    schools: '学校', health: '医疗', mosques: '清真寺', parks: '公园', gap: '公园缺口 ha',
+    open: '点击查看列表', search: '搜索名称…', empty: '该区没有这类设施', close: '收起', locate: '在地图上定位',
+    cat: { school: '学校', medical: '医疗设施', mosque: '清真寺' },
+  },
   tip: { liveability: '宜居', notAssessed: '宜居：没有查询到数据', click: '点击查看区情概览', selected: '已选中' },
   lineage: {
     page: '页面读取',
@@ -108,7 +112,11 @@ const en: typeof zh = {
     otherDesc: 'All plots whose primary use (primaryuseengdesc) is neither Residential nor Commercial, e.g. Private, Investment, Industrial, Utility, Recreational, Educational, Health, Religious, Undefined. Share = these plots ÷ all plots in the district. Breakdown:',
   },
   re: { sales: 'Sales value', yoy: 'YoY', tx: 'Transactions', mort: 'Mortgages', price: 'AED/m² average', lease: 'Leases', monthly: 'Monthly transactions' },
-  fac: { schools: 'Schools', health: 'Health', mosques: 'Mosques', parks: 'Parks', gap: 'Park gap, ha' },
+  fac: {
+    schools: 'Schools', health: 'Health', mosques: 'Mosques', parks: 'Parks', gap: 'Park gap, ha',
+    open: 'Click for the list', search: 'Search by name…', empty: 'No facilities of this type', close: 'Close', locate: 'Locate on map',
+    cat: { school: 'Schools', medical: 'Health facilities', mosque: 'Mosques' },
+  },
   tip: { liveability: 'Liveability', notAssessed: 'Liveability: no data found', click: 'Click for the overview', selected: 'Selected' },
   lineage: {
     page: 'Read from',

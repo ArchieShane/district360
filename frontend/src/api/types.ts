@@ -156,3 +156,14 @@ export interface LineageInfo {
     sql: string | null
   }>
 }
+
+export type FacilityCategory = 'school' | 'medical' | 'mosque'
+
+export interface FacilityItem {
+  id: string
+  category: FacilityCategory
+  nameEn: string | null
+  nameAr: string | null
+  subtype: string | null
+  location: [number, number]
+}

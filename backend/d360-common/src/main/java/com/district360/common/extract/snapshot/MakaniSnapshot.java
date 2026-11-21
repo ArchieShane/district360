@@ -14,11 +14,12 @@ public record MakaniSnapshot(
         List<District> districts,
         List<LandUse> landUse,
         List<Building> buildings,
-        List<Plot> plots) implements SourceSnapshot {
+        List<Plot> plots,
+        List<Poi> pois) implements SourceSnapshot {
 
     @Override
     public int rowCount() {
-        return districts.size() + landUse.size() + buildings.size() + plots.size();
+        return districts.size() + landUse.size() + buildings.size() + plots.size() + pois.size();
     }
 
     /**
@@ -72,6 +73,16 @@ public record MakaniSnapshot(
      * @param status constructed / under_construction / vacant_serviced / vacant_unserviced / other，与面板「地块状态」4 类一致
      */
     public record Plot(String code, String plotId, String status, String useDesc, String ewkbHex) {
+    }
+
+    /**
+     * 公共设施点位（与区级计数同一口径），供面板列表与地图定位。
+     *
+     * @param category school / medical / mosque
+     * @param subtype  学校：Public / Private；医疗：facility_type；清真寺：جامع / مسجد
+     */
+    public record Poi(String code, String category, String sourceId, String nameEn, String nameAr, String subtype,
+                      double lon, double lat) {
     }
 
     /** 建筑体块（EPSG:4326，EWKB hex）。 */

@@ -105,8 +105,13 @@ public class MakaniExtractor implements StatExtractor<MakaniSnapshot> {
                 .map(r -> new MakaniSnapshot.Plot(codeByKey.get(r.districtKey), r.plotId, r.status, r.useDesc, r.geomHex))
                 .toList();
 
-        log.info("makani 抽取完成：{} 个区，{} 条土地利用，{} 栋建筑，{} 个地块", out.size(), landUse.size(), buildings.size(), plotShapes.size());
-        return new MakaniSnapshot(mapper.plotDataDate(t), out, landUse, buildings, plotShapes);
+        List<MakaniSnapshot.Poi> pois = mapper.pois(t, props.getMedicalExcludeNamePatterns()).stream()
+                .map(r -> new MakaniSnapshot.Poi(codeByKey.get(r.districtKey), r.category, r.sourceId, r.nameEn, r.nameAr, r.subtype, r.lon, r.lat))
+                .toList();
+
+        log.info("makani 抽取完成：{} 个区，{} 条土地利用，{} 栋建筑，{} 个地块，{} 个公共设施点",
+                out.size(), landUse.size(), buildings.size(), plotShapes.size(), pois.size());
+        return new MakaniSnapshot(mapper.plotDataDate(t), out, landUse, buildings, plotShapes, pois);
     }
 
     /** ADM + AL REEM ISLAND → adm-al-reem-island；ADM + HADBAT AL ZA`FARANAH → adm-hadbat-al-zafaranah */

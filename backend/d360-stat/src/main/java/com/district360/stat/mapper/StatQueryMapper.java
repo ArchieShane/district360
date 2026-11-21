@@ -4,6 +4,7 @@ import com.district360.stat.row.District360Row;
 import com.district360.stat.row.DistrictListRow;
 import com.district360.stat.row.LandUseRow;
 import com.district360.stat.row.MonthlyRow;
+import com.district360.stat.row.PoiRow;
 import com.district360.stat.row.ScopeRow;
 import com.district360.stat.row.SourceStatusRow;
 import com.district360.stat.row.TileRow;
@@ -28,6 +29,9 @@ public interface StatQueryMapper {
     String districtBoundariesGeoJson();
 
     TileRow buildingTile(@Param("z") int z, @Param("x") int x, @Param("y") int y);
+
+    /** 某区某类公共设施列表（按名称排序）。 */
+    List<PoiRow> listPois(@Param("code") String code, @Param("category") String category);
 
     TileRow plotTile(@Param("z") int z, @Param("x") int x, @Param("y") int y);
 

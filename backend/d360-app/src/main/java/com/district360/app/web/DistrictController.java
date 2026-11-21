@@ -5,6 +5,7 @@ import com.district360.app.lineage.LineageService;
 import com.district360.app.service.DistrictService;
 import com.district360.app.web.dto.DistrictListItem;
 import com.district360.app.web.dto.DistrictOverview;
+import com.district360.app.web.dto.FacilityItem;
 import com.district360.app.web.dto.MetaInfo;
 import com.district360.app.web.dto.PageResult;
 import com.district360.common.api.ApiResponse;
@@ -39,6 +40,12 @@ public class DistrictController {
     @GetMapping("/districts/{code}/overview")
     public ApiResponse<DistrictOverview> overview(@PathVariable String code) {
         return ApiResponse.ok(service.overview(code));
+    }
+
+    /** 某区的公共设施列表：category = school / medical / mosque（面板点击数字展开，点击条目地图定位）。 */
+    @GetMapping("/districts/{code}/facilities/{category}")
+    public ApiResponse<java.util.List<FacilityItem>> facilities(@PathVariable String code, @PathVariable String category) {
+        return ApiResponse.ok(service.facilities(code, category));
     }
 
     /** 区数量、各源数据日期和最近一次抽取状态。 */

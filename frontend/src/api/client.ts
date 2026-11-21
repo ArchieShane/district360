@@ -1,4 +1,4 @@
-import type { ApiResponse, DistrictFeatureCollection, DistrictListItem, DistrictOverview, LineageInfo, MetaInfo, PageResult } from './types'
+import type { ApiResponse, DistrictFeatureCollection, DistrictListItem, DistrictOverview, FacilityCategory, FacilityItem, LineageInfo, MetaInfo, PageResult } from './types'
 
 const BASE = '/api/v1'
 
@@ -25,6 +25,8 @@ export const api = {
   },
   overview: (code: string) => get<DistrictOverview>(`/districts/${encodeURIComponent(code)}/overview`),
   meta: () => get<MetaInfo>('/meta'),
+  facilities: (code: string, category: FacilityCategory) =>
+    get<FacilityItem[]>(`/districts/${encodeURIComponent(code)}/facilities/${category}`),
   lineage: () => get<LineageInfo>('/lineage'),
   plotTilesUrl: (v: string) => `${location.origin}${BASE}/map/tiles/plots/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,
   buildingTilesUrl: (v: string) => `${location.origin}${BASE}/map/tiles/buildings/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,

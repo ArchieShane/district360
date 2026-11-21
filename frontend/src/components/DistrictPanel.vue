@@ -5,6 +5,7 @@ import type { BlockStatus } from '../api/types'
 import { useDistrictStore } from '../stores/district'
 import { dmy, nf, sg, ym } from '../utils/format'
 import { buildSummary } from '../utils/summary'
+import FacilityList from './FacilityList.vue'
 
 const store = useDistrictStore()
 const { t, locale } = useI18n()
@@ -210,9 +211,22 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
             </span>
           </div>
           <div class="fac6">
-            <div data-m="schools"><b>{{ fv(has(o.facilities.status), o.facilities.schools) }}</b>{{ t('fac.schools') }}</div>
-            <div data-m="medical"><b>{{ fv(has(o.facilities.status), o.facilities.medical) }}</b>{{ t('fac.health') }}</div>
-            <div data-m="mosques"><b>{{ fv(has(o.facilities.status), o.facilities.mosques) }}</b>{{ t('fac.mosques') }}</div>
+            <!-- 学校 / 医疗 / 清真寺：点击展开列表，点击条目在地图上定位 -->
+            <div data-m="schools" class="fac-btn" :class="{ on: store.facilityCategory === 'school' }" :title="t('fac.open')"
+                 role="button" tabindex="0" @click="has(o.facilities.status) && store.toggleFacilities('school')"
+                 @keydown.enter="has(o.facilities.status) && store.toggleFacilities('school')">
+              <b>{{ fv(has(o.facilities.status), o.facilities.schools) }}</b>{{ t('fac.schools') }}<em>›</em>
+            </div>
+            <div data-m="medical" class="fac-btn" :class="{ on: store.facilityCategory === 'medical' }" :title="t('fac.open')"
+                 role="button" tabindex="0" @click="has(o.facilities.status) && store.toggleFacilities('medical')"
+                 @keydown.enter="has(o.facilities.status) && store.toggleFacilities('medical')">
+              <b>{{ fv(has(o.facilities.status), o.facilities.medical) }}</b>{{ t('fac.health') }}<em>›</em>
+            </div>
+            <div data-m="mosques" class="fac-btn" :class="{ on: store.facilityCategory === 'mosque' }" :title="t('fac.open')"
+                 role="button" tabindex="0" @click="has(o.facilities.status) && store.toggleFacilities('mosque')"
+                 @keydown.enter="has(o.facilities.status) && store.toggleFacilities('mosque')">
+              <b>{{ fv(has(o.facilities.status), o.facilities.mosques) }}</b>{{ t('fac.mosques') }}<em>›</em>
+            </div>
             <div :class="{ na: !has(o.facilities.parks.status) }">
               <span data-m="parks"><b>{{ fv(has(o.facilities.parks.status), o.facilities.parks.count) }}</b>{{ t('fac.parks') }}</span>
               <small data-m="park_area_ha">{{ fv(has(o.facilities.parks.status), o.facilities.parks.areaHa, 1) }} ha</small>
@@ -221,6 +235,7 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
               <b>{{ fv(has(o.facilities.parks.status), o.facilities.parks.gapHa, 1) }}</b>{{ t('fac.gap') }}
             </div>
           </div>
+          <FacilityList />
         </div>
       </template>
     </div>

@@ -252,3 +252,45 @@ button, input { font-family: inherit; }
   font-size: 11.5px; line-height: 17px; font-weight: 400; color: var(--tm); white-space: normal; text-align: left; }
 .lur .info .info-pop b { display: block; color: #fff; font-size: 12px; margin-bottom: 3px; }
 .lur .info:hover .info-pop, .lur .info:focus-visible .info-pop { display: block; }
+
+/* 公共设施：可点击的计数 + 展开列表 */
+.fac6 .fac-btn { cursor: pointer; border-radius: 8px; padding: 2px 6px; margin: -2px -6px; position: relative; outline: none; }
+.fac6 .fac-btn em { font-style: normal; color: var(--tq); margin-left: 3px; transition: transform 0.2s; display: inline-block; }
+.fac6 .fac-btn:hover, .fac6 .fac-btn:focus-visible { background: rgba(127, 183, 240, 0.1); }
+.fac6 .fac-btn.on { background: rgba(127, 183, 240, 0.16); box-shadow: inset 0 0 0 1px rgba(127, 183, 240, 0.45); }
+.fac6 .fac-btn.on em { transform: rotate(90deg); color: var(--acc2); }
+.facl { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 9px; }
+.facl-h { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.facl-h b { font-size: 12px; color: #fff; white-space: nowrap; }
+.facl-q { flex: 1; min-width: 0; height: 26px; border-radius: 7px; border: 0; background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px var(--line);
+  color: #fff; padding: 0 9px; font-size: 12px; outline: none; }
+.facl-q:focus { box-shadow: inset 0 0 0 1px rgba(127, 183, 240, 0.7); }
+.facl-x { margin-left: auto; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.07); color: #fff; cursor: pointer; flex: none; }
+.facl-list { max-height: 260px; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+.facl-list::-webkit-scrollbar { width: 6px; }
+.facl-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }
+.facl-i { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; color: var(--tx); text-align: left;
+  padding: 6px 7px; border-radius: 8px; cursor: pointer; }
+.facl-i:hover { background: rgba(255, 255, 255, 0.06); }
+.facl-i.on { background: rgba(127, 183, 240, 0.16); box-shadow: inset 0 0 0 1px rgba(127, 183, 240, 0.5); }
+.facl-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.facl-n { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.facl-s { font-size: 11px; color: var(--tq); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.facl-go { color: var(--tq); font-size: 14px; }
+.facl-i:hover .facl-go, .facl-i.on .facl-go { color: var(--acc2); }
+.facl-empty { padding: 14px; text-align: center; color: var(--tq); font-size: 12px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35); }
+.dot.school { background: #e8c77a; }
+.dot.medical { background: #ff8a7a; }
+.dot.mosque { background: #5fe0a0; }
+/* 地图上定位到的设施：标签 + 连接线 + 定位点（锚点在定位点底部） */
+.poi-mk { display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.poi-pin { padding: 6px 10px; border-radius: 9px; background: rgba(10, 18, 28, 0.94); box-shadow: inset 0 0 0 1px rgba(127, 183, 240, 0.75), 0 6px 20px rgba(0, 0, 0, 0.45);
+  font-size: 12.5px; font-weight: 700; color: #fff; max-width: 280px; }
+.poi-pin span, .poi-pin small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.poi-pin small { font-size: 11px; font-weight: 500; color: var(--tm); }
+.poi-stem { width: 2px; height: 26px; background: linear-gradient(rgba(169, 208, 247, 0.95), rgba(169, 208, 247, 0.5)); }
+.poi-dot { width: 14px; height: 14px; border-radius: 50%; border: 3px solid #0b1118; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 12px rgba(127, 183, 240, 0.9); margin-top: -2px; }
+.poi-mk.school .poi-dot { background: #e8c77a; }
+.poi-mk.medical .poi-dot { background: #ff8a7a; }
+.poi-mk.mosque .poi-dot { background: #5fe0a0; }
