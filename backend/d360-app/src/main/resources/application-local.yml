@@ -1,0 +1,10 @@
+d360:
+  datasource:
+    stat:
+      username: postgres
+      password: "freedo"
+    makani:
+      username: postgres
+      password: "freedo"
+  admin:
+    token: "local-dev-token"

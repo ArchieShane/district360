@@ -89,10 +89,10 @@ public class LineageService {
         return v;
     }
 
-    /** jdbc:postgresql://host:port/db?x=y → db @ host:port */
+    /** jdbc:postgresql://host:port/db?x=y → db（只展示库名，不展示主机和端口） */
     static String describe(String url) {
         Matcher m = JDBC.matcher(url == null ? "" : url);
-        return m.matches() ? m.group(2) + " @ " + m.group(1) : url;
+        return m.matches() ? m.group(2) : "";
     }
 
     private static String fill(String text, Map<String, String> vars) {

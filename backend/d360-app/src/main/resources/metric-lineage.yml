@@ -2,11 +2,11 @@
 # 前端鼠标悬浮在数值上时展示（GET /api/v1/lineage）。
 #
 # 占位符在运行时替换成实际配置：
-#   {makani.db}          makani 源库（取自 d360.datasource.makani.url）
+#   {makani.db}          makani 源库名（取自 d360.datasource.makani.url，只显示库名）
 #   {makani.district} 等 makani 源表全名（schema + 前缀 + 表名，取自 d360.makani.*）
 #   {makani.municipality}、{makani.medicalExclude}
 #   {landuse.mapping}    土地利用归类规则（取自 d360.land-use.groups）
-#   {stat.db}            统计库（取自 d360.datasource.stat.url）
+#   {stat.db}            统计库名（取自 d360.datasource.stat.url，只显示库名）
 # 以冒号开头的参数在前端按当前选中的区替换：
 #   :makani_district_id  makani udm_district.districtid
 #   :liv_district_id     Liveability dim_districts.district_id
@@ -19,11 +19,11 @@ d360:
       makani:
         name-zh: makani
         name-en: makani
-        planned-db: "makani_1119 @ 10.255.254.109:5443"
+        planned-db: "makani_1119"
       liveability:
         name-zh: 宜居评估
         name-en: Liveability
-        planned-db: "liveability_data_20260730 @ 10.255.254.109:5443（待宜居组接入）"
+        planned-db: "liveability_data_20260730（待宜居组接入）"
       adrec:
         name-zh: ADREC
         name-en: ADREC

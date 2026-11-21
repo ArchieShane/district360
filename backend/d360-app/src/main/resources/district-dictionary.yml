@@ -19,7 +19,7 @@ d360:
     - { code: mushrif,    name-en: "Al Mushrif",           sort-no: 11, makani-district-id: 1291, liv-district-id: 174, mapping-confirmed: true }
     - { code: zafaranah,  name-en: "Hadbat Al Za'faranah", sort-no: 12, makani-district-id: 1302, liv-district-id: 213, mapping-confirmed: true }
     - { code: rasakhdar,  name-en: "Al Ras Al Akhdar",     sort-no: 13, makani-district-id: 1304, liv-district-id: 181, mapping-confirmed: true }
-    - { code: hudayriyat, name-en: "Hudayriyat Island",    sort-no: 14, makani-district-id: 1315, liv-district-id: 157, mapping-confirmed: false, mapping-note: "暂按 makani / Liveability 的 AL HIDAYRIYYAT（makani 1315、Liveability 157）；该区面约 127 km²，远大于原型里 Hudayriyat Island 的 5.56 km²，待确认" }
+    - { code: hudayriyat, name-en: "Hudayriyat Island",    sort-no: 14, makani-district-id: 1315, liv-district-id: 157, mapping-confirmed: true, mapping-note: "以数据库为准：makani / Liveability 的 AL HIDAYRIYYAT（makani 1315、Liveability 157），区面约 127 km²" }
     - { code: saadiyat,   name-en: "Saadiyat Island",      sort-no: 15, makani-district-id: 1347, liv-district-id: 187, mapping-confirmed: false, mapping-note: "暂按 makani AL SAADIYAT ISLAND（1347），待确认" }
     - { code: yas,        name-en: "Yas Island",           sort-no: 16, makani-district-id: 1330, liv-district-id: 232, mapping-confirmed: true }
     - { code: mina,       name-en: "Al Mina",              sort-no: 17, makani-district-id: 1288, liv-district-id: 235, mapping-confirmed: false, mapping-note: "暂按 makani ZAYED PORT（1288），待确认" }

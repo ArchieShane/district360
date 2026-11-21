@@ -42,11 +42,7 @@ docs/                         原型、字段对照、方案文档
 
 需要 JDK 17、Maven 3.9。
 
-```bash
-cp backend/d360-app/src/main/resources/application-local.example.yml backend/d360-app/src/main/resources/application-local.yml
-```
-
-在 `application-local.yml` 里填好统计库和 makani 库的账号密码（这个文件已被 `.gitignore` 忽略，不会提交）。也可以不建这个文件，改用环境变量 `D360_STAT_DB_USER`、`D360_STAT_DB_PASSWORD`、`D360_MAKANI_DB_USER`、`D360_MAKANI_DB_PASSWORD`。
+内网开发库的账号密码已写在 `backend/d360-app/src/main/resources/application-local.yml`（默认激活 `local` profile），拉下代码即可直接运行。需要连别的库时，改这个文件或用环境变量覆盖（`D360_STAT_DB_URL`、`D360_MAKANI_DB_URL`、`D360_*_DB_USER`、`D360_*_DB_PASSWORD`）。
 
 ```bash
 cd backend && mvn -B -DskipTests package && java -jar d360-app/target/district360.jar
@@ -68,6 +64,14 @@ cd frontend && npm install && npm run dev
 打开 http://localhost:5173 ，`/api` 会代理到 http://localhost:8080 。底图默认用 CARTO dark-matter（免 key），可在 `frontend/.env.local` 里用 `VITE_BASEMAP_STYLE` 换成其他 MapLibre 样式。
 
 生产构建：`npm run build`，产物在 `frontend/dist`，由 Nginx 托管并把 `/api` 反向代理到后端即可。
+
+## 切换到生产库
+
+当前连的是数据治理人员整理的库（`makani_1119`，表在 `ods` schema、带 `ods_makani_` 前缀）。到生产环境只改配置，不改代码：
+
+- 数据源地址与账号：`d360.datasource.*`（或对应环境变量）；
+- makani 表的位置：`d360.makani.schema`、`d360.makani.table-prefix`（例如生产库是 `public` schema、无前缀，就配 `schema: public`、`table-prefix: ""`）；
+- 指标悬浮提示里的库名、表名会自动跟着配置变。
 
 ## 接口
 
