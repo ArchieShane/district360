@@ -13,6 +13,10 @@ const o = computed(() => store.overview)
 const summary = computed(() => (o.value ? buildSummary(o.value, locale.value as 'zh' | 'en') : ''))
 
 const has = (s: BlockStatus) => s === 'ok' || s === 'sample'
+/** 没有数据时也渲染完整布局，数值显示 NaN（区块标题会标「没有查询到数据」） */
+const NA = 'NaN'
+const fv = (ok: boolean, v: number | null | undefined, digits = 0) => (ok ? nf(v, digits) : NA)
+const fs = (ok: boolean, v: number | null | undefined) => (ok ? sg(v) : NA)
 
 const PS = [
   { key: 'constructed', color: '#C9D3DE', metric: 'plots_constructed' },
@@ -29,12 +33,25 @@ const plotParts = computed(() => {
   if (!ps) return []
   return PS.map(p => ({ ...p, value: ps[p.key] ?? 0 }))
 })
+/** 面板显示的土地利用类别；没有数据时也按居住、商业两类占位 */
+const landUseShown = computed(() => {
+  const list = o.value?.land.landUse.filter(x => x.highlight) ?? []
+  if (list.length) return list
+  return [
+    { key: 'residential', nameZh: '居住', nameEn: 'Residential', pct: null },
+    { key: 'commercial', nameZh: '商业', nameEn: 'Commercial', pct: null },
+  ]
+})
 const plotTotal = computed(() => plotParts.value.reduce((a, p) => a + p.value, 0) || 1)
 
 const bars = computed(() => {
   const m = o.value?.realEstate.monthly ?? []
+  if (!m.length) {
+    // 没有数据：画 12 根灰色占位柱
+    return Array.from({ length: 12 }, (_, i) => ({ x: i * 30 + 4, h: 4, last: false, label: '', empty: true }))
+  }
   const max = Math.max(1, ...m.map(x => x.transactions))
-  return m.map((x, i) => ({ x: i * 30 + 4, h: (x.transactions / max) * 30, last: i === m.length - 1, label: x.month }))
+  return m.map((x, i) => ({ x: i * 30 + 4, h: (x.transactions / max) * 30, last: i === m.length - 1, label: x.month, empty: false }))
 })
 
 function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null) {
@@ -68,104 +85,115 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
         </div>
 
         <!-- 宜居得分 -->
-        <div class="blk">
+        <div class="blk" :class="{ na: !has(o.liveability.status) }">
           <div class="bh">
             <b>{{ t('block.liveability') }}</b>
-            <span><i v-if="o.liveability.status === 'sample'" class="tag smp">{{ t('status.sample') }}</i>{{ dateLabel('liveability', o.liveability.asOf) }}</span>
+            <span>
+              <i v-if="!has(o.liveability.status)" class="tag nd">{{ o.liveability.status === 'not_assessed' ? t('status.notAssessed') : t('status.unavailable') }}</i>
+              {{ dateLabel('liveability', o.liveability.asOf) }}
+            </span>
           </div>
-          <div v-if="has(o.liveability.status)" class="lvr">
+          <div class="lvr">
             <div>
-              <div class="bigv"><b data-m="liv_current">{{ nf(o.liveability.current, 2) }}</b></div>
-              <div class="subv"><span data-m="liv_target">{{ t('liv.target') }} <b>{{ nf(o.liveability.target, 2) }}</b></span> · <span data-m="liv_gap">{{ t('liv.gap') }} {{ nf(o.liveability.gap, 2) }}</span></div>
+              <div class="bigv"><b data-m="liv_current">{{ fv(has(o.liveability.status), o.liveability.current, 2) }}</b></div>
+              <div class="subv">
+                <span data-m="liv_target">{{ t('liv.target') }} <b>{{ fv(has(o.liveability.status), o.liveability.target, 2) }}</b></span> ·
+                <span data-m="liv_gap">{{ t('liv.gap') }} {{ fv(has(o.liveability.status), o.liveability.gap, 2) }}</span>
+              </div>
             </div>
             <div class="st3">
-              <div class="sv" data-m="liv_existing">{{ t('liv.existing') }}<b>{{ nf(o.liveability.existing, 2) }}</b></div>
+              <div class="sv" data-m="liv_existing">{{ t('liv.existing') }}<b>{{ fv(has(o.liveability.status), o.liveability.existing, 2) }}</b></div>
               <span class="ar">→</span>
-              <div class="sv" data-m="liv_current">{{ t('liv.current') }}<b>{{ nf(o.liveability.current, 2) }}</b></div>
+              <div class="sv" data-m="liv_current">{{ t('liv.current') }}<b>{{ fv(has(o.liveability.status), o.liveability.current, 2) }}</b></div>
               <span class="ar">→</span>
-              <div class="sv tg" data-m="liv_target">{{ t('liv.target') }}<b>{{ nf(o.liveability.target, 2) }}</b></div>
+              <div class="sv tg" data-m="liv_target">{{ t('liv.target') }}<b>{{ fv(has(o.liveability.status), o.liveability.target, 2) }}</b></div>
             </div>
           </div>
-          <div v-else class="bigv na2">{{ o.liveability.status === 'not_assessed' ? t('status.notAssessed') : t('status.unavailable') }}</div>
         </div>
 
         <!-- 土地与建设 -->
-        <div class="blk">
-          <div class="bh"><b>{{ t('block.land') }}</b><span>{{ dateLabel('makani', o.land.asOf) }}</span></div>
-          <template v-if="has(o.land.status)">
-            <div class="k3x">
-              <div data-m="plots"><b>{{ nf(o.land.plots) }}</b>{{ t('land.plots') }}</div>
-              <div data-m="buildings"><b>{{ nf(o.land.buildings) }}</b>{{ t('land.buildings') }}</div>
-              <div data-m="buildings_under_construction"><b>{{ nf(o.land.buildingsUnderConstruction) }}</b>{{ t('land.uc') }}</div>
-            </div>
-            <div class="pbar" style="margin-top: 9px; height: 9px">
+        <div class="blk" :class="{ na: !has(o.land.status) }">
+          <div class="bh">
+            <b>{{ t('block.land') }}</b>
+            <span><i v-if="!has(o.land.status)" class="tag nd">{{ t('status.unavailable') }}</i>{{ dateLabel('makani', o.land.asOf) }}</span>
+          </div>
+          <div class="k3x">
+            <div data-m="plots"><b>{{ fv(has(o.land.status), o.land.plots) }}</b>{{ t('land.plots') }}</div>
+            <div data-m="buildings"><b>{{ fv(has(o.land.status), o.land.buildings) }}</b>{{ t('land.buildings') }}</div>
+            <div data-m="buildings_under_construction"><b>{{ fv(has(o.land.status), o.land.buildingsUnderConstruction) }}</b>{{ t('land.uc') }}</div>
+          </div>
+          <div class="pbar" style="margin-top: 9px; height: 9px">
+            <template v-if="has(o.land.status)">
               <i v-for="p in plotParts" :key="p.key" :data-m="p.metric" :style="{ width: (p.value / plotTotal) * 100 + '%', background: p.color }"></i>
-            </div>
-            <div class="lgd">
-              <span v-for="p in plotParts" :key="p.key" :data-m="p.metric"><i :style="{ background: p.color }"></i>{{ t('land.ps.' + p.key) }} <b>{{ nf(p.value) }}</b></span>
-            </div>
-            <div class="lur">
-              {{ t('land.landUse') }}：
-              <span v-for="u in o.land.landUse.filter(x => x.highlight)" :key="u.key" data-m="land_use">
-                <i :style="{ background: LU_COLORS[u.key] ?? '#9AA6B2' }"></i>{{ locale === 'zh' ? u.nameZh : u.nameEn }} <b>{{ nf(u.pct, 1) }}%</b>
-              </span>
-            </div>
-          </template>
-          <div v-else class="bigv na2">{{ t('status.unavailable') }}</div>
+            </template>
+          </div>
+          <div class="lgd">
+            <span v-for="p in plotParts" :key="p.key" :data-m="p.metric"><i :style="{ background: p.color }"></i>{{ t('land.ps.' + p.key) }} <b>{{ fv(has(o.land.status), p.value) }}</b></span>
+          </div>
+          <div class="lur">
+            {{ t('land.landUse') }}：
+            <span v-for="u in landUseShown" :key="u.key" data-m="land_use">
+              <i :style="{ background: LU_COLORS[u.key] ?? '#9AA6B2' }"></i>{{ locale === 'zh' ? u.nameZh : u.nameEn }} <b>{{ fv(has(o.land.status), u.pct, 1) }}%</b>
+            </span>
+          </div>
         </div>
 
         <!-- 房地产 -->
-        <div class="blk">
+        <div class="blk" :class="{ na: !has(o.realEstate.status) }">
           <div class="bh">
             <b>{{ t('block.realEstate') }}</b>
             <span>
-              <i v-if="o.realEstate.status === 'sample'" class="tag smp">{{ t('status.sample') }}</i>
+              <i v-if="!has(o.realEstate.status)" class="tag nd">{{ t('status.unavailable') }}</i>
               <template v-if="o.realEstate.periodStart">{{ ym(o.realEstate.periodStart) }} – {{ ym(o.realEstate.periodEnd) }}</template>
               <template v-else>{{ t('src.adrec') }}</template>
             </span>
           </div>
-          <template v-if="has(o.realEstate.status)">
-            <div class="k3x">
-              <div>
-                <span data-m="re_sales"><b>AED {{ nf(o.realEstate.salesAedBn, 1) }}<small class="unit"> bn</small></b>{{ t('re.sales') }}</span>
-                <small data-m="re_yoy">{{ t('re.yoy') }} {{ sg(o.realEstate.salesYoyPct) }}%</small>
-              </div>
-              <div><span data-m="re_transactions"><b>{{ nf(o.realEstate.transactions) }}</b>{{ t('re.tx') }}</span><small data-m="re_mortgages">{{ t('re.mort') }} {{ nf(o.realEstate.mortgages) }}</small></div>
-              <div><span data-m="re_price"><b>{{ nf(o.realEstate.avgPriceSqm) }}</b>{{ t('re.price') }}</span><small data-m="re_leases">{{ t('re.lease') }} {{ nf(o.realEstate.activeLeases) }}</small></div>
+          <div class="k3x">
+            <div>
+              <span data-m="re_sales"><b>AED {{ fv(has(o.realEstate.status), o.realEstate.salesAedBn, 1) }}<small class="unit"> bn</small></b>{{ t('re.sales') }}</span>
+              <small data-m="re_yoy">{{ t('re.yoy') }} {{ fs(has(o.realEstate.status), o.realEstate.salesYoyPct) }}%</small>
             </div>
-            <template v-if="bars.length">
-              <svg width="100%" height="34" viewBox="0 0 360 34" preserveAspectRatio="none" class="bars" data-m="re_monthly">
-                <rect v-for="b in bars" :key="b.label" :x="b.x" :y="32 - b.h" width="22" :height="b.h" rx="2" fill="#7FB7F0" :opacity="b.last ? 1 : 0.5">
-                  <title>{{ ym(b.label) }}</title>
-                </rect>
-              </svg>
-              <div class="barsl"><span>{{ ym(bars[0].label) }}</span><span>{{ t('re.monthly') }}</span><span>{{ ym(bars[bars.length - 1].label) }}</span></div>
-            </template>
-          </template>
-          <div v-else class="bigv na2">{{ t('status.unavailable') }}</div>
+            <div>
+              <span data-m="re_transactions"><b>{{ fv(has(o.realEstate.status), o.realEstate.transactions) }}</b>{{ t('re.tx') }}</span>
+              <small data-m="re_mortgages">{{ t('re.mort') }} {{ fv(has(o.realEstate.status), o.realEstate.mortgages) }}</small>
+            </div>
+            <div>
+              <span data-m="re_price"><b>{{ fv(has(o.realEstate.status), o.realEstate.avgPriceSqm) }}</b>{{ t('re.price') }}</span>
+              <small data-m="re_leases">{{ t('re.lease') }} {{ fv(has(o.realEstate.status), o.realEstate.activeLeases) }}</small>
+            </div>
+          </div>
+          <svg width="100%" height="34" viewBox="0 0 360 34" preserveAspectRatio="none" class="bars" data-m="re_monthly">
+            <rect v-for="(b, i) in bars" :key="i" :x="b.x" :y="32 - b.h" width="22" :height="b.h" rx="2"
+                  :fill="b.empty ? '#3A4553' : '#7FB7F0'" :opacity="b.empty ? 1 : b.last ? 1 : 0.5">
+              <title>{{ b.empty ? 'NaN' : ym(b.label) }}</title>
+            </rect>
+          </svg>
+          <div class="barsl">
+            <span>{{ bars[0].empty ? '—' : ym(bars[0].label) }}</span>
+            <span>{{ t('re.monthly') }}</span>
+            <span>{{ bars[bars.length - 1].empty ? '—' : ym(bars[bars.length - 1].label) }}</span>
+          </div>
         </div>
 
         <!-- 公共设施 -->
         <div class="blk">
           <div class="bh">
             <b>{{ t('block.facilities') }}</b>
-            <span><i v-if="o.facilities.parks.status === 'sample'" class="tag smp">{{ t('fac.parks') }} · {{ t('status.sample') }}</i>{{ dateLabel('makani', o.facilities.asOf) }}</span>
+            <span>
+              <i v-if="!has(o.facilities.parks.status)" class="tag nd">{{ t('fac.parks') }} · {{ o.facilities.parks.status === 'not_assessed' ? t('status.notAssessed') : t('status.unavailable') }}</i>
+              {{ dateLabel('makani', o.facilities.asOf) }}
+            </span>
           </div>
           <div class="fac6">
-            <div data-m="schools"><b>{{ has(o.facilities.status) ? nf(o.facilities.schools) : '—' }}</b>{{ t('fac.schools') }}</div>
-            <div data-m="medical"><b>{{ has(o.facilities.status) ? nf(o.facilities.medical) : '—' }}</b>{{ t('fac.health') }}</div>
-            <div data-m="mosques"><b>{{ has(o.facilities.status) ? nf(o.facilities.mosques) : '—' }}</b>{{ t('fac.mosques') }}</div>
-            <template v-if="has(o.facilities.parks.status)">
-              <div>
-                <span data-m="parks"><b>{{ nf(o.facilities.parks.count) }}</b>{{ t('fac.parks') }}</span>
-                <small data-m="park_area_ha">{{ nf(o.facilities.parks.areaHa, 1) }} ha</small>
-              </div>
-              <div data-m="park_gap_ha"><b>{{ nf(o.facilities.parks.gapHa, 1) }}</b>{{ t('fac.gap') }}</div>
-            </template>
-            <!-- 宜居未接入：公园两项不显示数值 -->
-            <div v-else class="nodata2" data-m="parks">
-              {{ t('fac.parks') }} / {{ t('fac.gap') }}
-              <small>{{ o.facilities.parks.status === 'not_assessed' ? t('status.notAssessed') : t('status.unavailable') }}</small>
+            <div data-m="schools"><b>{{ fv(has(o.facilities.status), o.facilities.schools) }}</b>{{ t('fac.schools') }}</div>
+            <div data-m="medical"><b>{{ fv(has(o.facilities.status), o.facilities.medical) }}</b>{{ t('fac.health') }}</div>
+            <div data-m="mosques"><b>{{ fv(has(o.facilities.status), o.facilities.mosques) }}</b>{{ t('fac.mosques') }}</div>
+            <div :class="{ na: !has(o.facilities.parks.status) }">
+              <span data-m="parks"><b>{{ fv(has(o.facilities.parks.status), o.facilities.parks.count) }}</b>{{ t('fac.parks') }}</span>
+              <small data-m="park_area_ha">{{ fv(has(o.facilities.parks.status), o.facilities.parks.areaHa, 1) }} ha</small>
+            </div>
+            <div data-m="park_gap_ha" :class="{ na: !has(o.facilities.parks.status) }">
+              <b>{{ fv(has(o.facilities.parks.status), o.facilities.parks.gapHa, 1) }}</b>{{ t('fac.gap') }}
             </div>
           </div>
         </div>

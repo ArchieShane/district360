@@ -93,7 +93,7 @@ function applyHover(code: string | null) {
 }
 
 function tipHtml(d: DistrictFeatureProps): string {
-  const lv = d.liveabilityScore != null ? `${t('tip.liveability')} ${nf(d.liveabilityScore, 2)}` : t('tip.notAssessed')
+  const lv = `${t('tip.liveability')} ${d.liveabilityScore != null ? nf(d.liveabilityScore, 2) : 'NaN'}`
   const area = d.areaKm2 != null ? `${nf(d.areaKm2, 2)} km² · ` : ''
   return `<b>${escapeHtml(d.nameEn)}</b>${area}${lv}<br>${d.code === store.selectedCode ? t('tip.selected') : t('tip.click')}`
 }
@@ -107,7 +107,7 @@ function renderSelectedMarker() {
   const code = escapeHtml(d.code)
   const lv = d.liveabilityScore != null
     ? `<span data-m="liv_current" data-code="${code}">${t('tip.liveability')} <b>${nf(d.liveabilityScore, 2)}</b></span>`
-    : t('tip.notAssessed')
+    : `<span data-m="liv_current" data-code="${code}">${t('tip.liveability')} <b>NaN</b></span>`
   const area = d.areaKm2 != null ? `<span data-m="area_km2" data-code="${code}"><b>${nf(d.areaKm2, 2)}</b> km²</span> · ` : ''
   const div = document.createElement('div')
   div.className = 'dlb on'
