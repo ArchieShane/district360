@@ -1,26 +1,205 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<!--
-  TODO(房地产同事)：补全 SQL。
-  - 成交额 / 宗数 / 均价：x_q21_matview_sale（sale_contract_date 近 12 个月；同比对比上一个 12 个月）
-  - 按揭：x_q21_matview_mortgage（mortgage_start_date 近 12 个月）
-  - 在册租约：x_q21_matview_rent（rent_contract_current_status = 有效）
-  - 口径要求：按统计范围（makani 区面，参数 EWKB hex）做空间查询：记录位置落在范围内即计入
-      ST_Intersects(ST_GeomFromEWKB(decode(#{scope}, 'hex')), <记录位置>)
-    如果 ADREC 只有社区名、没有坐标 / 地块，先用 makani 社区面与范围做空间匹配，
-    并把用到的社区 → 区对应写进快照的 communityMappings 以便核对
--->
 <mapper namespace="com.district360.adrec.mapper.AdrecMapper">
 
-    <select id="communityNames" resultType="string">
-        SELECT NULL::text WHERE false
+    <sql id="districtScopes">
+        districts AS (
+            SELECT refs.district_code,
+                   ST_Transform(ST_GeomFromEWKB(decode(refs.scope_hex, 'hex')), #{sourceSrid}) AS geom
+            FROM (VALUES
+                <foreach collection="districts" item="district" separator=",">
+                    (#{district.code}::text, #{district.scopeEwkbHex}::text)
+                </foreach>
+            ) AS refs(district_code, scope_hex)
+        )
+    </sql>
+
+    <!-- Use the recorded property-line allocation once, after exact metric-row deduplication. -->
+    <sql id="saleLines">
+        WITH <include refid="districtScopes"/>
+        <![CDATA[
+        ,
+        sale_lines AS (
+            SELECT DISTINCT d.district_code, s.sale_application_id, s.sale_property_id, s.sale_contract_date,
+                   s.sale_property_share, s.longitude, s.latitude,
+                   s.sale_property_price_aed, s.property_sold_area_sqm, s.property_sale_rate_aed_sqm
+            FROM ods.ods_re_x_q21_matview_sale AS s
+            JOIN districts AS d
+              ON s.longitude BETWEEN ST_XMin(d.geom) AND ST_XMax(d.geom)
+             AND s.latitude BETWEEN ST_YMin(d.geom) AND ST_YMax(d.geom)
+             AND ST_Intersects(d.geom, ST_SetSRID(ST_MakePoint(s.longitude, s.latitude), #{sourceSrid}))
+            WHERE s.sale_contract_date >= #{previousStartDate}
+              AND s.sale_contract_date < #{periodEndNextDate}
+              AND s.longitude::text NOT IN ('NaN', 'Infinity', '-Infinity')
+              AND s.latitude::text NOT IN ('NaN', 'Infinity', '-Infinity')
+        )
+        ]]>
+    </sql>
+
+    <select id="salesStats" resultType="com.district360.adrec.mapper.AdrecMapper$SalesRow">
+        <include refid="saleLines"/>
+        <![CDATA[
+        , metric_lines AS (
+            SELECT district_code, sale_application_id,
+                   sale_contract_date >= #{periodStartDate} AS in_current_period,
+                   CASE WHEN sale_property_price_aed::text NOT IN ('NaN', 'Infinity', '-Infinity')
+                        THEN sale_property_price_aed END AS amount_aed,
+                   CASE WHEN property_sold_area_sqm > 0
+                              AND property_sold_area_sqm::text NOT IN ('NaN', 'Infinity', '-Infinity')
+                        THEN property_sold_area_sqm END AS area_sqm,
+                   CASE WHEN property_sale_rate_aed_sqm::text NOT IN ('NaN', 'Infinity', '-Infinity')
+                        THEN property_sale_rate_aed_sqm END AS rate_aed_sqm
+            FROM sale_lines
+        )
+        SELECT district_code,
+               SUM(amount_aed) FILTER (WHERE in_current_period) AS sales_aed,
+               SUM(amount_aed) FILTER (WHERE NOT in_current_period) AS previous_sales_aed,
+               NULLIF(COUNT(DISTINCT sale_application_id) FILTER (WHERE in_current_period), 0)::int
+                   AS transactions,
+               CASE WHEN COUNT(*) FILTER (
+                               WHERE in_current_period AND (area_sqm IS NULL OR rate_aed_sqm IS NULL)
+                           ) = 0
+                    THEN SUM(rate_aed_sqm * area_sqm) FILTER (WHERE in_current_period)
+                         / NULLIF(SUM(area_sqm) FILTER (WHERE in_current_period), 0)
+               END AS avg_price_sqm
+        FROM metric_lines
+        GROUP BY district_code
+        ]]>
     </select>
 
-    <select id="monthlyByCommunity" resultType="map">
-        SELECT NULL::text AS community WHERE false
+    <select id="salesMonthly" resultType="com.district360.adrec.mapper.AdrecMapper$MonthlyRow">
+        <include refid="saleLines"/>
+        <![CDATA[
+        SELECT district_code, DATE_TRUNC('month', sale_contract_date)::date AS month,
+               COUNT(DISTINCT sale_application_id)::int AS transactions
+        FROM sale_lines
+        WHERE sale_contract_date >= #{periodStartDate}
+          AND sale_application_id IS NOT NULL
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+        ]]>
     </select>
 
-    <select id="dataDate" resultType="java.time.LocalDate">
-        SELECT NULL::date
+    <sql id="adrecCalendarDate">
+        CASE
+            WHEN pg_typeof(${eventTime}) = 'timestamptz'::regtype
+                THEN (${eventTime} AT TIME ZONE 'Asia/Dubai')::date
+            ELSE ${eventTime}::date
+        END
+    </sql>
+
+    <sql id="adrecValidPoint">
+        CASE
+            WHEN ${coordinates}.longitude::double precision &gt; '-Infinity'::double precision
+             AND ${coordinates}.longitude::double precision &lt; 'Infinity'::double precision
+             AND ${coordinates}.latitude::double precision &gt; '-Infinity'::double precision
+             AND ${coordinates}.latitude::double precision &lt; 'Infinity'::double precision
+             AND (#{sourceSrid} &lt;&gt; 4326 OR
+                  (${coordinates}.longitude BETWEEN -180 AND 180 AND ${coordinates}.latitude BETWEEN -90 AND 90))
+                THEN ST_SetSRID(ST_MakePoint(${coordinates}.longitude, ${coordinates}.latitude), #{sourceSrid})
+        END
+    </sql>
+
+    <select id="sourceDates" resultType="com.district360.adrec.mapper.AdrecMapper$SourceDates">
+        WITH latest_load AS (
+            SELECT (SELECT MAX(_ingested_at) FROM ods.ods_re_x_q21_matview_sale
+                    WHERE isfinite(_ingested_at)) AS sale_loaded_at,
+                   (SELECT MAX(_ingested_at) FROM ods.ods_re_x_q21_matview_mortgage
+                    WHERE isfinite(_ingested_at)) AS mortgage_loaded_at,
+                   (SELECT MAX(_ingested_at) FROM ods.ods_re_x_q21_matview_rent
+                    WHERE isfinite(_ingested_at)
+                      AND LOWER(BTRIM(rent_application_source_system)) IN ('tawtheeq', 'adgm')) AS rent_loaded_at
+        ),
+        snapshot_days AS (
+            SELECT <include refid="adrecCalendarDate"><property name="eventTime" value="sale_loaded_at"/></include>
+                       AS sale_snapshot_date,
+                   <include refid="adrecCalendarDate"><property name="eventTime" value="mortgage_loaded_at"/></include>
+                       AS mortgage_snapshot_date,
+                   <include refid="adrecCalendarDate"><property name="eventTime" value="rent_loaded_at"/></include>
+                       AS rent_snapshot_date
+            FROM latest_load
+        )
+        SELECT GREATEST(sale_snapshot_date, mortgage_snapshot_date, rent_snapshot_date) AS source_as_of,
+               rent_snapshot_date
+        FROM snapshot_days
+    </select>
+
+    <select id="mortgageCounts" resultType="com.district360.adrec.mapper.AdrecMapper$DistrictCount">
+        WITH <include refid="districtScopes"/>,
+        mortgage_points AS (
+            SELECT m.orientational_mortgage_contract_id AS contract_id,
+                   <include refid="adrecValidPoint"><property name="coordinates" value="m"/></include> AS point
+            FROM ods.ods_re_x_q21_matview_mortgage m
+            WHERE m.mortgage_start_date &gt;= #{periodStartDate}
+              AND m.mortgage_start_date &lt; #{periodEndNextDate}
+              AND LOWER(BTRIM(m.mortgage_application_type)) IN ('registration', 'release', 'change')
+              AND m.orientational_mortgage_contract_id IS NOT NULL
+        )
+        SELECT d.district_code, COUNT(DISTINCT m.contract_id)::integer AS count
+        FROM mortgage_points m
+        JOIN districts d ON ST_Intersects(d.geom, m.point)
+        GROUP BY d.district_code
+    </select>
+
+    <select id="activeLeaseCounts" resultType="com.district360.adrec.mapper.AdrecMapper$DistrictCount">
+        WITH <include refid="districtScopes"/>,
+        rent_rows AS (
+            SELECT LOWER(BTRIM(r.rent_application_source_system)) AS source_system,
+                   BTRIM(r.rent_contract_number) AS contract_number,
+                   COALESCE(r.rent_property_id, r.property_id) AS property_id,
+                   r.latitude,
+                   r.longitude,
+                   LOWER(BTRIM(r.rent_contract_current_status)) AS status,
+                   <include refid="adrecCalendarDate"><property name="eventTime" value="r.rent_start_date"/></include>
+                       AS start_date,
+                   <include refid="adrecCalendarDate"><property name="eventTime" value="r.rent_end_date"/></include>
+                       AS end_date,
+                   <include refid="adrecCalendarDate"><property name="eventTime" value="r.rent_cancelation_termination_date"/></include>
+                       AS cancellation_date,
+                   CASE WHEN isfinite(r._ingested_at) THEN r._ingested_at END AS loaded_at,
+                   CASE WHEN isfinite(r.trs_moye_input_time) THEN r.trs_moye_input_time END AS input_time,
+                   r.rent_application_date AS application_date
+            FROM ods.ods_re_x_q21_matview_rent r
+            WHERE LOWER(BTRIM(r.rent_application_source_system)) IN ('tawtheeq', 'adgm')
+              AND NULLIF(BTRIM(r.rent_contract_number), '') IS NOT NULL
+        ),
+        versioned AS (
+            SELECT r.*,
+                   DENSE_RANK() OVER (
+                       PARTITION BY source_system, contract_number
+                       ORDER BY loaded_at DESC NULLS LAST, input_time DESC NULLS LAST, application_date DESC NULLS LAST
+                   ) AS contract_version,
+                   DENSE_RANK() OVER (
+                       PARTITION BY source_system, contract_number, property_id,
+                                    CASE WHEN property_id IS NULL THEN latitude END,
+                                    CASE WHEN property_id IS NULL THEN longitude END
+                       ORDER BY loaded_at DESC NULLS LAST, input_time DESC NULLS LAST, application_date DESC NULLS LAST
+                   ) AS property_version
+            FROM rent_rows r
+        ),
+        contract_status AS (
+            SELECT source_system, contract_number,
+                   BOOL_AND(COALESCE(
+                       status = 'active'
+                       AND isfinite(start_date) AND start_date &lt;= #{rentSnapshotDate}
+                       AND isfinite(end_date) AND end_date &gt;= #{rentSnapshotDate}
+                       AND (cancellation_date IS NULL OR cancellation_date &gt; #{rentSnapshotDate}), false
+                   )) AS active
+            FROM versioned
+            WHERE contract_version = 1
+            GROUP BY source_system, contract_number
+        ),
+        property_points AS (
+            SELECT r.source_system, r.contract_number,
+                   <include refid="adrecValidPoint"><property name="coordinates" value="r"/></include> AS point
+            FROM versioned r
+            WHERE property_version = 1
+        )
+        SELECT d.district_code,
+               (COUNT(DISTINCT (r.source_system, r.contract_number)) FILTER (WHERE c.active))::integer AS count
+        FROM property_points r
+        JOIN districts d ON ST_Intersects(d.geom, r.point)
+        JOIN contract_status c USING (source_system, contract_number)
+        GROUP BY d.district_code
     </select>
 </mapper>

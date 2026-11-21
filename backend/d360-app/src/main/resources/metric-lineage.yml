@@ -410,82 +410,261 @@ d360:
         name-en: Sales value (12 months)
         source: adrec
         stat-column: stat_district_adrec.sales_aed（页面 ÷ 10 亿显示为 bn）
-        source-tables: ["x_q21_matview_sale"]
-        logic-zh: 近 12 个月 sale_contract_date 内 sale_property_price_aed 求和。按统计范围（makani 区面）做空间汇总：成交 / 按揭 / 租约记录的位置（坐标或地块）落在范围内即计入；如果 ADREC 只有社区名，先用 makani 社区面与范围做空间匹配。
-        logic-en: Sum of sale_property_price_aed with sale_contract_date in the last 12 months, for records located inside the scope (makani polygon).
-        sql: |
-          SELECT sum(s.sale_property_price_aed)
-          FROM x_q21_matview_sale s
-          WHERE ST_Intersects(ST_GeomFromEWKB(:district_scope), <成交记录位置>)  -- 统计范围 = makani 区面
-            AND s.sale_contract_date >= <期末月往前 12 个月> AND s.sale_contract_date < <期末月次月>
+        source-tables: ["ods.ods_re_x_q21_matview_sale"]
+        logic-zh: 按合同日取迪拜时间最近 12 个完整自然月。成交点与 Makani 区面相交，去除完全相同的指标明细后，汇总物业行记录的分摊价（AED）。
+        logic-en: Sum recorded allocated property-line prices in AED after exact metric-row deduplication. Use contract dates in the last 12 complete Dubai calendar months and intersect sale points with the district scope.
+        sql: &adrec_sales_stats |
+          WITH districts AS (
+              SELECT refs.district_code,
+                     ST_Transform(ST_GeomFromEWKB(decode(refs.scope_hex, 'hex')), :source_srid) AS geom
+              FROM (VALUES
+                      (:district_code::text, :district_scope::text)
+              ) AS refs(district_code, scope_hex)
+          )
+          ,
+          sale_lines AS (
+              SELECT DISTINCT d.district_code, s.sale_application_id, s.sale_property_id, s.sale_contract_date,
+                     s.sale_property_share, s.longitude, s.latitude,
+                     s.sale_property_price_aed, s.property_sold_area_sqm, s.property_sale_rate_aed_sqm
+              FROM ods.ods_re_x_q21_matview_sale AS s
+              JOIN districts AS d
+                ON s.longitude BETWEEN ST_XMin(d.geom) AND ST_XMax(d.geom)
+               AND s.latitude BETWEEN ST_YMin(d.geom) AND ST_YMax(d.geom)
+               AND ST_Intersects(d.geom, ST_SetSRID(ST_MakePoint(s.longitude, s.latitude), :source_srid))
+              WHERE s.sale_contract_date >= :previous_start_date
+                AND s.sale_contract_date < :period_end_next_date
+                AND s.longitude::text NOT IN ('NaN', 'Infinity', '-Infinity')
+                AND s.latitude::text NOT IN ('NaN', 'Infinity', '-Infinity')
+          )
+          , metric_lines AS (
+              SELECT district_code, sale_application_id,
+                     sale_contract_date >= :period_start_date AS in_current_period,
+                     CASE WHEN sale_property_price_aed::text NOT IN ('NaN', 'Infinity', '-Infinity')
+                          THEN sale_property_price_aed END AS amount_aed,
+                     CASE WHEN property_sold_area_sqm > 0
+                                AND property_sold_area_sqm::text NOT IN ('NaN', 'Infinity', '-Infinity')
+                          THEN property_sold_area_sqm END AS area_sqm,
+                     CASE WHEN property_sale_rate_aed_sqm::text NOT IN ('NaN', 'Infinity', '-Infinity')
+                          THEN property_sale_rate_aed_sqm END AS rate_aed_sqm
+              FROM sale_lines
+          )
+          SELECT district_code,
+                 SUM(amount_aed) FILTER (WHERE in_current_period) AS sales_aed,
+                 SUM(amount_aed) FILTER (WHERE NOT in_current_period) AS previous_sales_aed,
+                 NULLIF(COUNT(DISTINCT sale_application_id) FILTER (WHERE in_current_period), 0)::int
+                     AS transactions,
+                 CASE WHEN COUNT(*) FILTER (
+                                 WHERE in_current_period AND (area_sqm IS NULL OR rate_aed_sqm IS NULL)
+                             ) = 0
+                      THEN SUM(rate_aed_sqm * area_sqm) FILTER (WHERE in_current_period)
+                           / NULLIF(SUM(area_sqm) FILTER (WHERE in_current_period), 0)
+                 END AS avg_price_sqm
+          FROM metric_lines
+          GROUP BY district_code
 
       re_yoy:
         name-zh: 成交额同比
         name-en: Sales YoY
         source: adrec
         stat-column: stat_district_adrec.sales_yoy_pct
-        source-tables: ["x_q21_matview_sale"]
-        logic-zh: （近 12 个月成交额 ÷ 上一个 12 个月成交额 − 1）× 100%。
-        logic-en: (last-12-month sales ÷ previous-12-month sales − 1) × 100%.
-        sql: |
-          SELECT 100.0 * (sum(price) FILTER (WHERE 近 12 个月) / sum(price) FILTER (WHERE 上一个 12 个月) - 1)
-          FROM x_q21_matview_sale ...   -- 同上，位置落在统计范围内
+        source-tables: ["ods.ods_re_x_q21_matview_sale"]
+        logic-zh: 同一查询返回前后两个连续 12 个月的成交额。抽取器计算（本期 − 基期）÷ 基期 × 100，任一期缺失或为零时返回数据缺失。
+        logic-en: The query returns recorded sales amounts for consecutive 12-month periods. The extractor computes 100 × (current − previous) ÷ previous. A missing or zero amount in either period yields missing data.
+        sql: *adrec_sales_stats
 
       re_transactions:
         name-zh: 成交宗数
         name-en: Transactions
         source: adrec
         stat-column: stat_district_adrec.transactions
-        source-tables: ["x_q21_matview_sale"]
-        logic-zh: 近 12 个月 sale_application_id 计数。
-        logic-en: Count of sale_application_id in the last 12 months.
-        sql: |
-          SELECT count(s.sale_application_id)
-          FROM x_q21_matview_sale s ...   -- 近 12 个月，位置落在统计范围内
+        source-tables: ["ods.ods_re_x_q21_matview_sale"]
+        logic-zh: 近 12 个完整月按合同日归期，每区统计不同的销售申请。一个申请有物业落在多个区时，各对应区分别计数。
+        logic-en: Count distinct sales applications per Makani district over the last 12 complete months by contract date. An application with properties in multiple districts contributes to each corresponding district.
+        sql: *adrec_sales_stats
 
       re_mortgages:
         name-zh: 按揭
         name-en: Mortgages
         source: adrec
         stat-column: stat_district_adrec.mortgages
-        source-tables: ["x_q21_matview_mortgage"]
-        logic-zh: 近 12 个月 mortgage_start_date 内的按揭数。
-        logic-en: Mortgages with mortgage_start_date in the last 12 months.
+        source-tables: ["ods.ods_re_x_q21_matview_mortgage"]
+        logic-zh: 按起始日取最近 12 个完整月。按揭物业点与 Makani 区面相交，对有登记、解押或变更记录的按揭合同参考号按区去重计数。
+        logic-en: Count distinct contract references per district for registration, release or change records with a mortgage start date in the last 12 complete months. Intersect mortgage property points with the district scope.
         sql: |
-          SELECT count(*) FROM x_q21_matview_mortgage ...   -- 近 12 个月，位置落在统计范围内
+          WITH districts AS (
+                  SELECT refs.district_code,
+                         ST_Transform(ST_GeomFromEWKB(decode(refs.scope_hex, 'hex')), :source_srid) AS geom
+                  FROM (VALUES
+                          (:district_code::text, :district_scope::text)
+                  ) AS refs(district_code, scope_hex)
+              )
+          ,
+              mortgage_points AS (
+                  SELECT m.orientational_mortgage_contract_id AS contract_id,
+              CASE
+                  WHEN m.longitude::double precision > '-Infinity'::double precision
+                   AND m.longitude::double precision < 'Infinity'::double precision
+                   AND m.latitude::double precision > '-Infinity'::double precision
+                   AND m.latitude::double precision < 'Infinity'::double precision
+                   AND (:source_srid <> 4326 OR
+                        (m.longitude BETWEEN -180 AND 180 AND m.latitude BETWEEN -90 AND 90))
+                      THEN ST_SetSRID(ST_MakePoint(m.longitude, m.latitude), :source_srid)
+              END
+           AS point
+                  FROM ods.ods_re_x_q21_matview_mortgage m
+                  WHERE m.mortgage_start_date >= :period_start_date
+                    AND m.mortgage_start_date < :period_end_next_date
+                    AND LOWER(BTRIM(m.mortgage_application_type)) IN ('registration', 'release', 'change')
+                    AND m.orientational_mortgage_contract_id IS NOT NULL
+              )
+              SELECT d.district_code, COUNT(DISTINCT m.contract_id)::integer AS count
+              FROM mortgage_points m
+              JOIN districts d ON ST_Intersects(d.geom, m.point)
+              GROUP BY d.district_code
 
       re_price:
         name-zh: 均价 AED/m²
         name-en: Average price AED/m²
         source: adrec
         stat-column: stat_district_adrec.avg_price_sqm
-        source-tables: ["x_q21_matview_sale"]
-        logic-zh: 近 12 个月 property_sale_rate_aed_sqm 平均值。
-        logic-en: Average property_sale_rate_aed_sqm over the last 12 months.
-        sql: |
-          SELECT avg(s.property_sale_rate_aed_sqm) FROM x_q21_matview_sale s ...   -- 近 12 个月，位置落在统计范围内
+        source-tables: ["ods.ods_re_x_q21_matview_sale"]
+        logic-zh: 近 12 个完整月的成交记录按成交面积加权。土地及其他物业合算。任一纳入的记录缺有效面积或源单价时，对应区均价返回数据缺失。
+        logic-en: Weight the reported unit prices by sold area over the last 12 complete months. Include land and other property types together. A missing or invalid sold area or unit price on any included row yields missing data for the district.
+        sql: *adrec_sales_stats
 
       re_leases:
         name-zh: 在册租约
         name-en: Active leases
         source: adrec
         stat-column: stat_district_adrec.active_leases
-        source-tables: ["x_q21_matview_rent"]
-        logic-zh: rent_contract_current_status = 有效 的租约数。
-        logic-en: Leases with rent_contract_current_status = active.
+        source-tables: ["ods.ods_re_x_q21_matview_rent"]
+        logic-zh: 纳入 Tawtheeq 和 ADGM。按最新租赁入库快照日，筛选最新状态为 active、起止日覆盖统计日、截至统计日未取消或终止的合同。使用最新物业位置与区面相交，按区对来源和合同号的组合去重。
+        logic-en: Include Tawtheeq and ADGM. At the latest rental ingestion date, require latest status active, a term covering that date, and no effective cancellation or termination. Intersect latest property positions with the district and count distinct source and contract-number pairs.
         sql: |
-          SELECT count(*) FROM x_q21_matview_rent
-          WHERE rent_contract_current_status = '<有效>' ...   -- 位置落在统计范围内
+          -- :rent_snapshot_date is the date of the latest finite _ingested_at across Tawtheeq and ADGM.
+          WITH districts AS (
+                  SELECT refs.district_code,
+                         ST_Transform(ST_GeomFromEWKB(decode(refs.scope_hex, 'hex')), :source_srid) AS geom
+                  FROM (VALUES
+                          (:district_code::text, :district_scope::text)
+                  ) AS refs(district_code, scope_hex)
+              )
+          ,
+              rent_rows AS (
+                  SELECT LOWER(BTRIM(r.rent_application_source_system)) AS source_system,
+                         BTRIM(r.rent_contract_number) AS contract_number,
+                         COALESCE(r.rent_property_id, r.property_id) AS property_id,
+                         r.latitude,
+                         r.longitude,
+                         LOWER(BTRIM(r.rent_contract_current_status)) AS status,
+              CASE
+                  WHEN pg_typeof(r.rent_start_date) = 'timestamptz'::regtype
+                      THEN (r.rent_start_date AT TIME ZONE 'Asia/Dubai')::date
+                  ELSE r.rent_start_date::date
+              END
+                             AS start_date,
+              CASE
+                  WHEN pg_typeof(r.rent_end_date) = 'timestamptz'::regtype
+                      THEN (r.rent_end_date AT TIME ZONE 'Asia/Dubai')::date
+                  ELSE r.rent_end_date::date
+              END
+                             AS end_date,
+              CASE
+                  WHEN pg_typeof(r.rent_cancelation_termination_date) = 'timestamptz'::regtype
+                      THEN (r.rent_cancelation_termination_date AT TIME ZONE 'Asia/Dubai')::date
+                  ELSE r.rent_cancelation_termination_date::date
+              END
+                             AS cancellation_date,
+                         CASE WHEN isfinite(r._ingested_at) THEN r._ingested_at END AS loaded_at,
+                         CASE WHEN isfinite(r.trs_moye_input_time) THEN r.trs_moye_input_time END AS input_time,
+                         r.rent_application_date AS application_date
+                  FROM ods.ods_re_x_q21_matview_rent r
+                  WHERE LOWER(BTRIM(r.rent_application_source_system)) IN ('tawtheeq', 'adgm')
+                    AND NULLIF(BTRIM(r.rent_contract_number), '') IS NOT NULL
+              ),
+              versioned AS (
+                  SELECT r.*,
+                         DENSE_RANK() OVER (
+                             PARTITION BY source_system, contract_number
+                             ORDER BY loaded_at DESC NULLS LAST, input_time DESC NULLS LAST, application_date DESC NULLS LAST
+                         ) AS contract_version,
+                         DENSE_RANK() OVER (
+                             PARTITION BY source_system, contract_number, property_id,
+                                          CASE WHEN property_id IS NULL THEN latitude END,
+                                          CASE WHEN property_id IS NULL THEN longitude END
+                             ORDER BY loaded_at DESC NULLS LAST, input_time DESC NULLS LAST, application_date DESC NULLS LAST
+                         ) AS property_version
+                  FROM rent_rows r
+              ),
+              contract_status AS (
+                  SELECT source_system, contract_number,
+                         BOOL_AND(COALESCE(
+                             status = 'active'
+                             AND isfinite(start_date) AND start_date <= :rent_snapshot_date
+                             AND isfinite(end_date) AND end_date >= :rent_snapshot_date
+                             AND (cancellation_date IS NULL OR cancellation_date > :rent_snapshot_date), false
+                         )) AS active
+                  FROM versioned
+                  WHERE contract_version = 1
+                  GROUP BY source_system, contract_number
+              ),
+              property_points AS (
+                  SELECT r.source_system, r.contract_number,
+              CASE
+                  WHEN r.longitude::double precision > '-Infinity'::double precision
+                   AND r.longitude::double precision < 'Infinity'::double precision
+                   AND r.latitude::double precision > '-Infinity'::double precision
+                   AND r.latitude::double precision < 'Infinity'::double precision
+                   AND (:source_srid <> 4326 OR
+                        (r.longitude BETWEEN -180 AND 180 AND r.latitude BETWEEN -90 AND 90))
+                      THEN ST_SetSRID(ST_MakePoint(r.longitude, r.latitude), :source_srid)
+              END
+           AS point
+                  FROM versioned r
+                  WHERE property_version = 1
+              )
+              SELECT d.district_code,
+                     (COUNT(DISTINCT (r.source_system, r.contract_number)) FILTER (WHERE c.active))::integer AS count
+              FROM property_points r
+              JOIN districts d ON ST_Intersects(d.geom, r.point)
+              JOIN contract_status c USING (source_system, contract_number)
+              GROUP BY d.district_code
 
       re_monthly:
         name-zh: 月度成交宗数
         name-en: Monthly transactions
         source: adrec
         stat-column: stat_district_adrec_monthly.transactions
-        source-tables: ["x_q21_matview_sale"]
-        logic-zh: 按 sale_contract_date 所在月份统计 sale_application_id 数量，共 12 个月。
-        logic-en: Count of sale_application_id by month of sale_contract_date, 12 months.
+        source-tables: ["ods.ods_re_x_q21_matview_sale"]
+        logic-zh: 近 12 个完整月按合同日期所在月和 Makani 区去重统计销售申请。缺数据或宗数为零的月份没有结果行。
+        logic-en: Count distinct sales applications by contract month and Makani district over the last 12 complete months. Omit months with missing observations or zero transactions.
         sql: |
-          SELECT date_trunc('month', s.sale_contract_date) AS month, count(s.sale_application_id)
-          FROM x_q21_matview_sale s ...   -- 位置落在统计范围内
-          GROUP BY 1 ORDER BY 1
+          WITH districts AS (
+              SELECT refs.district_code,
+                     ST_Transform(ST_GeomFromEWKB(decode(refs.scope_hex, 'hex')), :source_srid) AS geom
+              FROM (VALUES
+                      (:district_code::text, :district_scope::text)
+              ) AS refs(district_code, scope_hex)
+          )
+          ,
+          sale_lines AS (
+              SELECT DISTINCT d.district_code, s.sale_application_id, s.sale_property_id, s.sale_contract_date,
+                     s.sale_property_share, s.longitude, s.latitude,
+                     s.sale_property_price_aed, s.property_sold_area_sqm, s.property_sale_rate_aed_sqm
+              FROM ods.ods_re_x_q21_matview_sale AS s
+              JOIN districts AS d
+                ON s.longitude BETWEEN ST_XMin(d.geom) AND ST_XMax(d.geom)
+               AND s.latitude BETWEEN ST_YMin(d.geom) AND ST_YMax(d.geom)
+               AND ST_Intersects(d.geom, ST_SetSRID(ST_MakePoint(s.longitude, s.latitude), :source_srid))
+              WHERE s.sale_contract_date >= :previous_start_date
+                AND s.sale_contract_date < :period_end_next_date
+                AND s.longitude::text NOT IN ('NaN', 'Infinity', '-Infinity')
+                AND s.latitude::text NOT IN ('NaN', 'Infinity', '-Infinity')
+          )
+          SELECT district_code, DATE_TRUNC('month', sale_contract_date)::date AS month,
+                 COUNT(DISTINCT sale_application_id)::int AS transactions
+          FROM sale_lines
+          WHERE sale_contract_date >= :period_start_date
+            AND sale_application_id IS NOT NULL
+          GROUP BY 1, 2
+          ORDER BY 1, 2
