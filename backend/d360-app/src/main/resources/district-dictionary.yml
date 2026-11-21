@@ -1,0 +1,25 @@
+# 统一区字典：页面 17 个区 ↔ 各数据源的区编码。
+# - code：页面区编码，全系统主键（与原型 #d=<code> 一致）
+# - makani-district-id：makani udm_district.districtid（必须与 municipalityname = ADM 一起用）
+# - liv-district-id：Liveability dim_districts.district_id；为空 = 不在宜居评估范围
+# - mapping-confirmed = false 的几行是待产品确认的对应关系
+# ADREC 是社区粒度，映射单独放在统计库 stat.map_adrec_community，不在这里维护。
+d360:
+  districts:
+    - { code: reem,       name-en: "Al Reem Island",       sort-no: 1,  makani-district-id: 57,   liv-district-id: 185, mapping-confirmed: true }
+    - { code: maryah,     name-en: "Al Maryah Island",     sort-no: 2,  makani-district-id: 74,   liv-district-id: 169, mapping-confirmed: true }
+    - { code: zahiyah,    name-en: "Al Zahiyah",           sort-no: 3,  makani-district-id: 1303, liv-district-id: 201, mapping-confirmed: true }
+    - { code: danah,      name-en: "Al Danah",             sort-no: 4,  makani-district-id: 1301, liv-district-id: 149, mapping-confirmed: true }
+    - { code: hisn,       name-en: "Al Hisn",              sort-no: 5,  makani-district-id: 1293, liv-district-id: 158, mapping-confirmed: true }
+    - { code: khalidiyah, name-en: "Al Khalidiyah",        sort-no: 6,  makani-district-id: 1290, liv-district-id: 161, mapping-confirmed: true }
+    - { code: manhal,     name-en: "Al Manhal",            sort-no: 7,  makani-district-id: 1294, liv-district-id: 168, mapping-confirmed: true }
+    - { code: wahda,      name-en: "Al Wahda",             sort-no: 8,  mapping-confirmed: false, mapping-note: "makani / Liveability 都没有 Al Wahda 这个区，待确认对应关系" }
+    - { code: nahyan,     name-en: "Al Nahyan",            sort-no: 9,  makani-district-id: 1295, liv-district-id: 177, mapping-confirmed: true }
+    - { code: bateen,     name-en: "Al Bateen",            sort-no: 10, makani-district-id: 1300, liv-district-id: 147, mapping-confirmed: true }
+    - { code: mushrif,    name-en: "Al Mushrif",           sort-no: 11, makani-district-id: 1291, liv-district-id: 174, mapping-confirmed: true }
+    - { code: zafaranah,  name-en: "Hadbat Al Za'faranah", sort-no: 12, makani-district-id: 1302, liv-district-id: 213, mapping-confirmed: true }
+    - { code: rasakhdar,  name-en: "Al Ras Al Akhdar",     sort-no: 13, makani-district-id: 1304, liv-district-id: 181, mapping-confirmed: true }
+    - { code: hudayriyat, name-en: "Hudayriyat Island",    sort-no: 14, makani-district-id: 1315, mapping-confirmed: false, mapping-note: "暂按 makani AL HIDAYRIYYAT（1315）；原型标注不在宜居评估范围（Liveability 有 157，未使用），待确认" }
+    - { code: saadiyat,   name-en: "Saadiyat Island",      sort-no: 15, makani-district-id: 1347, liv-district-id: 187, mapping-confirmed: false, mapping-note: "暂按 makani AL SAADIYAT ISLAND（1347），待确认" }
+    - { code: yas,        name-en: "Yas Island",           sort-no: 16, makani-district-id: 1330, liv-district-id: 232, mapping-confirmed: true }
+    - { code: mina,       name-en: "Al Mina",              sort-no: 17, makani-district-id: 1288, liv-district-id: 235, mapping-confirmed: false, mapping-note: "暂按 makani ZAYED PORT（1288），待确认" }

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.district360.stat.mapper.StatQueryMapper">
+
+    <select id="listDistricts" resultType="com.district360.stat.row.DistrictListRow">
+        SELECT d.code, d.name_en, d.name_ar, d.sort_no, d.mapping_confirmed, d.mapping_note,
+               ST_X(d.centroid) AS centroid_lon, ST_Y(d.centroid) AS centroid_lat,
+               ST_XMin(d.bbox) AS min_lon, ST_YMin(d.bbox) AS min_lat,
+               ST_XMax(d.bbox) AS max_lon, ST_YMax(d.bbox) AS max_lat,
+               m.area_km2,
+               l.score_current,
+               l.is_sample AS liv_sample,
+               (l.district_code IS NOT NULL) AS liv_present
+        FROM stat.dim_district d
+                 LEFT JOIN stat.stat_district_makani m ON m.district_code = d.code
+                 LEFT JOIN stat.stat_district_liveability l ON l.district_code = d.code
+        ORDER BY d.name_en
+    </select>
+
+    <select id="findDistrict360" resultType="com.district360.stat.row.District360Row">
+        SELECT * FROM stat.v_district_360 WHERE code = #{code}
+    </select>
+
+    <select id="listLandUse" resultType="com.district360.stat.row.LandUseRow">
+        SELECT use_desc, plot_count FROM stat.stat_district_landuse WHERE district_code = #{code}
+    </select>
+
+    <select id="listAdrecMonthly" resultType="com.district360.stat.row.MonthlyRow">
+        SELECT month, transactions FROM stat.stat_district_adrec_monthly WHERE district_code = #{code} ORDER BY month
+    </select>
+
+    <select id="districtBoundariesGeoJson" resultType="string">
+        SELECT json_build_object(
+                   'type', 'FeatureCollection',
+                   'features', coalesce(json_agg(json_build_object(
+                       'type', 'Feature',
+                       'id', d.sort_no,
+                       'properties', json_build_object('code', d.code, 'nameEn', d.name_en, 'nameAr', d.name_ar),
+                       'geometry', ST_AsGeoJSON(d.boundary, 6)::json) ORDER BY d.sort_no), '[]'::json)
+               )::text
+        FROM stat.dim_district d
+        WHERE d.boundary IS NOT NULL
+    </select>
+
+    <select id="buildingTile" resultType="com.district360.stat.row.TileRow">
+        WITH bounds AS (SELECT ST_TileEnvelope(#{z}, #{x}, #{y}) AS env),
+             mvt AS (
+                 SELECT ST_AsMVTGeom(b.geom, bounds.env, 4096, 64, true) AS geom,
+                        b.district_code AS code,
+                        b.height::float8 AS height,
+                        b.under_construction AS uc
+                 FROM stat.map_building b, bounds
+                 WHERE b.geom &amp;&amp; bounds.env
+             )
+        SELECT coalesce(ST_AsMVT(mvt.*, 'buildings', 4096, 'geom'), ''::bytea) AS mvt FROM mvt
+    </select>
+
+    <select id="listSourceStatus" resultType="com.district360.stat.row.SourceStatusRow">
+        WITH s AS (
+            SELECT 'makani' AS source, count(*)::int AS row_count, max(source_as_of) AS source_as_of, false AS sample
+            FROM stat.stat_district_makani
+            UNION ALL
+            SELECT 'liveability', count(*)::int, max(source_as_of), bool_or(is_sample)
+            FROM stat.stat_district_liveability
+            UNION ALL
+            SELECT 'adrec', count(*)::int, max(source_as_of), bool_or(is_sample)
+            FROM stat.stat_district_adrec
+        )
+        SELECT s.source, s.row_count, s.source_as_of, s.sample,
+               j.status AS last_status, j.started_at AS last_started_at, j.finished_at AS last_finished_at, j.message AS last_message
+        FROM s
+                 LEFT JOIN LATERAL (
+            SELECT status, started_at, finished_at, message
+            FROM stat.etl_job_log
+            WHERE source = s.source
+            ORDER BY started_at DESC
+            LIMIT 1
+            ) j ON true
+    </select>
+</mapper>

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.district360.stat.mapper.StatWriteMapper">
+
+    <insert id="upsertDictionary">
+        INSERT INTO stat.dim_district (code, name_en, sort_no, makani_district_id, liv_district_id, mapping_confirmed, mapping_note, updated_at)
+        VALUES (#{d.code}, #{d.nameEn}, #{d.sortNo}, #{d.makaniDistrictId}, #{d.livDistrictId}, #{d.mappingConfirmed}, #{d.mappingNote}, now())
+        ON CONFLICT (code) DO UPDATE SET
+            name_en = EXCLUDED.name_en,
+            sort_no = EXCLUDED.sort_no,
+            makani_district_id = EXCLUDED.makani_district_id,
+            liv_district_id = EXCLUDED.liv_district_id,
+            mapping_confirmed = EXCLUDED.mapping_confirmed,
+            mapping_note = EXCLUDED.mapping_note,
+            updated_at = now()
+    </insert>
+
+    <update id="clearMakaniGeometry">
+        UPDATE stat.dim_district SET makani_name = NULL, name_ar = NULL, centroid = NULL, bbox = NULL, boundary = NULL, updated_at = now()
+    </update>
+
+    <update id="updateMakaniGeometry">
+        UPDATE stat.dim_district SET
+            makani_name = #{d.makaniName},
+            name_ar = #{d.nameAr},
+            centroid = ST_SetSRID(ST_MakePoint(#{d.centroidLon}, #{d.centroidLat}), 4326),
+            bbox = ST_MakeEnvelope(#{d.minLon}, #{d.minLat}, #{d.maxLon}, #{d.maxLat}, 4326),
+            boundary = ST_Multi(ST_GeomFromEWKB(decode(#{d.boundaryEwkbHex}, 'hex'))),
+            updated_at = now()
+        WHERE code = #{d.code}
+    </update>
+
+    <delete id="deleteAllMakani">DELETE FROM stat.stat_district_makani</delete>
+
+    <insert id="insertMakani">
+        INSERT INTO stat.stat_district_makani (district_code, area_km2, communities, plots, plots_constructed, plots_under_construction,
+            plots_vacant_serviced, plots_vacant_unserviced, buildings, buildings_under_construction, schools, medical, mosques, source_as_of, extracted_at)
+        VALUES
+        <foreach collection="list" item="d" separator=",">
+            (#{d.code}, #{d.areaKm2}, #{d.communities}, #{d.plots}, #{d.plotsConstructed}, #{d.plotsUnderConstruction},
+             #{d.plotsVacantServiced}, #{d.plotsVacantUnserviced}, #{d.buildings}, #{d.buildingsUnderConstruction},
+             #{d.schools}, #{d.medical}, #{d.mosques}, #{asOf}, now())
+        </foreach>
+    </insert>
+
+    <delete id="deleteAllLandUse">DELETE FROM stat.stat_district_landuse</delete>
+
+    <insert id="insertLandUse">
+        INSERT INTO stat.stat_district_landuse (district_code, use_desc, plot_count) VALUES
+        <foreach collection="list" item="r" separator=",">(#{r.code}, #{r.useDesc}, #{r.plotCount})</foreach>
+    </insert>
+
+    <delete id="deleteAllBuildings">DELETE FROM stat.map_building</delete>
+
+    <insert id="insertBuildings">
+        INSERT INTO stat.map_building (district_code, building_id, height, under_construction, geom)
+        SELECT v.code, v.building_id, v.height, v.uc,
+               ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform(ST_GeomFromEWKB(decode(v.hex, 'hex')), 3857)), 3))
+        FROM (VALUES
+        <foreach collection="list" item="b" separator=",">
+            (#{b.code}, #{b.buildingId}, #{b.height}::numeric, #{b.underConstruction}::boolean, #{b.ewkbHex})
+        </foreach>
+        ) AS v(code, building_id, height, uc, hex)
+    </insert>
+
+    <delete id="deleteAllLiveability">DELETE FROM stat.stat_district_liveability</delete>
+
+    <insert id="insertLiveability">
+        INSERT INTO stat.stat_district_liveability (district_code, score_existing, score_current, score_target, parks, park_area_ha, park_gap_ha,
+            is_sample, source_as_of, extracted_at)
+        VALUES
+        <foreach collection="list" item="d" separator=",">
+            (#{d.code}, #{d.scoreExisting}, #{d.scoreCurrent}, #{d.scoreTarget}, #{d.parks}, #{d.parkAreaHa}, #{d.parkGapHa}, false, #{asOf}, now())
+        </foreach>
+    </insert>
+
+    <delete id="deleteAllAdrec">DELETE FROM stat.stat_district_adrec</delete>
+
+    <insert id="insertAdrec">
+        INSERT INTO stat.stat_district_adrec (district_code, period_start_month, period_end_month, sales_aed, sales_yoy_pct, transactions,
+            mortgages, avg_price_sqm, active_leases, is_sample, source_as_of, extracted_at)
+        VALUES
+        <foreach collection="list" item="d" separator=",">
+            (#{d.code}, (#{s.periodStart} || '-01')::date, (#{s.periodEnd} || '-01')::date, #{d.salesAed}, #{d.salesYoyPct}, #{d.transactions},
+             #{d.mortgages}, #{d.avgPriceSqm}, #{d.activeLeases}, false, #{s.sourceAsOf}, now())
+        </foreach>
+    </insert>
+
+    <delete id="deleteAllAdrecMonthly">DELETE FROM stat.stat_district_adrec_monthly</delete>
+
+    <insert id="insertAdrecMonthly">
+        INSERT INTO stat.stat_district_adrec_monthly (district_code, month, transactions) VALUES
+        <foreach collection="list" item="r" separator=",">(#{r.code}, (#{r.month} || '-01')::date, #{r.transactions})</foreach>
+    </insert>
+
+    <delete id="deleteAllAdrecCommunity">DELETE FROM stat.map_adrec_community</delete>
+
+    <insert id="insertAdrecCommunity">
+        INSERT INTO stat.map_adrec_community (adrec_community_name, district_code, remark, updated_at) VALUES
+        <foreach collection="list" item="r" separator=",">(#{r.adrecCommunityName}, #{r.districtCode}, #{r.remark}, now())</foreach>
+    </insert>
+</mapper>

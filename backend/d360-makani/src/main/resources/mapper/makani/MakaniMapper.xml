@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.district360.makani.mapper.MakaniMapper">
+
+    <!-- 目标区面：districtid 跨市政重复，必须同时按市政过滤 -->
+    <sql id="districtCte">
+        WITH d AS (
+            SELECT districtid, shape
+            FROM ${t.district}
+            WHERE municipalityname = #{muni}
+              AND districtid IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+        )
+    </sql>
+
+    <!-- 中心点落在区面内；用 ST_Centroid 而不是 ST_PointOnSurface，避免源数据里的无效多边形报错 -->
+    <sql id="inDistrict">x.shape &amp;&amp; d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))</sql>
+
+    <select id="districts" resultType="com.district360.makani.row.MakaniRows$District">
+        SELECT districtid                                                   AS makani_id,
+               nameenglish                                                  AS makani_name,
+               namearabic                                                   AS name_ar,
+               round((ST_Area(ST_Transform(shape, 32640)) / 1e6)::numeric, 3) AS area_km2,
+               ST_X(ST_PointOnSurface(shape))                               AS centroid_lon,
+               ST_Y(ST_PointOnSurface(shape))                               AS centroid_lat,
+               ST_XMin(shape) AS min_lon, ST_YMin(shape) AS min_lat,
+               ST_XMax(shape) AS max_lon, ST_YMax(shape) AS max_lat,
+               encode(ST_AsEWKB(ST_Multi(ST_SimplifyPreserveTopology(ST_Force2D(shape), #{tol}))), 'hex') AS boundary_hex
+        FROM ${t.district}
+        WHERE municipalityname = #{muni}
+          AND districtid IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+    <select id="communities" resultType="com.district360.makani.row.MakaniRows$Count">
+        <include refid="districtCte"/>
+        SELECT d.districtid AS makani_id, count(*) AS n
+        FROM d JOIN ${t.community} x ON <include refid="inDistrict"/>
+        GROUP BY d.districtid
+    </select>
+
+    <select id="plots" resultType="com.district360.makani.row.MakaniRows$Plot">
+        <include refid="districtCte"/>
+        SELECT d.districtid AS makani_id,
+               count(*) AS total,
+               count(*) FILTER (WHERE x.construction_status = 'Constructed') AS constructed,
+               count(*) FILTER (WHERE x.construction_status = 'Under Construction') AS under_construction,
+               count(*) FILTER (WHERE x.construction_status = 'Not Constructed' AND x.servicestatus = 'available') AS vacant_serviced,
+               count(*) FILTER (WHERE x.construction_status = 'Not Constructed'
+                                  AND x.servicestatus IN ('notAvailable', 'notAvailableHaveConsNOC')) AS vacant_unserviced
+        FROM d JOIN ${t.plot} x ON <include refid="inDistrict"/>
+        GROUP BY d.districtid
+    </select>
+
+    <select id="landUse" resultType="com.district360.makani.row.MakaniRows$LandUse">
+        <include refid="districtCte"/>
+        SELECT d.districtid AS makani_id, coalesce(nullif(trim(x.primaryuseengdesc), ''), 'Undefined') AS use_desc, count(*) AS plot_count
+        FROM d JOIN ${t.plot} x ON <include refid="inDistrict"/>
+        GROUP BY 1, 2
+    </select>
+
+    <select id="buildingStats" resultType="com.district360.makani.row.MakaniRows$BuildingStat">
+        <include refid="districtCte"/>
+        SELECT d.districtid AS makani_id,
+               count(*) AS total,
+               count(*) FILTER (WHERE x.physicalstatus IN ('underConstruction', 'Under Construction')) AS under_construction
+        FROM d JOIN ${t.building} x ON <include refid="inDistrict"/>
+        GROUP BY d.districtid
+    </select>
+
+    <select id="schools" resultType="com.district360.makani.row.MakaniRows$Count">
+        <include refid="districtCte"/>
+        SELECT d.districtid AS makani_id, count(*) AS n
+        FROM d JOIN ${t.school} x ON <include refid="inDistrict"/>
+        GROUP BY d.districtid
+    </select>
+
+    <select id="medical" resultType="com.district360.makani.row.MakaniRows$Count">
+        <include refid="districtCte"/>
+        SELECT d.districtid AS makani_id, count(*) AS n
+        FROM d JOIN ${t.doh} x ON <include refid="inDistrict"/>
+        WHERE x.facility_category = 'Medical'
+        <if test="exclude != null and exclude.size() > 0">
+            AND NOT (coalesce(x.facility_name_in_english, '') ILIKE ANY (ARRAY[
+            <foreach collection="exclude" item="p" separator=",">#{p}</foreach>
+            ]::text[]))
+        </if>
+        GROUP BY d.districtid
+    </select>
+
+    <select id="mosques" resultType="com.district360.makani.row.MakaniRows$Count">
+        <include refid="districtCte"/>
+        SELECT d.districtid AS makani_id, count(*) AS n
+        FROM d JOIN ${t.mosque} x ON <include refid="inDistrict"/>
+        GROUP BY d.districtid
+    </select>
+
+    <select id="buildings" resultType="com.district360.makani.row.MakaniRows$Building">
+        <include refid="districtCte"/>
+        SELECT d.districtid AS makani_id,
+               x.buildingid AS building_id,
+               round(coalesce(nullif(x.buildingheight, 0), x.buildingnumberoffloors * 3.5, 6)::numeric, 1) AS height,
+               (x.physicalstatus IN ('underConstruction', 'Under Construction')) AS under_construction,
+               encode(ST_AsEWKB(ST_Force2D(x.shape)), 'hex') AS geom_hex
+        FROM d JOIN ${t.building} x ON <include refid="inDistrict"/>
+        WHERE x.shape IS NOT NULL
+    </select>
+
+    <select id="plotDataDate" resultType="java.time.LocalDate">
+        SELECT max(datareceiveddate)::date FROM ${t.plot}
+    </select>
+</mapper>

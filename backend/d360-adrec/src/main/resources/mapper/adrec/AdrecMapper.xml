@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  TODO(房地产同事)：补全 SQL。
+  - 成交额 / 宗数 / 均价：x_q21_matview_sale（sale_contract_date 近 12 个月；同比对比上一个 12 个月）
+  - 按揭：x_q21_matview_mortgage（mortgage_start_date 近 12 个月）
+  - 在册租约：x_q21_matview_rent（rent_contract_current_status = 有效）
+  - ADREC 是社区粒度，需要先维护社区 → 区映射（写进快照的 communityMappings）
+-->
+<mapper namespace="com.district360.adrec.mapper.AdrecMapper">
+
+    <select id="communityNames" resultType="string">
+        SELECT NULL::text WHERE false
+    </select>
+
+    <select id="monthlyByCommunity" resultType="map">
+        SELECT NULL::text AS community WHERE false
+    </select>
+
+    <select id="dataDate" resultType="java.time.LocalDate">
+        SELECT NULL::date
+    </select>
+</mapper>
