@@ -31,6 +31,17 @@ const HOME: LngLatBoundsLike = (() => {
 })()
 const LABEL_FONT = ['Montserrat SemiBold', 'Open Sans Bold', 'Noto Sans Regular', 'Noto Sans CJK JP Regular']
 const NONE = '__none__'
+/** 地块按建设状态着色，与面板「地块状态」图例颜色一致 */
+const PLOT_COLOR: ExpressionSpecification = ['match', ['get', 'status'],
+  'constructed', '#C9D3DE',
+  'under_construction', '#FFB547',
+  'vacant_serviced', '#7FB7F0',
+  'vacant_unserviced', '#6B7785',
+  '#9AA6B2']
+const PLOT_STATUS_KEY: Record<string, string> = {
+  constructed: 'constructed', under_construction: 'underConstruction',
+  vacant_serviced: 'vacantServiced', vacant_unserviced: 'vacantUnserviced', other: 'other',
+}
 
 function padding() {
   const open = !!store.selectedCode
@@ -81,7 +92,25 @@ function applySelection() {
   map.setFilter('district-labels', ['!=', ['get', 'code'], code ?? NONE])
   map.setPaintProperty('district-labels', 'text-opacity', code ? 0.45 : 0.9)
   if (map.getLayer('buildings-3d')) map.setPaintProperty('buildings-3d', 'fill-extrusion-color', buildingColor(code))
+  // 只显示选中区的地块
+  map.setFilter('plots-fill', ['==', ['get', 'code'], code ?? NONE])
+  map.setFilter('plots-line', ['==', ['get', 'code'], code ?? NONE])
+  applyPlotHighlight()
   renderSelectedMarker()
+}
+
+/** 面板图例悬停：该状态的地块加亮，其他地块变淡 */
+function applyPlotHighlight() {
+  if (!map || !map.getLayer('plots-fill')) return
+  const hl = store.highlightPlotStatus
+  map.setPaintProperty('plots-fill', 'fill-opacity', hl ? ['case', ['==', ['get', 'status'], hl], 0.85, 0.06] : 0.42)
+  map.setPaintProperty('plots-line', 'line-opacity', hl ? ['case', ['==', ['get', 'status'], hl], 1, 0.15] : 0.7)
+  map.setPaintProperty('plots-line', 'line-width', hl ? ['case', ['==', ['get', 'status'], hl], 2, 0.6] : 0.8)
+}
+
+function plotTipHtml(p: Record<string, unknown>): string {
+  const key = PLOT_STATUS_KEY[String(p.status)] ?? 'other'
+  return `<b>${t('land.plot')} ${escapeHtml(String(p.plot_id ?? ''))}</b>${t('land.ps.' + key)} · ${escapeHtml(String(p.use_desc ?? ''))}`
 }
 
 function applyHover(code: string | null) {
@@ -119,6 +148,9 @@ function addLayers(fc: DistrictFeatureCollection) {
   if (!map) return
   map.addSource('districts', { type: 'geojson', data: fc as unknown as GeoJSON.FeatureCollection })
   map.addSource('district-points', { type: 'geojson', data: points(fc) })
+  map.addSource('plots', {
+    type: 'vector', tiles: [api.plotTilesUrl(store.dataVersion)], minzoom: 10, maxzoom: 16, attribution: 'Plots © makani',
+  })
   map.addSource('buildings', {
     type: 'vector', tiles: [api.buildingTilesUrl(store.dataVersion)], minzoom: 12, maxzoom: 16, attribution: 'Buildings © makani',
   })
@@ -126,6 +158,15 @@ function addLayers(fc: DistrictFeatureCollection) {
   map.addLayer({
     id: 'districts-hover', type: 'fill', source: 'districts',
     paint: { 'fill-color': '#7FB7F0', 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.12, 0.02] },
+  })
+  // 地块：放在建筑下面，只显示选中区，按建设状态着色
+  map.addLayer({
+    id: 'plots-fill', type: 'fill', source: 'plots', 'source-layer': 'plots', filter: ['==', ['get', 'code'], NONE],
+    paint: { 'fill-color': PLOT_COLOR, 'fill-opacity': 0.42 },
+  })
+  map.addLayer({
+    id: 'plots-line', type: 'line', source: 'plots', 'source-layer': 'plots', filter: ['==', ['get', 'code'], NONE],
+    paint: { 'line-color': PLOT_COLOR, 'line-width': 0.8, 'line-opacity': 0.7 },
   })
   map.addLayer({
     id: 'buildings-3d', type: 'fill-extrusion', source: 'buildings', 'source-layer': 'buildings', minzoom: 12,
@@ -171,6 +212,13 @@ function addLayers(fc: DistrictFeatureCollection) {
   const onHover = (code: string | undefined, point: maplibregl.Point) => {
     store.hoveredCode = code ?? null
     const d = code ? store.features.get(code) : undefined
+    // 选中区内悬停到地块上：显示地块编号、建设状态、用途
+    const plot = store.selectedCode ? map!.queryRenderedFeatures(point, { layers: ['plots-fill'] })[0] : undefined
+    if (plot) {
+      tip.value = { x: point.x, y: point.y, html: plotTipHtml(plot.properties ?? {}) }
+      map!.getCanvas().style.cursor = 'pointer'
+      return
+    }
     tip.value = d ? { x: point.x, y: point.y, html: tipHtml(d) } : null
     map!.getCanvas().style.cursor = d ? 'pointer' : ''
   }
@@ -246,6 +294,7 @@ watch(() => store.selectedCode, () => {
 })
 
 watch(() => store.hoveredCode, code => applyHover(code))
+watch(() => store.highlightPlotStatus, () => applyPlotHighlight())
 watch(() => store.homeTick, () => flyHome())
 watch(() => store.lang, () => renderSelectedMarker())
 </script>

@@ -31,5 +31,7 @@ public interface MakaniMapper {
 
     List<MakaniRows.Building> buildings(@Param("t") MakaniTables t);
 
+    List<MakaniRows.PlotShape> plotShapes(@Param("t") MakaniTables t);
+
     LocalDate plotDataDate(@Param("t") MakaniTables t);
 }

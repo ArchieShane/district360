@@ -50,6 +50,8 @@ public class StatWriter {
             chunked(s.landUse(), mapper::insertLandUse);
             mapper.deleteAllBuildings();
             chunked(s.buildings(), mapper::insertBuildings);
+            mapper.deleteAllPlots();
+            chunked(s.plots(), mapper::insertPlots);
         });
     }
 

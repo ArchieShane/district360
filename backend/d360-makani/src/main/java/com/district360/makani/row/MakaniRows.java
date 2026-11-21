@@ -52,6 +52,14 @@ public final class MakaniRows {
         public int plotCount;
     }
 
+    public static class PlotShape {
+        public Integer districtKey;
+        public String plotId;
+        public String status;
+        public String useDesc;
+        public String geomHex;
+    }
+
     public static class Building {
         public Integer districtKey;
         public String buildingId;

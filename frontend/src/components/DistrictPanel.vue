@@ -18,11 +18,12 @@ const NA = 'NaN'
 const fv = (ok: boolean, v: number | null | undefined, digits = 0) => (ok ? nf(v, digits) : NA)
 const fs = (ok: boolean, v: number | null | undefined) => (ok ? sg(v) : NA)
 
+// status 与地图地块图层（map_plot.status）一致，悬停图例时地图上高亮对应地块
 const PS = [
-  { key: 'constructed', color: '#C9D3DE', metric: 'plots_constructed' },
-  { key: 'underConstruction', color: '#FFB547', metric: 'plots_under_construction' },
-  { key: 'vacantServiced', color: '#7FB7F0', metric: 'plots_vacant_serviced' },
-  { key: 'vacantUnserviced', color: '#6B7785', metric: 'plots_vacant_unserviced' },
+  { key: 'constructed', status: 'constructed', color: '#C9D3DE', metric: 'plots_constructed' },
+  { key: 'underConstruction', status: 'under_construction', color: '#FFB547', metric: 'plots_under_construction' },
+  { key: 'vacantServiced', status: 'vacant_serviced', color: '#7FB7F0', metric: 'plots_vacant_serviced' },
+  { key: 'vacantUnserviced', status: 'vacant_unserviced', color: '#6B7785', metric: 'plots_vacant_unserviced' },
 ] as const
 const LU_COLORS: Record<string, string> = {
   residential: '#E8C77A', commercial: '#6FB2FF', community: '#5FE0A0', open_space: '#4FBF85', other: '#9AA6B2',
@@ -41,6 +42,14 @@ const landUseShown = computed(() => {
     { key: 'residential', nameZh: '居住', nameEn: 'Residential', pct: null },
     { key: 'commercial', nameZh: '商业', nameEn: 'Commercial', pct: null },
   ]
+})
+/** 「其他」= 居住、商业以外的全部地块用途合计（让三项占比加起来是 100%） */
+const landUseOther = computed(() => {
+  const all = o.value?.land.landUse ?? []
+  const rest = all.filter(x => !x.highlight)
+  const total = all.reduce((a, x) => a + x.plotCount, 0)
+  const n = rest.reduce((a, x) => a + x.plotCount, 0)
+  return { pct: total ? Math.round((n / total) * 1000) / 10 : null, parts: rest }
 })
 const plotTotal = computed(() => plotParts.value.reduce((a, p) => a + p.value, 0) || 1)
 
@@ -124,16 +133,32 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
           </div>
           <div class="pbar" style="margin-top: 9px; height: 9px">
             <template v-if="has(o.land.status)">
-              <i v-for="p in plotParts" :key="p.key" :data-m="p.metric" :style="{ width: (p.value / plotTotal) * 100 + '%', background: p.color }"></i>
+              <i v-for="p in plotParts" :key="p.key" :data-m="p.metric" :style="{ width: (p.value / plotTotal) * 100 + '%', background: p.color }"
+                 @mouseenter="store.highlightPlotStatus = p.status" @mouseleave="store.highlightPlotStatus = null"></i>
             </template>
           </div>
           <div class="lgd">
-            <span v-for="p in plotParts" :key="p.key" :data-m="p.metric"><i :style="{ background: p.color }"></i>{{ t('land.ps.' + p.key) }} <b>{{ fv(has(o.land.status), p.value) }}</b></span>
+            <span v-for="p in plotParts" :key="p.key" :data-m="p.metric" class="hl"
+                  :class="{ on: store.highlightPlotStatus === p.status }"
+                  @mouseenter="store.highlightPlotStatus = p.status" @mouseleave="store.highlightPlotStatus = null"><i :style="{ background: p.color }"></i>{{ t('land.ps.' + p.key) }} <b>{{ fv(has(o.land.status), p.value) }}</b></span>
           </div>
           <div class="lur">
             {{ t('land.landUse') }}：
             <span v-for="u in landUseShown" :key="u.key" data-m="land_use">
               <i :style="{ background: LU_COLORS[u.key] ?? '#9AA6B2' }"></i>{{ locale === 'zh' ? u.nameZh : u.nameEn }} <b>{{ fv(has(o.land.status), u.pct, 1) }}%</b>
+            </span>
+            <span class="lu-other" data-m="land_use">
+              <i style="background: #9AA6B2"></i>{{ t('land.other') }} <b>{{ fv(has(o.land.status), landUseOther.pct, 1) }}%</b>
+              <em class="info" tabindex="0">i
+                <span class="info-pop">
+                  <b>{{ t('land.otherTitle') }}</b>
+                  {{ t('land.otherDesc') }}
+                  <template v-if="has(o.land.status) && landUseOther.parts.length">
+                    <br />
+                    <template v-for="(p, i) in landUseOther.parts" :key="p.key">{{ i ? '；' : '' }}{{ locale === 'zh' ? p.nameZh : p.nameEn }} {{ nf(p.pct ?? 0, 1) }}%（{{ nf(p.plotCount) }}）</template>
+                  </template>
+                </span>
+              </em>
             </span>
           </div>
         </div>

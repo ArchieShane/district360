@@ -36,9 +36,14 @@ d360:
       password: ${D360_MAKANI_DB_PASSWORD:}
     # 宜居 / ADREC：配置 url 后对应模块才启用（见 application-local.example.yml）
 
+  # makani 源表位置：表全名 = <schema>.<table-prefix><表名>，例如 ods.ods_makani_udm_district
+  #   数据治理库 makani_1119      ：schema = ods，    table-prefix = ods_makani_
+  #   全量库 makani_sync_full / 生产：schema = public，table-prefix = ""（留空）
+  # 也可以用环境变量 D360_MAKANI_SCHEMA / D360_MAKANI_TABLE_PREFIX 覆盖；改完重启后端即生效，
+  # 指标悬浮提示里的库名、表名会跟着变。
   makani:
-    schema: ods
-    table-prefix: ods_makani_
+    schema: ${D360_MAKANI_SCHEMA:ods}
+    table-prefix: ${D360_MAKANI_TABLE_PREFIX:ods_makani_}
     boundary-simplify-tolerance: 0.00003
     medical-exclude-name-patterns: ["%test%"]
 

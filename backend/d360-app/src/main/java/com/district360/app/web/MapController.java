@@ -36,6 +36,16 @@ public class MapController {
     /** 建筑体块矢量瓦片（图层名 buildings，属性 code / height / uc）。 */
     @GetMapping("/tiles/buildings/{z}/{x}/{y}.pbf")
     public ResponseEntity<byte[]> buildings(@PathVariable int z, @PathVariable int x, @PathVariable int y) {
+        return tile(z, x, y, () -> service.buildingTile(z, x, y));
+    }
+
+    /** 地块矢量瓦片（图层名 plots，属性 code / plot_id / status / use_desc），选中区后按建设状态高亮。 */
+    @GetMapping("/tiles/plots/{z}/{x}/{y}.pbf")
+    public ResponseEntity<byte[]> plots(@PathVariable int z, @PathVariable int x, @PathVariable int y) {
+        return tile(z, x, y, () -> service.plotTile(z, x, y));
+    }
+
+    private ResponseEntity<byte[]> tile(int z, int x, int y, java.util.function.Supplier<byte[]> body) {
         int max = 1 << Math.max(0, Math.min(z, 22));
         if (z < 0 || z > 22 || x < 0 || y < 0 || x >= max || y >= max) {
             return ResponseEntity.badRequest().build();
@@ -43,6 +53,6 @@ public class MapController {
         return ResponseEntity.ok()
                 .contentType(MVT)
                 .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS))
-                .body(service.buildingTile(z, x, y));
+                .body(body.get());
     }
 }

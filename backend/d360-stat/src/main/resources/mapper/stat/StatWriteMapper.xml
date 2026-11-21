@@ -47,6 +47,19 @@
         ) AS v(code, building_id, height, uc, hex)
     </insert>
 
+    <delete id="deleteAllPlots">DELETE FROM stat.map_plot</delete>
+
+    <insert id="insertPlots">
+        INSERT INTO stat.map_plot (district_code, plot_id, status, use_desc, geom)
+        SELECT v.code, v.plot_id, v.status, v.use_desc,
+               ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform(ST_GeomFromEWKB(decode(v.hex, 'hex')), 3857)), 3))
+        FROM (VALUES
+        <foreach collection="list" item="p" separator=",">
+            (#{p.code}, #{p.plotId}, #{p.status}, #{p.useDesc}, #{p.ewkbHex})
+        </foreach>
+        ) AS v(code, plot_id, status, use_desc, hex)
+    </insert>
+
     <delete id="deleteAllLiveability">DELETE FROM stat.stat_district_liveability</delete>
 
     <insert id="insertLiveability">

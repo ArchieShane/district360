@@ -101,6 +101,25 @@
         WHERE x.shape IS NOT NULL
     </select>
 
+    <!-- 地块形状 + 建设状态分类（与 plots 查询里的 4 类口径一致），供地图高亮 -->
+    <select id="plotShapes" resultType="com.district360.makani.row.MakaniRows$PlotShape">
+        <include refid="districtCte"/>
+        SELECT d.objectid AS district_key,
+               x.plotid AS plot_id,
+               CASE
+                   WHEN x.construction_status = 'Constructed' THEN 'constructed'
+                   WHEN x.construction_status = 'Under Construction' THEN 'under_construction'
+                   WHEN x.construction_status = 'Not Constructed' AND x.servicestatus = 'available' THEN 'vacant_serviced'
+                   WHEN x.construction_status = 'Not Constructed'
+                        AND x.servicestatus IN ('notAvailable', 'notAvailableHaveConsNOC') THEN 'vacant_unserviced'
+                   ELSE 'other'
+               END AS status,
+               coalesce(nullif(trim(x.primaryuseengdesc), ''), 'Undefined') AS use_desc,
+               encode(ST_AsEWKB(ST_Force2D(x.shape)), 'hex') AS geom_hex
+        FROM d JOIN ${t.plot} x ON <include refid="inDistrict"/>
+        WHERE x.shape IS NOT NULL
+    </select>
+
     <select id="plotDataDate" resultType="java.time.LocalDate">
         SELECT max(datareceiveddate)::date FROM ${t.plot}
     </select>

@@ -26,5 +26,6 @@ export const api = {
   overview: (code: string) => get<DistrictOverview>(`/districts/${encodeURIComponent(code)}/overview`),
   meta: () => get<MetaInfo>('/meta'),
   lineage: () => get<LineageInfo>('/lineage'),
+  plotTilesUrl: (v: string) => `${location.origin}${BASE}/map/tiles/plots/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,
   buildingTilesUrl: (v: string) => `${location.origin}${BASE}/map/tiles/buildings/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,
 }

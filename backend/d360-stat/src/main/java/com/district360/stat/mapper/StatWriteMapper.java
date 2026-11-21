@@ -27,6 +27,10 @@ public interface StatWriteMapper {
 
     void insertBuildings(@Param("list") List<MakaniSnapshot.Building> list);
 
+    void deleteAllPlots();
+
+    void insertPlots(@Param("list") List<MakaniSnapshot.Plot> list);
+
     void deleteAllLiveability();
 
     void insertLiveability(@Param("list") List<LiveabilitySnapshot.District> list, @Param("asOf") LocalDate asOf);

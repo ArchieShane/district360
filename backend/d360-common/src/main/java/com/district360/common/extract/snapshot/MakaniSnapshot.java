@@ -13,11 +13,12 @@ public record MakaniSnapshot(
         LocalDate sourceAsOf,
         List<District> districts,
         List<LandUse> landUse,
-        List<Building> buildings) implements SourceSnapshot {
+        List<Building> buildings,
+        List<Plot> plots) implements SourceSnapshot {
 
     @Override
     public int rowCount() {
-        return districts.size() + landUse.size() + buildings.size();
+        return districts.size() + landUse.size() + buildings.size() + plots.size();
     }
 
     /**
@@ -63,6 +64,14 @@ public record MakaniSnapshot(
 
     /** 区 × makani 原始用途（udm_plot.primaryuseengdesc）的地块数；归类规则在读接口里按配置做。 */
     public record LandUse(String code, String useDesc, int plotCount) {
+    }
+
+    /**
+     * 地块（EPSG:4326，EWKB hex），供地图按建设状态高亮。
+     *
+     * @param status constructed / under_construction / vacant_serviced / vacant_unserviced / other，与面板「地块状态」4 类一致
+     */
+    public record Plot(String code, String plotId, String status, String useDesc, String ewkbHex) {
     }
 
     /** 建筑体块（EPSG:4326，EWKB hex）。 */

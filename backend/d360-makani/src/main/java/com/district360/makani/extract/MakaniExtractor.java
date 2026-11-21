@@ -51,6 +51,8 @@ public class MakaniExtractor implements StatExtractor<MakaniSnapshot> {
     @Override
     public MakaniSnapshot extract(List<DistrictRef> ignored) {
         MakaniTables t = new MakaniTables(props);
+        log.info("makani 源表：{}、{}、{}、{}（schema = {}，前缀 = '{}'）",
+                t.getDistrict(), t.getPlot(), t.getBuilding(), t.getCommunity(), props.getSchema(), props.getTablePrefix());
 
         List<MakaniRows.District> base = new ArrayList<>(mapper.districts(t, props.getBoundarySimplifyTolerance()));
         if (base.isEmpty()) {
@@ -99,8 +101,12 @@ public class MakaniExtractor implements StatExtractor<MakaniSnapshot> {
                 .map(r -> new MakaniSnapshot.Building(codeByKey.get(r.districtKey), r.buildingId, r.height, r.underConstruction, r.geomHex))
                 .toList();
 
-        log.info("makani 抽取完成：{} 个区，{} 条土地利用，{} 栋建筑", out.size(), landUse.size(), buildings.size());
-        return new MakaniSnapshot(mapper.plotDataDate(t), out, landUse, buildings);
+        List<MakaniSnapshot.Plot> plotShapes = mapper.plotShapes(t).stream()
+                .map(r -> new MakaniSnapshot.Plot(codeByKey.get(r.districtKey), r.plotId, r.status, r.useDesc, r.geomHex))
+                .toList();
+
+        log.info("makani 抽取完成：{} 个区，{} 条土地利用，{} 栋建筑，{} 个地块", out.size(), landUse.size(), buildings.size(), plotShapes.size());
+        return new MakaniSnapshot(mapper.plotDataDate(t), out, landUse, buildings, plotShapes);
     }
 
     /** ADM + AL REEM ISLAND → adm-al-reem-island；ADM + HADBAT AL ZA`FARANAH → adm-hadbat-al-zafaranah */

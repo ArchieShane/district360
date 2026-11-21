@@ -10,9 +10,9 @@ import java.util.List;
 @ConfigurationProperties(prefix = "d360.makani")
 public class MakaniProperties {
 
-    /** 源表所在 schema，makani_1119 为 ods。 */
+    /** 源表所在 schema：makani_1119 为 ods，makani_sync_full / 生产库为 public。 */
     private String schema = "ods";
-    /** 源表名前缀，makani_1119 为 ods_makani_。 */
+    /** 源表名前缀：makani_1119 为 ods_makani_，makani_sync_full / 生产库为空字符串。 */
     private String tablePrefix = "ods_makani_";
     /** 区面简化容差（度），约 3 米。 */
     private double boundarySimplifyTolerance = 0.00003;
@@ -22,7 +22,8 @@ public class MakaniProperties {
     public String table(String name) {
         String full = schema + "." + tablePrefix + name;
         if (!full.matches("[A-Za-z0-9_]+\\.[A-Za-z0-9_]+")) {
-            throw new IllegalStateException("非法的 makani 表名配置: " + full);
+            throw new IllegalStateException("非法的 makani 表名配置: " + full
+                    + "（d360.makani.schema / table-prefix 只能包含字母、数字、下划线；前缀可以为空）");
         }
         return full;
     }

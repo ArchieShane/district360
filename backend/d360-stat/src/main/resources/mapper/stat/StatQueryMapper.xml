@@ -85,6 +85,20 @@
         SELECT coalesce(ST_AsMVT(mvt.*, 'buildings', 4096, 'geom'), ''::bytea) AS mvt FROM mvt
     </select>
 
+    <select id="plotTile" resultType="com.district360.stat.row.TileRow">
+        WITH bounds AS (SELECT ST_TileEnvelope(#{z}, #{x}, #{y}) AS env),
+             mvt AS (
+                 SELECT ST_AsMVTGeom(p.geom, bounds.env, 4096, 64, true) AS geom,
+                        p.district_code AS code,
+                        p.plot_id AS plot_id,
+                        p.status AS status,
+                        p.use_desc AS use_desc
+                 FROM stat.map_plot p, bounds
+                 WHERE p.geom &amp;&amp; bounds.env
+             )
+        SELECT coalesce(ST_AsMVT(mvt.*, 'plots', 4096, 'geom'), ''::bytea) AS mvt FROM mvt
+    </select>
+
     <select id="listSourceStatus" resultType="com.district360.stat.row.SourceStatusRow">
         WITH s AS (
             SELECT 'makani' AS source, count(*)::int AS row_count, max(source_as_of) AS source_as_of, false AS sample

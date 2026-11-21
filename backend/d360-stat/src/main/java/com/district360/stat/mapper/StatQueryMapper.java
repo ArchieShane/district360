@@ -29,6 +29,8 @@ public interface StatQueryMapper {
 
     TileRow buildingTile(@Param("z") int z, @Param("x") int x, @Param("y") int y);
 
+    TileRow plotTile(@Param("z") int z, @Param("x") int x, @Param("y") int y);
+
     List<SourceStatusRow> listSourceStatus();
 
     /** 各区统计范围，供宜居 / ADREC 抽取器做空间查询。 */

@@ -67,6 +67,7 @@ onBeforeUnmount(() => {
         <template v-else>
           <span><i style="background: #a9d0f7"></i>{{ t('legend.selected') }}</span>
           <span><i style="background: #ffb547"></i>{{ t('legend.uc') }}</span>
+          <span><i style="background: linear-gradient(90deg, #c9d3de 50%, #7fb7f0 50%)"></i>{{ t('legend.plots') }}</span>
           <span><i style="background: #2b3643"></i>{{ t('legend.outside') }}</span>
           <span class="sep"></span><span>{{ t('legend.esc') }}</span>
         </template>

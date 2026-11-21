@@ -56,7 +56,7 @@ cd backend && mvn -B -DskipTests package && java -jar d360-app/target/district36
 
 启动时会自动：
 1. Flyway 在统计库建表（`stat` schema）；
-2. 如果 makani 统计表还是空的，后台跑一次 makani 抽取：从 makani 读出全部 216 个区（区名、区面）及各项计数、38.3 万栋建筑，约 80 秒。
+2. 如果 makani 统计表还是空的，后台跑一次 makani 抽取：从 makani 读出全部 216 个区（区名、区面）及各项计数、38.3 万栋建筑、41 万个地块（全量库），约 2.5 分钟。
 
 ### 前端
 
@@ -70,13 +70,20 @@ cd frontend && npm install && npm run dev
 
 生产构建：`npm run build`，产物在 `frontend/dist`，由 Nginx 托管并把 `/api` 反向代理到后端即可。
 
-## 切换到生产库
+## 切换 makani 库（schema / 表名前缀）
 
-当前连的是数据治理人员整理的库（`makani_1119`，表在 `ods` schema、带 `ods_makani_` 前缀）。到生产环境只改配置，不改代码：
+makani 源表的位置全部由配置决定，表全名 = `<schema>.<table-prefix><表名>`，换库只改配置、不改代码：
 
-- 数据源地址与账号：`d360.datasource.*`（或对应环境变量）；
-- makani 表的位置：`d360.makani.schema`、`d360.makani.table-prefix`（例如生产库是 `public` schema、无前缀，就配 `schema: public`、`table-prefix: ""`）；
+| 库 | `d360.datasource.makani.url` | `d360.makani.schema` | `d360.makani.table-prefix` |
+|---|---|---|---|
+| 数据治理库 | `.../makani_1119` | `ods` | `ods_makani_` |
+| 全量库 / 生产库 | `.../makani_sync_full` | `public` | `""`（留空） |
+
+- 默认值在 `application.yml`，本地覆盖在 `application-local.yml`，也可以用环境变量 `D360_MAKANI_DB_URL`、`D360_MAKANI_SCHEMA`、`D360_MAKANI_TABLE_PREFIX`；
+- 改完重启后端，再执行一次抽取（`POST /api/v1/admin/etl/makani`）；
 - 指标悬浮提示里的库名、表名会自动跟着配置变。
+
+> 当前本地配置指向 `makani_sync_full`：2026-11-21 发现 109 服务器存在硬件导致的数据损坏（makani_1119 建筑表），暂用全量库测试，详见 docs 方案文档「实现状态」。
 
 ## 接口
 

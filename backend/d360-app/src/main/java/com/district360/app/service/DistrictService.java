@@ -106,6 +106,11 @@ public class DistrictService {
         return tile == null || tile.mvt == null ? new byte[0] : tile.mvt;
     }
 
+    public byte[] plotTile(int z, int x, int y) {
+        var tile = query.plotTile(z, x, y);
+        return tile == null || tile.mvt == null ? new byte[0] : tile.mvt;
+    }
+
     public MetaInfo meta() {
         List<MetaInfo.SourceInfo> sources = new ArrayList<>();
         for (SourceStatusRow s : query.listSourceStatus()) {

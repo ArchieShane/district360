@@ -1,10 +1,17 @@
+# 本地开发配置（随代码提交，连内网开发库）。
+# 109 上的 makani_1119 建筑表在 2026-11-21 发现硬件导致的数据损坏，暂时改用全量库 makani_sync_full 测试；
+# 换回 makani_1119 时，把下面 makani 的 url、schema、table-prefix 三项改回去（或删掉这几行用 application.yml 默认值）。
 d360:
   datasource:
     stat:
       username: postgres
       password: "freedo"
     makani:
+      url: jdbc:postgresql://10.255.254.109:5443/makani_sync_full
       username: postgres
       password: "freedo"
+  makani:
+    schema: public
+    table-prefix: ""
   admin:
     token: "local-dev-token"
