@@ -21,13 +21,19 @@ public record MakaniSnapshot(
     }
 
     /**
-     * 每区一行。所有计数都是「对象中心点落在区面内」的空间汇总。
+     * 每区一行（ADM 全部区）。所有计数都是「对象中心点落在区面内」的空间汇总。
+     *
+     * @param code   页面区编码，由 makani 区名生成
+     * @param nameEn 显示用英文名
+     * @param sortNo 按英文名排序的序号
      *
      * @param boundaryEwkbHex 简化后的区面（EPSG:4326，EWKB hex），只用于地图展示
      * @param scopeEwkbHex    未简化的区面，作为三个库共用的统计范围
      */
     public record District(
             String code,
+            String nameEn,
+            int sortNo,
             Integer makaniDistrictId,
             String makaniName,
             String nameAr,

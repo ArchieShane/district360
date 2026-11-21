@@ -11,7 +11,6 @@ spring:
     default: local
   config:
     import:
-      - classpath:district-dictionary.yml
       - classpath:metric-lineage.yml
   autoconfigure:
     exclude:

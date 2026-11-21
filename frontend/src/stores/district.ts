@@ -1,12 +1,19 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api } from '../api/client'
-import type { DistrictListItem, DistrictOverview, LineageInfo, MetaInfo } from '../api/types'
+import type { DistrictFeatureCollection, DistrictFeatureProps, DistrictListItem, DistrictOverview, LineageInfo, MetaInfo } from '../api/types'
 import { i18n, type Lang } from '../i18n'
 
-/** 页面状态：区列表、选中 / 悬停的区、概览缓存、语言；与 URL hash（#d=reem&l=en）同步。 */
+const PAGE_SIZE = 30
+
+/**
+ * 页面状态。
+ * - 地图数据（ADM 全部区的边界 + 属性）一次性加载，用于地图、悬停提示、选中区；
+ * - 左侧列表分页加载：滚动到底再取下一页，搜索交给后端；
+ * - 选中区、语言与 URL hash（#d=al-reem-island&l=en）同步。
+ */
 export const useDistrictStore = defineStore('district', () => {
-  const districts = ref<DistrictListItem[]>([])
+  const boundaries = ref<DistrictFeatureCollection | null>(null)
   const meta = ref<MetaInfo | null>(null)
   const lineage = ref<LineageInfo | null>(null)
   const selectedCode = ref<string | null>(null)
@@ -19,23 +26,73 @@ export const useDistrictStore = defineStore('district', () => {
   /** 递增一次 = 请求地图回到全景 */
   const homeTick = ref(0)
 
-  const selected = computed(() => districts.value.find(d => d.code === selectedCode.value) ?? null)
+  // 左侧列表（分页）
+  const list = ref<DistrictListItem[]>([])
+  const listTotal = ref(0)
+  const listHasMore = ref(true)
+  const listLoading = ref(false)
+  const listQuery = ref('')
+  let listPage = 0
+  let listToken = 0
+  let listStarted = false
+
+  /** code → 地图属性（全部区） */
+  const features = computed(() => {
+    const m = new Map<string, DistrictFeatureProps>()
+    boundaries.value?.features.forEach(f => m.set(f.properties.code, f.properties))
+    return m
+  })
+  const selected = computed(() => (selectedCode.value ? features.value.get(selectedCode.value) ?? null : null))
   const overview = computed(() => (selectedCode.value ? overviews.value[selectedCode.value] ?? null : null))
 
   async function load() {
+    const listReady = resetList('') // 列表第一页与地图数据并行加载
     try {
-      const [list, m, lin] = await Promise.all([api.districts(), api.meta(), api.lineage()])
-      districts.value = list
+      const [b, m, lin] = await Promise.all([api.boundaries(), api.meta(), api.lineage()])
+      boundaries.value = b
       meta.value = m
       lineage.value = lin
       readHash()
     } catch (e) {
       error.value = (e as Error).message
     }
+    await listReady
+  }
+
+  /** 换搜索词：清空列表，从第一页重新加载 */
+  async function resetList(q: string) {
+    listStarted = true
+    listQuery.value = q
+    list.value = []
+    listPage = 0
+    listHasMore.value = true
+    listToken++ // 让还在路上的旧请求作废
+    listLoading.value = false
+    await loadMore()
+  }
+
+  /** 加载下一页（滚动到底时调用）；并发请求、过期请求都会被忽略 */
+  async function loadMore() {
+    // 首次加载由 load() 发起；在那之前（例如列表组件刚挂载时滚动监听触发）不加载
+    if (!listStarted || listLoading.value || !listHasMore.value) return
+    listLoading.value = true
+    const token = listToken
+    try {
+      const page = await api.districts(listPage, PAGE_SIZE, listQuery.value || undefined)
+      if (token !== listToken) return
+      list.value.push(...page.items)
+      listTotal.value = page.total
+      listHasMore.value = page.hasMore
+      listPage++
+    } catch (e) {
+      error.value = (e as Error).message
+    } finally {
+      if (token === listToken) listLoading.value = false
+    }
   }
 
   async function select(code: string) {
-    if (!districts.value.some(d => d.code === code)) return
+    if (!features.value.has(code)) return
     selectedCode.value = code
     writeHash()
     if (!overviews.value[code]) {
@@ -86,7 +143,8 @@ export const useDistrictStore = defineStore('district', () => {
   }
 
   return {
-    districts, meta, lineage, selectedCode, hoveredCode, overviews, loadingOverview, error, lang, notesOpen, homeTick,
-    selected, overview, load, select, deselect, goHome, setLang, readHash,
+    boundaries, features, meta, lineage, selectedCode, hoveredCode, overviews, loadingOverview, error, lang, notesOpen, homeTick,
+    list, listTotal, listHasMore, listLoading, listQuery,
+    selected, overview, load, resetList, loadMore, select, deselect, goHome, setLang, readHash,
   }
 })

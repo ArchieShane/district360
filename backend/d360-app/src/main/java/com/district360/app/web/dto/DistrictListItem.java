@@ -3,10 +3,10 @@ package com.district360.app.web.dto;
 import java.math.BigDecimal;
 
 /**
- * 区列表 / 地图悬停用。
+ * 区列表的一行（左侧列表，分页加载）。
  *
- * @param centroid         [lon, lat]，makani 没有区面时为 null
- * @param bbox             [minLon, minLat, maxLon, maxLat]
+ * @param centroid          [lon, lat]
+ * @param bbox              [minLon, minLat, maxLon, maxLat]
  * @param liveabilityStatus ok / sample / not_assessed / unavailable
  */
 public record DistrictListItem(
@@ -14,10 +14,7 @@ public record DistrictListItem(
         String nameEn,
         String nameAr,
         int sortNo,
-        boolean mappingConfirmed,
-        String mappingNote,
         Integer makaniDistrictId,
-        Integer livDistrictId,
         double[] centroid,
         double[] bbox,
         BigDecimal areaKm2,

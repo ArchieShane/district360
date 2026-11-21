@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(scanBasePackages = "com.district360")
-@ConfigurationPropertiesScan(basePackages = {"com.district360.common", "com.district360.app"})
+@ConfigurationPropertiesScan(basePackages = "com.district360.app")
 @EnableScheduling
 public class District360Application {
 

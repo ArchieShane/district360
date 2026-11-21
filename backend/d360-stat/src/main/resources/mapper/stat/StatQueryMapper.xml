@@ -2,9 +2,16 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.district360.stat.mapper.StatQueryMapper">
 
+    <sql id="districtFilter">
+        <where>
+            <if test="q != null and q != ''">
+                d.name_en ILIKE '%' || #{q} || '%' OR d.makani_name ILIKE '%' || #{q} || '%' OR d.name_ar ILIKE '%' || #{q} || '%'
+            </if>
+        </where>
+    </sql>
+
     <select id="listDistricts" resultType="com.district360.stat.row.DistrictListRow">
-        SELECT d.code, d.name_en, d.name_ar, d.sort_no, d.mapping_confirmed, d.mapping_note,
-               d.makani_district_id, d.liv_district_id,
+        SELECT d.code, d.name_en, d.name_ar, d.sort_no, d.makani_district_id,
                ST_X(d.centroid) AS centroid_lon, ST_Y(d.centroid) AS centroid_lat,
                ST_XMin(d.bbox) AS min_lon, ST_YMin(d.bbox) AS min_lat,
                ST_XMax(d.bbox) AS max_lon, ST_YMax(d.bbox) AS max_lat,
@@ -15,7 +22,13 @@
         FROM stat.dim_district d
                  LEFT JOIN stat.stat_district_makani m ON m.district_code = d.code
                  LEFT JOIN stat.stat_district_liveability l ON l.district_code = d.code
-        ORDER BY d.name_en
+        <include refid="districtFilter"/>
+        ORDER BY d.sort_no
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countDistricts" resultType="int">
+        SELECT count(*) FROM stat.dim_district d <include refid="districtFilter"/>
     </select>
 
     <select id="findDistrict360" resultType="com.district360.stat.row.District360Row">
@@ -30,16 +43,30 @@
         SELECT month, transactions FROM stat.stat_district_adrec_monthly WHERE district_code = #{code} ORDER BY month
     </select>
 
+    <!-- 地图用：全部区的边界 + 标签 / 悬停所需属性（中心点、外包框、面积、宜居得分） -->
     <select id="districtBoundariesGeoJson" resultType="string">
         SELECT json_build_object(
                    'type', 'FeatureCollection',
                    'features', coalesce(json_agg(json_build_object(
                        'type', 'Feature',
                        'id', d.sort_no,
-                       'properties', json_build_object('code', d.code, 'nameEn', d.name_en, 'nameAr', d.name_ar),
-                       'geometry', ST_AsGeoJSON(d.boundary, 6)::json) ORDER BY d.sort_no), '[]'::json)
+                       'properties', json_build_object(
+                           'code', d.code,
+                           'nameEn', d.name_en,
+                           'nameAr', d.name_ar,
+                           'sortNo', d.sort_no,
+                           'makaniDistrictId', d.makani_district_id,
+                           'areaKm2', m.area_km2,
+                           'liveabilityScore', l.score_current,
+                           'livSample', l.is_sample,
+                           'centroid', json_build_array(round(ST_X(d.centroid)::numeric, 6), round(ST_Y(d.centroid)::numeric, 6)),
+                           'bbox', json_build_array(round(ST_XMin(d.bbox)::numeric, 6), round(ST_YMin(d.bbox)::numeric, 6),
+                                                    round(ST_XMax(d.bbox)::numeric, 6), round(ST_YMax(d.bbox)::numeric, 6))),
+                       'geometry', ST_AsGeoJSON(d.boundary, 5)::json) ORDER BY d.sort_no), '[]'::json)
                )::text
         FROM stat.dim_district d
+                 LEFT JOIN stat.stat_district_makani m ON m.district_code = d.code
+                 LEFT JOIN stat.stat_district_liveability l ON l.district_code = d.code
         WHERE d.boundary IS NOT NULL
     </select>
 
@@ -80,6 +107,7 @@
     </select>
 
     <select id="listScopes" resultType="com.district360.stat.row.ScopeRow">
-        SELECT code, encode(ST_AsEWKB(scope), 'hex') AS scope_hex FROM stat.dim_district WHERE scope IS NOT NULL
+        SELECT code, name_en, makani_district_id, encode(ST_AsEWKB(scope), 'hex') AS scope_hex
+        FROM stat.dim_district WHERE scope IS NOT NULL ORDER BY sort_no
     </select>
 </mapper>

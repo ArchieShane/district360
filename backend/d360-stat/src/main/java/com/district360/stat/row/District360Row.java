@@ -9,8 +9,7 @@ public class District360Row {
     public String nameEn;
     public String nameAr;
     public int sortNo;
-    public boolean mappingConfirmed;
-    public String mappingNote;
+    public Integer makaniDistrictId;
 
     public BigDecimal areaKm2;
     public Integer communities;

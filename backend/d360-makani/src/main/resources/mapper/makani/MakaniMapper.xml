@@ -2,13 +2,15 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.district360.makani.mapper.MakaniMapper">
 
-    <!-- 目标区面：districtid 跨市政重复，必须同时按市政过滤 -->
+    <!-- 目标区面：默认取该市政全部区（ids 为空）；districtid 跨市政重复，必须同时按市政过滤 -->
     <sql id="districtCte">
         WITH d AS (
             SELECT districtid, shape
             FROM ${t.district}
             WHERE municipalityname = #{muni}
+              <if test="ids != null and ids.size() > 0">
               AND districtid IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+              </if>
         )
     </sql>
 
@@ -28,7 +30,10 @@
                encode(ST_AsEWKB(ST_Multi(ST_Force2D(shape))), 'hex')                                    AS scope_hex
         FROM ${t.district}
         WHERE municipalityname = #{muni}
+          <if test="ids != null and ids.size() > 0">
           AND districtid IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+          </if>
+        ORDER BY nameenglish
     </select>
 
     <select id="communities" resultType="com.district360.makani.row.MakaniRows$Count">

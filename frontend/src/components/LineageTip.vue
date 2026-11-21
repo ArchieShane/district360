@@ -21,7 +21,7 @@ let hideTimer: number | undefined
 const metric = computed(() => (active.value ? store.lineage?.metrics[active.value.key] ?? null : null))
 const district = computed(() => {
   const code = active.value?.code ?? store.selectedCode
-  return store.districts.find(d => d.code === code) ?? null
+  return code ? store.features.get(code) ?? null : null
 })
 const source = computed(() => (metric.value ? store.lineage?.sources[metric.value.source] ?? null : null))
 
@@ -32,7 +32,7 @@ const state = computed<BlockStatus | 'planned'>(() => {
   const o = store.overview && store.overview.district.code === district.value?.code ? store.overview : null
   const block: Record<SourceKey, BlockStatus | undefined> = {
     makani: o?.land.status,
-    liveability: o?.liveability.status ?? district.value?.liveabilityStatus,
+    liveability: o?.liveability.status ?? (district.value?.livSample ? 'sample' : undefined),
     adrec: o?.realEstate.status,
   }
   const s = block[m.source]
@@ -46,7 +46,6 @@ const sql = computed(() => {
   const d = district.value
   return m.sql
     .replaceAll(':makani_district_id', d?.makaniDistrictId != null ? String(d.makaniDistrictId) : ':makani_district_id')
-    .replaceAll(':liv_district_id', d?.livDistrictId != null ? String(d.livDistrictId) : ':liv_district_id')
     .replaceAll(':district_code', d?.code ?? ':district_code')
     .replaceAll(':district_scope', d ? scopeLabel(d.nameEn, d.makaniDistrictId) : ':district_scope')
 })

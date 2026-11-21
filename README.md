@@ -1,6 +1,6 @@
 # District 360 · 区情概览
 
-阿布扎比市政（ADM）17 个区的单页区情概览：点击地图上的区，3D 场景高亮该区，右侧弹出一页概览（宜居、土地与建设、房地产、公共设施）。
+阿布扎比市政（ADM）全部 101 个区的单页区情概览（区列表以 makani 数据库为准）：点击地图上的区，3D 场景高亮该区，右侧弹出一页概览（宜居、土地与建设、房地产、公共设施）。
 
 - 原型：`docs/District_360_区情概览_单页__20261121更新.html`
 - 字段口径：`docs/District360_数据字段对照_2026112101.xlsx`
@@ -20,6 +20,8 @@ ADREC ───────┘ AdrecExtractor        （房地产组）
      Spring Boot REST /api/v1  ──►  Vue3 + MapLibre（在线底图 + 建筑 3D 瓦片）
 ```
 
+**区列表以数据库为准**：makani `udm_district` 中 `municipalityname = 'ADM'` 的全部区（101 个），区编码由区名生成（如 `AL REEM ISLAND` → `al-reem-island`，页面链接 `#d=al-reem-island`）。不再维护区清单配置。
+
 **统计口径：三个库都按「统计范围」做空间查询。** 统计范围 = 每个区的 makani 原始区面（存于 `stat.dim_district.scope`）。各库的区 ID / 区名可能不一致，但范围一致；已验证 Liveability 的区面与 makani 区面基本重合（IoU ≥ 0.997）。
 
 页面只有区级汇总数，没有明细，所以接口只读统计库：哪个源慢了、断了或者还没接入，页面都照常显示（显示上次抽取的结果，或者标「样例数值」/「暂无数据」）。
@@ -28,12 +30,12 @@ ADREC ───────┘ AdrecExtractor        （房地产组）
 
 ```
 backend/                      Spring Boot 3.5 · JDK 17 · MyBatis · Flyway
-├─ d360-common                契约：统一返回体、区字典、StatExtractor 接口、三个源的快照类型
+├─ d360-common                契约：统一返回体、DistrictRef（区 + 统计范围）、StatExtractor 接口、三个源的快照类型
 ├─ d360-stat                  统计库：数据源、Flyway 建表（db/migration）、写入、读查询
-├─ d360-makani                makani 抽取（按区面做空间汇总）
+├─ d360-makani                makani 抽取：产出区列表（ADM 全部区）、区面，并按区面做空间汇总
 ├─ d360-liveability           宜居抽取（骨架，待宜居组实现）
 ├─ d360-adrec                 ADREC 抽取（骨架，待房地产组实现）
-└─ d360-app                   启动类、接口、定时调度；配置 application.yml、区字典 district-dictionary.yml
+└─ d360-app                   启动类、接口、定时调度；配置 application.yml、指标来源 metric-lineage.yml
 frontend/                     Vue 3 · Vite · TypeScript · Pinia · vue-i18n · MapLibre GL
 docs/                         原型、字段对照、方案文档
 ```
@@ -52,8 +54,7 @@ cd backend && mvn -B -DskipTests package && java -jar d360-app/target/district36
 
 启动时会自动：
 1. Flyway 在统计库建表（`stat` schema），并写入宜居 / ADREC 的样例数据（`is_sample = true`）；
-2. 把区字典同步到 `stat.dim_district`；
-3. 如果 makani 统计表还是空的，后台跑一次 makani 抽取（约 6 秒）。
+2. 如果 makani 统计表还是空的，后台跑一次 makani 抽取：从 makani 读出 ADM 全部 101 个区（区名、区面）及各项计数、14.6 万栋建筑，约 35 秒。
 
 ### 前端
 
@@ -79,9 +80,9 @@ cd frontend && npm install && npm run dev
 
 | 接口 | 用途 |
 |---|---|
-| `GET /api/v1/districts` | 区列表：名称、面积、中心点、外包框、宜居得分（列表、悬停提示） |
+| `GET /api/v1/districts?page=0&size=30&q=` | 区列表分页（ADM 全部区，按英文名排序）：左侧列表滚动到底加载下一页，`q` 按区名搜索 |
 | `GET /api/v1/districts/{code}/overview` | 右侧面板：标题 + 宜居 / 土地与建设 / 房地产 / 公共设施，每块带 `status` 和 `asOf` |
-| `GET /api/v1/map/districts.geojson` | 区边界（EPSG:4326，已简化） |
+| `GET /api/v1/map/districts.geojson` | 全部区边界（EPSG:4326，已简化）及标签 / 悬停所需属性（中心点、外包框、面积、宜居得分），地图一次性加载 |
 | `GET /api/v1/map/tiles/buildings/{z}/{x}/{y}.pbf` | 建筑体块矢量瓦片（图层 `buildings`，属性 `code`、`height`、`uc`） |
 | `GET /api/v1/meta` | 区数量、各源数据日期、是否样例、最近一次抽取状态 |
 | `GET /api/v1/lineage` | 指标血缘：每个指标读哪个库 / 表、怎么算、对应 SQL（页面悬浮提示用） |
@@ -111,5 +112,4 @@ cd frontend && npm install && npm run dev
 
 见 `docs/接口设计与协作方案_v0.2.md` 第 8 节。页面数值以各源库当前实际数据为准；影响口径的主要有：
 
-- Al Mina / Al Wahda / Hudayriyat / Saadiyat 与 makani 区的对应关系（区字典里标了 `mapping-confirmed: false`，页面显示 TBC）；
 - 土地利用：按业务要求已删除「混合」，面板只显示居住、商业；Investment 等未列出的用途计入「公用与其他」（配置项 `d360.land-use.groups`）。

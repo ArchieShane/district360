@@ -1,6 +1,5 @@
 package com.district360.stat.mapper;
 
-import com.district360.common.district.DistrictRef;
 import com.district360.common.extract.snapshot.AdrecSnapshot;
 import com.district360.common.extract.snapshot.LiveabilitySnapshot;
 import com.district360.common.extract.snapshot.MakaniSnapshot;
@@ -12,11 +11,9 @@ import java.util.List;
 /** 统计库写入。只由 {@link com.district360.stat.write.StatWriter} 调用。 */
 public interface StatWriteMapper {
 
-    void upsertDictionary(@Param("d") DistrictRef district);
+    void deleteAllDistricts();
 
-    void clearMakaniGeometry();
-
-    void updateMakaniGeometry(@Param("d") MakaniSnapshot.District district);
+    void insertDistrict(@Param("d") MakaniSnapshot.District district);
 
     void deleteAllMakani();
 

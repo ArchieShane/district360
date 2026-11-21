@@ -12,8 +12,8 @@ public record DistrictOverview(
         RealEstate realEstate,
         Facilities facilities) {
 
-    public record Header(String code, String nameEn, String nameAr, String municipality, BigDecimal areaKm2,
-                         Integer communities, Integer plots, boolean mappingConfirmed, String mappingNote) {
+    public record Header(String code, String nameEn, String nameAr, String municipality, Integer makaniDistrictId,
+                         BigDecimal areaKm2, Integer communities, Integer plots) {
     }
 
     public record Liveability(String status, LocalDate asOf, BigDecimal existing, BigDecimal current, BigDecimal target,

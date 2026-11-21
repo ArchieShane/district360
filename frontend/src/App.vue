@@ -57,7 +57,7 @@ onBeforeUnmount(() => {
       <button type="button" class="tbb" @click="store.goHome()">{{ t('toolbar.reset') }}</button>
     </div>
 
-    <IntroCard v-if="store.districts.length" />
+    <IntroCard v-if="store.boundaries" />
 
     <div class="lgw">
       <div class="lg">

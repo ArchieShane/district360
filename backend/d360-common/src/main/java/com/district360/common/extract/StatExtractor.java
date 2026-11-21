@@ -16,6 +16,11 @@ public interface StatExtractor<S extends SourceSnapshot> {
     /** 数据源标识：makani / liveability / adrec。 */
     String source();
 
-    /** 读源库并返回快照。抛异常即视为本次抽取失败，统计库保持原样。 */
+    /**
+     * 读源库并返回快照。抛异常即视为本次抽取失败，统计库保持原样。
+     *
+     * @param districts 要统计的区（带统计范围）。makani 抽取器收到的是空列表：区列表本身由它从 makani 产出；
+     *                  其他抽取器收到 ADM 全部区，按 {@link DistrictRef#scopeEwkbHex()} 做空间查询
+     */
     S extract(List<DistrictRef> districts);
 }

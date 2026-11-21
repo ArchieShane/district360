@@ -2,34 +2,17 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.district360.stat.mapper.StatWriteMapper">
 
-    <insert id="upsertDictionary">
-        INSERT INTO stat.dim_district (code, name_en, sort_no, makani_district_id, liv_district_id, mapping_confirmed, mapping_note, updated_at)
-        VALUES (#{d.code}, #{d.nameEn}, #{d.sortNo}, #{d.makaniDistrictId}, #{d.livDistrictId}, #{d.mappingConfirmed}, #{d.mappingNote}, now())
-        ON CONFLICT (code) DO UPDATE SET
-            name_en = EXCLUDED.name_en,
-            sort_no = EXCLUDED.sort_no,
-            makani_district_id = EXCLUDED.makani_district_id,
-            liv_district_id = EXCLUDED.liv_district_id,
-            mapping_confirmed = EXCLUDED.mapping_confirmed,
-            mapping_note = EXCLUDED.mapping_note,
-            updated_at = now()
+    <delete id="deleteAllDistricts">DELETE FROM stat.dim_district</delete>
+
+    <insert id="insertDistrict">
+        INSERT INTO stat.dim_district (code, name_en, name_ar, sort_no, makani_district_id, makani_name, centroid, bbox, boundary, scope, updated_at)
+        VALUES (#{d.code}, #{d.nameEn}, #{d.nameAr}, #{d.sortNo}, #{d.makaniDistrictId}, #{d.makaniName},
+                ST_SetSRID(ST_MakePoint(#{d.centroidLon}, #{d.centroidLat}), 4326),
+                ST_MakeEnvelope(#{d.minLon}, #{d.minLat}, #{d.maxLon}, #{d.maxLat}, 4326),
+                ST_Multi(ST_GeomFromEWKB(decode(#{d.boundaryEwkbHex}, 'hex'))),
+                ST_Multi(ST_GeomFromEWKB(decode(#{d.scopeEwkbHex}, 'hex'))),
+                now())
     </insert>
-
-    <update id="clearMakaniGeometry">
-        UPDATE stat.dim_district SET makani_name = NULL, name_ar = NULL, centroid = NULL, bbox = NULL, boundary = NULL, scope = NULL, updated_at = now()
-    </update>
-
-    <update id="updateMakaniGeometry">
-        UPDATE stat.dim_district SET
-            makani_name = #{d.makaniName},
-            name_ar = #{d.nameAr},
-            centroid = ST_SetSRID(ST_MakePoint(#{d.centroidLon}, #{d.centroidLat}), 4326),
-            bbox = ST_MakeEnvelope(#{d.minLon}, #{d.minLat}, #{d.maxLon}, #{d.maxLat}, 4326),
-            boundary = ST_Multi(ST_GeomFromEWKB(decode(#{d.boundaryEwkbHex}, 'hex'))),
-            scope = ST_Multi(ST_GeomFromEWKB(decode(#{d.scopeEwkbHex}, 'hex'))),
-            updated_at = now()
-        WHERE code = #{d.code}
-    </update>
 
     <delete id="deleteAllMakani">DELETE FROM stat.stat_district_makani</delete>
 

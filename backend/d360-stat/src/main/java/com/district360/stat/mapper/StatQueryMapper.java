@@ -14,7 +14,10 @@ import java.util.List;
 /** 接口读统计库。 */
 public interface StatQueryMapper {
 
-    List<DistrictListRow> listDistricts();
+    /** 区列表分页（按英文名排序），q 为空表示不过滤。 */
+    List<DistrictListRow> listDistricts(@Param("q") String q, @Param("offset") int offset, @Param("limit") int limit);
+
+    int countDistricts(@Param("q") String q);
 
     District360Row findDistrict360(@Param("code") String code);
 

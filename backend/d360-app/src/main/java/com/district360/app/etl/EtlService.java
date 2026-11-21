@@ -1,12 +1,10 @@
 package com.district360.app.etl;
 
-import com.district360.common.district.DistrictDictionary;
 import com.district360.common.district.DistrictRef;
 import com.district360.common.extract.SourceSnapshot;
 import com.district360.common.extract.StatExtractor;
 import com.district360.stat.mapper.EtlLogMapper;
 import com.district360.stat.mapper.StatQueryMapper;
-import com.district360.stat.row.ScopeRow;
 import com.district360.stat.write.StatWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +17,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
 /**
  * 运行各源抽取：抽取 → 统一写入统计库 → 记日志。某个源失败不影响其他源，也不会清掉它已有的数据。
@@ -32,18 +29,16 @@ public class EtlService {
 
     private final Map<String, StatExtractor<?>> extractors = new LinkedHashMap<>();
     private final Map<String, ReentrantLock> locks = new ConcurrentHashMap<>();
-    private final DistrictDictionary dictionary;
     private final StatWriter writer;
     private final EtlLogMapper logMapper;
     private final StatQueryMapper query;
 
-    public EtlService(List<StatExtractor<?>> extractors, DistrictDictionary dictionary, StatWriter writer, EtlLogMapper logMapper,
+    public EtlService(List<StatExtractor<?>> extractors, StatWriter writer, EtlLogMapper logMapper,
                       StatQueryMapper query) {
         // makani 排第一：它产出统计范围（区面），宜居 / ADREC 依赖这个范围
         extractors.stream().filter(e -> MAKANI.equals(e.source())).forEach(e -> this.extractors.put(e.source(), e));
         extractors.stream().filter(e -> !MAKANI.equals(e.source())).forEach(e -> this.extractors.put(e.source(), e));
         this.query = query;
-        this.dictionary = dictionary;
         this.writer = writer;
         this.logMapper = logMapper;
         log.info("已启用的抽取器：{}", this.extractors.keySet());
@@ -97,18 +92,20 @@ public class EtlService {
     }
 
     /**
-     * makani 直接用自己库里的区面；其他源拿到的 DistrictRef 带上统计范围（makani 原始区面），
-     * 按范围做空间查询，不依赖各库自己的区 ID。
+     * makani 抽取器自己从 makani 产出区列表（传空列表）；其他源拿到 ADM 全部区及其统计范围（makani 原始区面），
+     * 按范围做空间查询，不依赖各库自己的区 ID / 区名。
      */
     private List<DistrictRef> districtsFor(String source) {
         if (MAKANI.equals(source)) {
-            return dictionary.all();
+            return List.of();
         }
-        Map<String, String> scopes = query.listScopes().stream().collect(Collectors.toMap(r -> r.code, r -> r.scopeHex));
-        if (scopes.isEmpty()) {
-            throw new IllegalStateException("统计库里还没有区范围，请先执行 makani 抽取");
+        List<DistrictRef> districts = query.listScopes().stream()
+                .map(r -> new DistrictRef(r.code, r.nameEn, r.makaniDistrictId, r.scopeHex))
+                .toList();
+        if (districts.isEmpty()) {
+            throw new IllegalStateException("统计库里还没有区，请先执行 makani 抽取");
         }
-        return dictionary.all().stream().map(d -> d.withScope(scopes.get(d.code()))).toList();
+        return districts;
     }
 
     private static String truncate(String s) {

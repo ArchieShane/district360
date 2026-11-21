@@ -1,4 +1,4 @@
-import type { ApiResponse, DistrictListItem, DistrictOverview, LineageInfo, MetaInfo } from './types'
+import type { ApiResponse, DistrictFeatureCollection, DistrictListItem, DistrictOverview, LineageInfo, MetaInfo, PageResult } from './types'
 
 const BASE = '/api/v1'
 
@@ -12,10 +12,18 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  districts: () => get<DistrictListItem[]>('/districts'),
+  districts: (page: number, size: number, q?: string) => {
+    const p = new URLSearchParams({ page: String(page), size: String(size) })
+    if (q) p.set('q', q)
+    return get<PageResult<DistrictListItem>>(`/districts?${p}`)
+  },
+  boundaries: async (): Promise<DistrictFeatureCollection> => {
+    const res = await fetch(`${BASE}/map/districts.geojson`)
+    if (!res.ok) throw new Error(`请求失败：${res.status}`)
+    return res.json()
+  },
   overview: (code: string) => get<DistrictOverview>(`/districts/${encodeURIComponent(code)}/overview`),
   meta: () => get<MetaInfo>('/meta'),
   lineage: () => get<LineageInfo>('/lineage'),
-  boundariesUrl: () => `${location.origin}${BASE}/map/districts.geojson`,
   buildingTilesUrl: () => `${location.origin}${BASE}/map/tiles/buildings/{z}/{x}/{y}.pbf`,
 }

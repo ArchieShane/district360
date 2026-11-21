@@ -6,7 +6,7 @@ import com.district360.app.web.dto.BlockStatus;
 import com.district360.app.web.dto.DistrictListItem;
 import com.district360.app.web.dto.DistrictOverview;
 import com.district360.app.web.dto.MetaInfo;
-import com.district360.common.district.DistrictDictionary;
+import com.district360.app.web.dto.PageResult;
 import com.district360.stat.mapper.StatQueryMapper;
 import com.district360.stat.row.District360Row;
 import com.district360.stat.row.DistrictListRow;
@@ -32,47 +32,48 @@ public class DistrictService {
     private static final String MUNICIPALITY = "ADM";
 
     private final StatQueryMapper query;
-    private final DistrictDictionary dictionary;
     private final LandUseProperties landUse;
     private final EtlService etl;
 
-    public DistrictService(StatQueryMapper query, DistrictDictionary dictionary, LandUseProperties landUse, EtlService etl) {
+    public DistrictService(StatQueryMapper query, LandUseProperties landUse, EtlService etl) {
         this.query = query;
-        this.dictionary = dictionary;
         this.landUse = landUse;
         this.etl = etl;
     }
 
-    public List<DistrictListItem> listDistricts() {
-        boolean livLoaded = rowCount("liveability") > 0;
-        return query.listDistricts().stream().map(r -> new DistrictListItem(
-                r.code, r.nameEn, r.nameAr, r.sortNo, r.mappingConfirmed, r.mappingNote,
-                r.makaniDistrictId, r.livDistrictId,
+    public PageResult<DistrictListItem> listDistricts(int page, int size, String q) {
+        int p = Math.max(0, page);
+        int n = Math.max(1, Math.min(size, 100));
+        String filter = q == null || q.isBlank() ? null : q.trim();
+        boolean livReal = livSourceReal();
+        int total = query.countDistricts(filter);
+        List<DistrictListItem> items = query.listDistricts(filter, p * n, n).stream().map(r -> new DistrictListItem(
+                r.code, r.nameEn, r.nameAr, r.sortNo, r.makaniDistrictId,
                 r.centroidLon == null ? null : new double[]{r.centroidLon, r.centroidLat},
                 r.minLon == null ? null : new double[]{r.minLon, r.minLat, r.maxLon, r.maxLat},
                 r.areaKm2,
                 r.scoreCurrent,
-                livStatus(r.livPresent, Boolean.TRUE.equals(r.livSample), livLoaded))).toList();
+                livStatus(r.livPresent, Boolean.TRUE.equals(r.livSample), livReal))).toList();
+        return new PageResult<>(items, p, n, total, (long) (p + 1) * n < total);
     }
 
     public DistrictOverview overview(String code) {
-        dictionary.require(code);
         District360Row r = query.findDistrict360(code);
         if (r == null) {
-            throw new NoSuchElementException("统计库里没有这个区: " + code);
+            throw new NoSuchElementException("没有这个区: " + code);
         }
         boolean makani = r.plots != null;
         boolean livPresent = r.scoreCurrent != null || r.livAsOf != null;
         boolean adrecPresent = r.adrecAsOf != null || r.transactions != null;
-        boolean livLoaded = rowCount("liveability") > 0;
+        boolean livReal = livSourceReal();
 
         String makaniStatus = makani ? BlockStatus.OK : BlockStatus.UNAVAILABLE;
-        String livStatus = livStatus(livPresent, Boolean.TRUE.equals(r.livSample), livLoaded);
+        String livStatus = livStatus(livPresent, Boolean.TRUE.equals(r.livSample), livReal);
         String adrecStatus = !adrecPresent ? BlockStatus.UNAVAILABLE
                 : Boolean.TRUE.equals(r.adrecSample) ? BlockStatus.SAMPLE : BlockStatus.OK;
 
-        var header = new DistrictOverview.Header(r.code, r.nameEn, r.nameAr, MUNICIPALITY, r.areaKm2, r.communities, r.plots,
-                r.mappingConfirmed, r.mappingNote);
+        var header = new DistrictOverview.Header(r.code, r.nameEn, r.nameAr, MUNICIPALITY, r.makaniDistrictId, r.areaKm2,
+                r.communities, r.plots);
 
         BigDecimal gap = (r.scoreTarget != null && r.scoreCurrent != null)
                 ? r.scoreTarget.subtract(r.scoreCurrent).max(BigDecimal.ZERO) : null;
@@ -112,20 +113,22 @@ public class DistrictService {
             sources.add(new MetaInfo.SourceInfo(s.source, etl.has(s.source), s.rowCount, s.sourceAsOf,
                     Boolean.TRUE.equals(s.sample), s.lastStatus, s.lastFinishedAt, s.lastMessage));
         }
-        return new MetaInfo(dictionary.all().size(), 4, sources);
+        return new MetaInfo(query.countDistricts(null), 4, sources);
     }
 
     // ------------------------------------------------------------------------------------------
 
-    private int rowCount(String source) {
-        return query.listSourceStatus().stream().filter(s -> source.equals(s.source)).mapToInt(s -> s.rowCount).sum();
+    /** 宜居是否已经接入真实数据（统计表里有数据且不是样例）。只有接入真实数据后，缺行才能判断为「未纳入评估」。 */
+    private boolean livSourceReal() {
+        return query.listSourceStatus().stream()
+                .anyMatch(s -> "liveability".equals(s.source) && s.rowCount > 0 && !Boolean.TRUE.equals(s.sample));
     }
 
-    private static String livStatus(boolean present, boolean sample, boolean sourceLoaded) {
+    private static String livStatus(boolean present, boolean sample, boolean sourceReal) {
         if (present) {
             return sample ? BlockStatus.SAMPLE : BlockStatus.OK;
         }
-        return sourceLoaded ? BlockStatus.NOT_ASSESSED : BlockStatus.UNAVAILABLE;
+        return sourceReal ? BlockStatus.NOT_ASSESSED : BlockStatus.UNAVAILABLE;
     }
 
     private List<DistrictOverview.LandUseShare> landUseShares(List<LandUseRow> rows) {

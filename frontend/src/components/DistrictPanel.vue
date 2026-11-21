@@ -47,7 +47,7 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
     <div class="pnh">
       <div class="pk"><span>{{ t('panel.kicker') }}</span></div>
       <div class="ptl">
-        <h2>{{ store.selected?.nameEn }}</h2>
+        <h2>{{ store.selected?.nameEn ?? o?.district.nameEn }}</h2>
         <button type="button" :aria-label="t('panel.close')" @click="store.deselect()">×</button>
       </div>
       <div v-if="o" class="pch">
@@ -55,8 +55,6 @@ function dateLabel(src: 'makani' | 'liveability' | 'adrec', asOf: string | null)
         <span v-if="o.district.communities != null" class="chip" data-m="communities"><b>{{ nf(o.district.communities) }}</b> {{ t('chips.communities') }}</span>
         <span v-if="o.district.plots != null" class="chip" data-m="plots"><b>{{ nf(o.district.plots) }}</b> {{ t('chips.plots') }}</span>
         <span class="chip" data-m="municipality">{{ t('chips.muni') }}</span>
-        <span v-if="!o.district.mappingConfirmed" class="chip smp" :title="o.district.mappingNote ?? ''">{{ t('chips.unconfirmed') }}</span>
-        <span v-if="!store.selected?.centroid" class="chip smp">{{ t('chips.noBoundary') }}</span>
       </div>
     </div>
 

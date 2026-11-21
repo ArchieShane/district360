@@ -5,7 +5,7 @@ import { useDistrictStore } from '../stores/district'
 
 const store = useDistrictStore()
 const { t } = useI18n()
-const first = computed(() => store.districts.find(d => d.code === 'reem') ?? store.districts[0])
+const first = computed(() => store.features.get('al-reem-island') ?? store.boundaries?.features[0]?.properties ?? null)
 </script>
 
 <template>
@@ -13,7 +13,7 @@ const first = computed(() => store.districts.find(d => d.code === 'reem') ?? sto
     <h3>{{ t('intro.title') }}</h3>
     <p>{{ t('intro.text') }}</p>
     <div class="k3">
-      <div><b>{{ store.meta?.districtCount ?? store.districts.length }}</b>{{ t('intro.districts') }}</div>
+      <div><b>{{ store.meta?.districtCount ?? store.features.size }}</b>{{ t('intro.districts') }}</div>
       <div><b>{{ store.meta?.blockCount ?? 4 }}</b>{{ t('intro.blocks') }}</div>
     </div>
     <button v-if="first" type="button" class="go" @click="store.select(first.code)">{{ t('intro.go', { name: first.nameEn }) }}</button>

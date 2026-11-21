@@ -50,7 +50,7 @@ d360:
         name-zh: 所属市政
         name-en: Municipality
         source: makani
-        stat-column: 固定值（区字典只收录 ADM 的区）
+        stat-column: 固定值（区列表只含 makani 中 ADM 的区）
         source-tables: ["{makani.district}"]
         logic-zh: 区面按 municipalityname = '{makani.municipality}' 过滤；districtid 在不同市政之间会重复，所以所有查询都带这个条件。
         logic-en: Districts are filtered by municipalityname = '{makani.municipality}'; districtid repeats across municipalities, so every query carries this filter.

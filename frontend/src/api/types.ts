@@ -13,15 +13,39 @@ export interface DistrictListItem {
   nameEn: string
   nameAr: string | null
   sortNo: number
-  mappingConfirmed: boolean
-  mappingNote: string | null
   makaniDistrictId: number | null
-  livDistrictId: number | null
   centroid: [number, number] | null
   bbox: [number, number, number, number] | null
   areaKm2: number | null
   liveabilityScore: number | null
   liveabilityStatus: BlockStatus
+}
+
+export interface PageResult<T> {
+  items: T[]
+  page: number
+  size: number
+  total: number
+  hasMore: boolean
+}
+
+/** 地图 GeoJSON 里每个区的属性（全部区一次性加载，供地图标签、悬停、选中区使用） */
+export interface DistrictFeatureProps {
+  code: string
+  nameEn: string
+  nameAr: string | null
+  sortNo: number
+  makaniDistrictId: number | null
+  areaKm2: number | null
+  liveabilityScore: number | null
+  livSample: boolean | null
+  centroid: [number, number]
+  bbox: [number, number, number, number]
+}
+
+export interface DistrictFeatureCollection {
+  type: 'FeatureCollection'
+  features: { type: 'Feature'; id: number; properties: DistrictFeatureProps; geometry: GeoJSON.Geometry }[]
 }
 
 export interface LandUseShare {
@@ -40,11 +64,10 @@ export interface DistrictOverview {
     nameEn: string
     nameAr: string | null
     municipality: string
+    makaniDistrictId: number | null
     areaKm2: number | null
     communities: number | null
     plots: number | null
-    mappingConfirmed: boolean
-    mappingNote: string | null
   }
   liveability: {
     status: BlockStatus

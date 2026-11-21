@@ -42,8 +42,8 @@ public class StatWriter {
 
     private void writeMakani(MakaniSnapshot s) {
         tx.executeWithoutResult(status -> {
-            mapper.clearMakaniGeometry();
-            s.districts().forEach(mapper::updateMakaniGeometry);
+            mapper.deleteAllDistricts();
+            s.districts().forEach(mapper::insertDistrict);
             mapper.deleteAllMakani();
             chunked(s.districts(), list -> mapper.insertMakani(list, s.sourceAsOf()));
             mapper.deleteAllLandUse();
