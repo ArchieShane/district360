@@ -30,7 +30,7 @@ d360:
       liveability:
         name-zh: 宜居评估
         name-en: Liveability
-        planned-db: "liveability_data_20260730（待宜居组接入）"
+        planned-db: "liveability_data_20260730"
       adrec:
         name-zh: ADREC
         name-en: ADREC
@@ -280,57 +280,57 @@ d360:
         name-en: Liveability · current
         source: liveability
         stat-column: stat_district_liveability.score_current
-        source-tables: ["dim_districts", "fact_district_scores"]
-        logic-zh: 按统计范围（makani 区面）在 dim_districts 里找重合面积最大的区，取该区 stage = Pipeline、calc_version_id = 496（已发布版本）的 overall_score。
-        logic-en: Find the Liveability district that overlaps the scope (makani polygon) most, then overall_score with stage = Pipeline, calc_version_id = 496.
+        source-tables: ["dim_calc_versions", "dim_districts", "fact_district_scores"]
+        logic-zh: 按统计范围（makani 区面）在 dim_districts 里找重合面积最大的区，取该区 stage = Pipeline、当前发布版本（dim_calc_versions.current_flag = true）的 overall_score。
+        logic-en: Find the Liveability district that overlaps the scope (makani polygon) most, then overall_score with stage = Pipeline, published calc version (dim_calc_versions.current_flag = true).
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
                      WHERE d.geom && s.g
                      ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT overall_score FROM fact_district_scores
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496 AND stage = 'Pipeline'
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag) AND stage = 'Pipeline'
 
       liv_existing:
         name-zh: 宜居得分 · 现状
         name-en: Liveability · existing
         source: liveability
         stat-column: stat_district_liveability.score_existing
-        source-tables: ["dim_districts", "fact_district_scores"]
-        logic-zh: 按统计范围匹配 Liveability 的区（同上），取 stage = Existing、calc_version_id = 496 的 overall_score。
-        logic-en: Match the Liveability district by scope (as above), then overall_score with stage = Existing, calc_version_id = 496.
+        source-tables: ["dim_calc_versions", "dim_districts", "fact_district_scores"]
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），取 stage = Existing、当前发布版本（dim_calc_versions.current_flag = true）的 overall_score。
+        logic-en: Match the Liveability district by scope (as above), then overall_score with stage = Existing, published calc version (dim_calc_versions.current_flag = true).
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
                      WHERE d.geom && s.g
                      ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT overall_score FROM fact_district_scores
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496 AND stage = 'Existing'
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag) AND stage = 'Existing'
 
       liv_target:
         name-zh: 宜居得分 · 目标
         name-en: Liveability · target
         source: liveability
         stat-column: stat_district_liveability.score_target
-        source-tables: ["dim_districts", "fact_district_scores"]
-        logic-zh: 按统计范围匹配 Liveability 的区（同上），取 stage = AP50、calc_version_id = 496 的 overall_score。
-        logic-en: Match the Liveability district by scope (as above), then overall_score with stage = AP50, calc_version_id = 496.
+        source-tables: ["dim_calc_versions", "dim_districts", "fact_district_scores"]
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），取 stage = AP50、当前发布版本（dim_calc_versions.current_flag = true）的 overall_score。
+        logic-en: Match the Liveability district by scope (as above), then overall_score with stage = AP50, published calc version (dim_calc_versions.current_flag = true).
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
                      WHERE d.geom && s.g
                      ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT overall_score FROM fact_district_scores
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496 AND stage = 'AP50'
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag) AND stage = 'AP50'
 
       liv_gap:
         name-zh: 宜居得分 · 差距
         name-en: Liveability · gap
         source: liveability
         stat-column: 接口计算：max(0, score_target − score_current)
-        source-tables: ["dim_districts", "fact_district_scores"]
-        logic-zh: 目标（AP50）− 目前（Pipeline），小于 0 记 0；区按统计范围匹配（同上）。
-        logic-en: Target (AP50) − current (Pipeline), floored at 0; district matched by scope (as above).
+        source-tables: ["dim_calc_versions", "dim_districts", "fact_district_scores"]
+        logic-zh: 目标（AP50）− 目前（Pipeline），小于 0 记 0；区按统计范围匹配（同上），取当前发布版本（dim_calc_versions.current_flag = true）。
+        logic-en: Target (AP50) − current (Pipeline), floored at 0; district matched by scope (as above), published calc version (dim_calc_versions.current_flag = true).
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
@@ -339,20 +339,21 @@ d360:
           SELECT greatest(0, max(overall_score) FILTER (WHERE stage = 'AP50')
                             - max(overall_score) FILTER (WHERE stage = 'Pipeline'))
           FROM fact_district_scores
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag)
 
       parks:
         name-zh: 公园数
         name-en: Parks
         source: liveability
         stat-column: stat_district_liveability.parks
-        source-tables: ["dim_facilities"]
-        logic-zh: 公园类设施点位（Park_Local / Park_Neighbourhoud / Park_District / Park_Other，stage = Existing）落在统计范围（makani 区面）内即计入。
-        logic-en: Park facility points (Park_Local / Park_Neighbourhoud / Park_District / Park_Other, stage = Existing) inside the scope (makani polygon).
+        source-tables: ["fact_facilities"]
+        logic-zh: 公园类设施（Park_Local / Park_Neighbourhoud / Park_District / Park_Other）只计 stage = Existing（Pipeline / AP50 / Ultimate 是规划增量，不计）。几何有点有面，统一取 ST_PointOnSurface（点取自身、面取面内一点）落在统计范围（makani 区面）内即计入，跨区的公园只计一次。与公园面积 existing_sqm 同一批公园。
+        logic-en: Park facilities (Park_Local / Park_Neighbourhoud / Park_District / Park_Other) with stage = Existing only (Pipeline / AP50 / Ultimate are planned additions). Geometries are points or polygons; counted when ST_PointOnSurface(geom) falls inside the scope (makani polygon), so a park straddling a boundary is counted once. Same parks as existing_sqm in park area.
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g)  -- 统计范围 = makani 区面
-          SELECT count(*) FROM dim_facilities f, s
-          WHERE f.geom && s.g AND ST_Intersects(s.g, f.geom)
+          SELECT count(*) FROM fact_facilities f, s
+          WHERE f.geom && s.g
+            AND ST_Intersects(s.g, ST_PointOnSurface(f.geom))  -- 点取自身，面取面内一点
             AND f.stage = 'Existing'
             AND f.facility_type IN ('Park_Local', 'Park_Neighbourhoud', 'Park_District', 'Park_Other')
 
@@ -361,32 +362,32 @@ d360:
         name-en: Park area
         source: liveability
         stat-column: stat_district_liveability.park_area_ha
-        source-tables: ["dim_districts", "fact_parks_demand"]
-        logic-zh: 按统计范围匹配 Liveability 的区（同上），existing_sqm ÷ 10,000 换算成公顷（calc_version_id = 496）。
-        logic-en: District matched by scope (as above); existing_sqm ÷ 10,000 → hectares (calc_version_id = 496).
+        source-tables: ["dim_calc_versions", "dim_districts", "fact_parks_demand"]
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），existing_sqm ÷ 10,000 换算成公顷（当前发布版本，dim_calc_versions.current_flag = true）。
+        logic-en: District matched by scope (as above); existing_sqm ÷ 10,000 → hectares (published calc version, dim_calc_versions.current_flag = true).
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
                      WHERE d.geom && s.g
                      ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT existing_sqm / 10000.0 FROM fact_parks_demand
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag)
 
       park_gap_ha:
         name-zh: 公园缺口
         name-en: Park gap
         source: liveability
         stat-column: stat_district_liveability.park_gap_ha
-        source-tables: ["dim_districts", "fact_parks_demand"]
-        logic-zh: 按统计范围匹配 Liveability 的区（同上），(area_required_sqm − existing_sqm) ÷ 10,000，小于 0 记 0（calc_version_id = 496）。
-        logic-en: District matched by scope (as above); (area_required_sqm − existing_sqm) ÷ 10,000, floored at 0 (calc_version_id = 496).
+        source-tables: ["dim_calc_versions", "dim_districts", "fact_parks_demand"]
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），(area_required_sqm − existing_sqm) ÷ 10,000，小于 0 记 0（当前发布版本，dim_calc_versions.current_flag = true）。
+        logic-en: District matched by scope (as above); (area_required_sqm − existing_sqm) ÷ 10,000, floored at 0 (published calc version, dim_calc_versions.current_flag = true).
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
                      WHERE d.geom && s.g
                      ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT greatest(area_required_sqm - existing_sqm, 0) / 10000.0 FROM fact_parks_demand
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = 496
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag)
 
       re_sales:
         name-zh: 成交额（近 12 个月）

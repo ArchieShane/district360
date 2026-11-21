@@ -4,22 +4,24 @@ import com.district360.common.district.DistrictRef;
 import com.district360.common.extract.StatExtractor;
 import com.district360.common.extract.snapshot.LiveabilitySnapshot;
 import com.district360.liveability.mapper.LiveabilityMapper;
+import com.district360.liveability.row.LivDistrictRow;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Liveability 抽取。
+ * Liveability 抽取：每个区用 {@link DistrictRef#scopeEwkbHex()}（统计范围 = makani 原始区面）在源库做空间查询，
+ * <b>不用区 ID</b>，保证与 makani、ADREC 口径一致。范围内没有宜居区或没有得分的区跳过 → 页面显示「未纳入评估」。
+ * 计算版本取当前发布版本（dim_calc_versions.current_flag = true），没有发布版本时抽取失败、统计库保持原样。
  * <p>
- * TODO(宜居同事)：
- * <ol>
- *   <li>用 {@link DistrictRef#scopeEwkbHex()}（统计范围 = makani 原始区面）在源库做空间查询，<b>不用区 ID</b>，
- *       保证与 makani、ADREC 口径一致；范围内没有宜居数据的区跳过 → 页面显示「未纳入评估」；</li>
- *   <li>组装成 {@link LiveabilitySnapshot.District}（code 用 {@link DistrictRef#code()}）；</li>
- *   <li>返回快照即可，写统计库、日志、定时都由框架处理。</li>
- * </ol>
- * 本地验证：配置 d360.datasource.liveability.*，然后 POST /api/v1/admin/etl/liveability。
+ * 不捕获异常：抛出即记为失败，统计库保持原样。写统计库、日志、定时都由框架处理。
+ * 本地验证：POST /api/v1/admin/etl/liveability。
  */
 public class LiveabilityExtractor implements StatExtractor<LiveabilitySnapshot> {
+
+    private static final Logger log = LoggerFactory.getLogger(LiveabilityExtractor.class);
 
     private final LiveabilityMapper mapper;
 
@@ -34,6 +36,25 @@ public class LiveabilityExtractor implements StatExtractor<LiveabilitySnapshot> 
 
     @Override
     public LiveabilitySnapshot extract(List<DistrictRef> districts) {
-        throw new UnsupportedOperationException("LiveabilityExtractor 尚未实现（宜居同事负责）");
+        // 当前发布版本只取一次，整批区都用它，避免抽取过程中有人重新发布导致前后版本不一
+        Long version = mapper.publishedVersion();
+        if (version == null) {
+            throw new IllegalStateException("Liveability 没有已发布的计算版本（dim_calc_versions.current_flag = true），本次不抽取");
+        }
+        log.info("Liveability 使用当前发布版本 calc_version_id = {}", version);
+        List<LiveabilitySnapshot.District> out = new ArrayList<>();
+        for (DistrictRef d : districts) {
+            if (d.scopeEwkbHex() == null) {
+                continue;
+            }
+            LivDistrictRow r = mapper.districtStats(d.scopeEwkbHex(), version);
+            // 范围内找不到宜居区、或没有「目前」得分 → 不放进列表，页面显示「未纳入评估」
+            if (r == null || r.livDistrictId == null || r.scoreCurrent == null) {
+                continue;
+            }
+            out.add(new LiveabilitySnapshot.District(
+                    d.code(), r.scoreExisting, r.scoreCurrent, r.scoreTarget, r.parks, r.parkAreaHa, r.parkGapHa));
+        }
+        return new LiveabilitySnapshot(mapper.dataDate(version), out);
     }
 }

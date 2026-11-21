@@ -1,35 +1,52 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <!--
-  TODO(宜居同事)：补全 SQL。口径要求：按统计范围（makani 区面）做空间查询，不用区 ID。
+  Liveability 取数。口径：按统计范围（makani 区面，EPSG:4326）做空间查询，不用区 ID。
 
-  可直接复用的两个片段：
-  1) 区级表（fact_district_scores、fact_parks_demand）：用范围找 dim_districts 里重合面积最大的区
-       <include refid="livDistrictByScope"/>  → 得到 district_id
-  2) 点位表（dim_facilities）：点落在范围内
-       ST_Intersects(ST_GeomFromEWKB(decode(#{scope}, 'hex')), f.geom)
-
-  指标：
-  - 得分：fact_district_scores.overall_score，calc_version_id = 496，stage ∈ {Existing, Pipeline, AP50}
-  - 公园面积 / 缺口：fact_parks_demand.existing_sqm、area_required_sqm（calc_version_id = 496），换算成 ha，缺口小于 0 记 0
-  - 公园数：dim_facilities（facility_type ∈ Park_*，stage = Existing），点位落在范围内
-  - 新原型不显示人口，不要抽 fact_population
+  - 计算版本 #{version}：每次抽取开始时取一次当前发布版本（dim_calc_versions.current_flag = true，见 publishedVersion），
+    整批 216 个区都用同一个版本，不写死版本号；
+  - 区级表（fact_district_scores、fact_parks_demand）：用范围在 dim_districts 里找重合面积最大的宜居区，再取该区指标；
+  - 公园数（fact_facilities）：公园类设施 stage = Existing，几何有点有面，统一用 ST_PointOnSurface(geom)
+    （点取自身，面取面内一点）落在范围内即计入，跨区的面只计一次；
+    已核对（2026-11-21，当时发布版本为 496）：fact_parks_demand.existing_sqm 正是这些 Existing 公园面的面积合计，
+    PointOnSurface 落区结果与 fact_facilities.liv_district_id 完全一致。
+  改这里的 SQL 时，同步更新 d360-app 的 metric-lineage.yml（liv_*、park*）。
 -->
 <mapper namespace="com.district360.liveability.mapper.LiveabilityMapper">
 
-    <sql id="livDistrictByScope">
-        (SELECT d.district_id
-         FROM dim_districts d
-         WHERE d.geom &amp;&amp; ST_GeomFromEWKB(decode(#{scope}, 'hex'))
-         ORDER BY ST_Area(ST_Intersection(d.geom, ST_GeomFromEWKB(decode(#{scope}, 'hex')))) DESC
-         LIMIT 1)
-    </sql>
+    <select id="publishedVersion" resultType="java.lang.Long">
+        SELECT calc_version_id FROM dim_calc_versions WHERE current_flag
+    </select>
 
-    <select id="districtStats" resultType="map">
-        SELECT <include refid="livDistrictByScope"/> AS district_id
+    <select id="districtStats" resultType="com.district360.liveability.row.LivDistrictRow">
+        WITH s AS (SELECT ST_GeomFromEWKB(decode(#{scope}, 'hex')) AS g),
+             l AS (SELECT d.district_id
+                   FROM dim_districts d, s
+                   WHERE d.geom &amp;&amp; s.g
+                   ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC
+                   LIMIT 1),
+             sc AS (SELECT stage, overall_score
+                    FROM fact_district_scores
+                    WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = #{version}),
+             pd AS (SELECT existing_sqm, area_required_sqm
+                    FROM fact_parks_demand
+                    WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = #{version}
+                    LIMIT 1)
+        SELECT (SELECT district_id FROM l)                                    AS liv_district_id,
+               (SELECT overall_score FROM sc WHERE stage = 'Existing')        AS score_existing,
+               (SELECT overall_score FROM sc WHERE stage = 'Pipeline')        AS score_current,
+               (SELECT overall_score FROM sc WHERE stage = 'AP50')            AS score_target,
+               (SELECT count(*)
+                FROM fact_facilities f, s
+                WHERE f.geom &amp;&amp; s.g
+                  AND ST_Intersects(s.g, ST_PointOnSurface(f.geom))
+                  AND f.stage = 'Existing'
+                  AND f.facility_type IN ('Park_Local', 'Park_Neighbourhoud', 'Park_District', 'Park_Other')) AS parks,
+               (SELECT existing_sqm / 10000.0 FROM pd)                        AS park_area_ha,
+               (SELECT greatest(area_required_sqm - existing_sqm, 0) / 10000.0 FROM pd) AS park_gap_ha
     </select>
 
     <select id="dataDate" resultType="java.time.LocalDate">
-        SELECT NULL::date
+        SELECT max(updated_at)::date FROM fact_district_scores WHERE calc_version_id = #{version}
     </select>
 </mapper>
