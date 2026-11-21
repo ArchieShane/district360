@@ -5,6 +5,8 @@
 
   - 计算版本 #{version}：每次抽取开始时取一次当前发布版本（dim_calc_versions.current_flag = true，见 publishedVersion），
     整批 216 个区都用同一个版本，不写死版本号；
+  - 评估范围：宜居库配置表 param_district_scope.in_scope（没有配置行按 false，与宜居库视图 vw_district_scope 一致）；
+    不在评估范围的区照常写入（公园指标照常展示），页面不展示其得分；
   - 区级表（fact_district_scores、fact_parks_demand）：用范围在 dim_districts 里找重合面积最大的宜居区，再取该区指标；
   - 公园数（fact_facilities）：公园类设施 stage = Existing，几何有点有面，统一用 ST_PointOnSurface(geom)
     （点取自身，面取面内一点）落在范围内即计入，跨区的面只计一次；
@@ -33,6 +35,8 @@
                     WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = #{version}
                     LIMIT 1)
         SELECT (SELECT district_id FROM l)                                    AS liv_district_id,
+               coalesce((SELECT p.in_scope FROM param_district_scope p
+                         WHERE p.district_id = (SELECT district_id FROM l)), false) AS in_scope,
                (SELECT overall_score FROM sc WHERE stage = 'Existing')        AS score_existing,
                (SELECT overall_score FROM sc WHERE stage = 'Pipeline')        AS score_current,
                (SELECT overall_score FROM sc WHERE stage = 'AP50')            AS score_target,

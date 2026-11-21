@@ -45,15 +45,14 @@ public class DistrictService {
         int p = Math.max(0, page);
         int n = Math.max(1, Math.min(size, 100));
         String filter = q == null || q.isBlank() ? null : q.trim();
-        boolean livReal = livSourceReal();
         int total = query.countDistricts(filter);
         List<DistrictListItem> items = query.listDistricts(filter, p * n, n).stream().map(r -> new DistrictListItem(
                 r.code, r.nameEn, r.nameAr, r.sortNo, r.municipality, r.makaniDistrictId,
                 r.centroidLon == null ? null : new double[]{r.centroidLon, r.centroidLat},
                 r.minLon == null ? null : new double[]{r.minLon, r.minLat, r.maxLon, r.maxLat},
                 r.areaKm2,
-                r.scoreCurrent,
-                livStatus(r.livPresent, Boolean.TRUE.equals(r.livSample), livReal))).toList();
+                outOfScope(r.livInScope) ? null : r.scoreCurrent,
+                scoreStatus(livStatus(r.livPresent, Boolean.TRUE.equals(r.livSample)), r.livInScope))).toList();
         return new PageResult<>(items, p, n, total, (long) (p + 1) * n < total);
     }
 
@@ -65,19 +64,24 @@ public class DistrictService {
         boolean makani = r.plots != null;
         boolean livPresent = r.scoreCurrent != null || r.livAsOf != null;
         boolean adrecPresent = r.adrecAsOf != null || r.transactions != null;
-        boolean livReal = livSourceReal();
 
         String makaniStatus = makani ? BlockStatus.OK : BlockStatus.UNAVAILABLE;
-        String livStatus = livStatus(livPresent, Boolean.TRUE.equals(r.livSample), livReal);
+        String livStatus = livStatus(livPresent, Boolean.TRUE.equals(r.livSample));
         String adrecStatus = !adrecPresent ? BlockStatus.UNAVAILABLE
                 : Boolean.TRUE.equals(r.adrecSample) ? BlockStatus.SAMPLE : BlockStatus.OK;
 
         var header = new DistrictOverview.Header(r.code, r.nameEn, r.nameAr, r.municipality, r.makaniDistrictId, r.areaKm2,
                 r.communities, r.plots);
 
-        BigDecimal gap = (r.scoreTarget != null && r.scoreCurrent != null)
-                ? r.scoreTarget.subtract(r.scoreCurrent).max(BigDecimal.ZERO) : null;
-        var liveability = new DistrictOverview.Liveability(livStatus, r.livAsOf, r.scoreExisting, r.scoreCurrent, r.scoreTarget, gap);
+        // 不在宜居评估范围：得分区块标 not_assessed 且不返回得分（源库里这些区的得分多为 0，不能展示）；公园照常
+        DistrictOverview.Liveability liveability;
+        if (outOfScope(r.livInScope)) {
+            liveability = new DistrictOverview.Liveability(scoreStatus(livStatus, r.livInScope), r.livAsOf, null, null, null, null);
+        } else {
+            BigDecimal gap = (r.scoreTarget != null && r.scoreCurrent != null)
+                    ? r.scoreTarget.subtract(r.scoreCurrent).max(BigDecimal.ZERO) : null;
+            liveability = new DistrictOverview.Liveability(livStatus, r.livAsOf, r.scoreExisting, r.scoreCurrent, r.scoreTarget, gap);
+        }
 
         var land = new DistrictOverview.Land(makaniStatus, r.makaniAsOf, r.plots, r.buildings, r.buildingsUnderConstruction,
                 pct(r.plotsConstructed, r.plots),
@@ -136,17 +140,25 @@ public class DistrictService {
 
     // ------------------------------------------------------------------------------------------
 
-    /** 宜居是否已经接入真实数据（统计表里有数据且不是样例）。只有接入真实数据后，缺行才能判断为「未纳入评估」。 */
-    private boolean livSourceReal() {
-        return query.listSourceStatus().stream()
-                .anyMatch(s -> "liveability".equals(s.source) && s.rowCount > 0 && !Boolean.TRUE.equals(s.sample));
+    /** 宜居库明确标为不在评估范围（param_district_scope.in_scope = false）。NULL 视为在范围内（旧数据、样例数据）。 */
+    private static boolean outOfScope(Boolean inScope) {
+        return Boolean.FALSE.equals(inScope);
     }
 
-    private static String livStatus(boolean present, boolean sample, boolean sourceReal) {
-        if (present) {
-            return sample ? BlockStatus.SAMPLE : BlockStatus.OK;
+    /** 宜居得分的区块状态：有数据但不在评估范围时为 not_assessed（只影响得分，公园区块仍用 livStatus）。 */
+    private static String scoreStatus(String livStatus, Boolean inScope) {
+        return outOfScope(inScope) ? BlockStatus.NOT_ASSESSED : livStatus;
+    }
+
+    /**
+     * 宜居数据本身的状态（公园区块直接用它；得分区块再经 {@link #scoreStatus} 叠加评估范围）。
+     * 没有行 = 范围内找不到宜居区或还没抽取 → 「没有查询到数据」；「不在评估范围」只由 in_scope = false 判定。
+     */
+    private static String livStatus(boolean present, boolean sample) {
+        if (!present) {
+            return BlockStatus.UNAVAILABLE;
         }
-        return sourceReal ? BlockStatus.NOT_ASSESSED : BlockStatus.UNAVAILABLE;
+        return sample ? BlockStatus.SAMPLE : BlockStatus.OK;
     }
 
     private List<DistrictOverview.LandUseShare> landUseShares(List<LandUseRow> rows) {

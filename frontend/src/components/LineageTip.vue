@@ -25,7 +25,9 @@ const district = computed(() => {
 })
 const source = computed(() => (metric.value ? store.lineage?.sources[metric.value.source] ?? null : null))
 
-/** 当前值的状态：实测 / 未纳入评估 / 没有查询到数据 */
+const PARK_KEYS = new Set(['parks', 'park_area_ha', 'park_gap_ha'])
+
+/** 当前值的状态：实测 / 不在宜居评估范围 / 没有查询到数据 */
 const state = computed<BlockStatus | 'planned'>(() => {
   const m = metric.value
   if (!m) return 'unavailable'
@@ -35,7 +37,8 @@ const state = computed<BlockStatus | 'planned'>(() => {
     liveability: o?.liveability.status,
     adrec: o?.realEstate.status,
   }
-  const s = block[m.source]
+  // 公园指标虽然来自宜居库，但不受「是否在宜居评估范围」影响，按公园区块自己的状态
+  const s = PARK_KEYS.has(active.value!.key) ? o?.facilities.parks.status : block[m.source]
   if (s) return s
   return source.value?.implemented ? 'ok' : 'unavailable'
 })

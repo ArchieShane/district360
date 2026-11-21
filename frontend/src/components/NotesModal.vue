@@ -54,11 +54,11 @@ const zh = () => locale.value === 'zh'
       <h4>{{ zh() ? '标记说明' : 'Markers' }}</h4>
       <ul v-if="zh()">
         <li><b>没有查询到数据</b>：该数据源还没接入（或该区在源库里没有数据），页面不显示数值。</li>
-        <li><b>未纳入评估</b>：宜居评估不覆盖该区，不做估算。</li>
+        <li><b>不在宜居评估范围</b>：宜居库配置该区不在评估范围（param_district_scope.in_scope = false），不展示宜居得分；公园指标照常展示。</li>
       </ul>
       <ul v-else>
         <li><b>No data found</b>: the source is not connected yet (or has no data for this district); no value is shown.</li>
-        <li><b>Not assessed</b>: the district is outside the Liveability assessment; no estimate is made.</li>
+        <li><b>Outside the Liveability assessment</b>: the Liveability configuration marks the district as out of scope (param_district_scope.in_scope = false); no score is shown, park figures still are.</li>
       </ul>
 
       <h4>{{ zh() ? '留到下一阶段' : 'Next phase' }}</h4>

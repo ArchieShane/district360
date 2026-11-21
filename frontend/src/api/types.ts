@@ -41,6 +41,8 @@ export interface DistrictFeatureProps {
   areaKm2: number | null
   liveabilityScore: number | null
   livSample: boolean | null
+  /** 是否在宜居评估范围；false 时 liveabilityScore 为 null，不展示得分 */
+  livInScope: boolean | null
   centroid: [number, number]
   bbox: [number, number, number, number]
 }

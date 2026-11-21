@@ -72,11 +72,11 @@
     <delete id="deleteAllLiveability">DELETE FROM stat.stat_district_liveability</delete>
 
     <insert id="insertLiveability">
-        INSERT INTO stat.stat_district_liveability (district_code, score_existing, score_current, score_target, parks, park_area_ha, park_gap_ha,
+        INSERT INTO stat.stat_district_liveability (district_code, in_scope, score_existing, score_current, score_target, parks, park_area_ha, park_gap_ha,
             is_sample, source_as_of, extracted_at)
         VALUES
         <foreach collection="list" item="d" separator=",">
-            (#{d.code}, #{d.scoreExisting}, #{d.scoreCurrent}, #{d.scoreTarget}, #{d.parks}, #{d.parkAreaHa}, #{d.parkGapHa}, false, #{asOf}, now())
+            (#{d.code}, #{d.inScope}, #{d.scoreExisting}, #{d.scoreCurrent}, #{d.scoreTarget}, #{d.parks}, #{d.parkAreaHa}, #{d.parkGapHa}, false, #{asOf}, now())
         </foreach>
     </insert>
 
