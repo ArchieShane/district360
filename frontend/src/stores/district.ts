@@ -1,10 +1,20 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api } from '../api/client'
-import type { DistrictFeatureCollection, DistrictFeatureProps, DistrictListItem, DistrictOverview, FacilityCategory, FacilityItem, LineageInfo, MetaInfo } from '../api/types'
+import type { DistrictFeatureCollection, DistrictFeatureProps, DistrictListItem, DistrictOverview, FacilityCategory, FacilityItem, LineageInfo, MapFeatureDetail, MetaInfo } from '../api/types'
 import { i18n, type Lang } from '../i18n'
 
 const PAGE_SIZE = 30
+
+/** 地图上点开的地块 / 建筑详情；data 为 null 表示还在加载 */
+export interface FeatureDetailState {
+  kind: 'plot' | 'building'
+  id: number
+  /** 卡片锚点：点击位置 */
+  lngLat: [number, number]
+  data: MapFeatureDetail | null
+  error: string | null
+}
 
 /**
  * 页面状态。
@@ -26,6 +36,9 @@ export const useDistrictStore = defineStore('district', () => {
   const facilityLoading = ref(false)
   const focusedPoiId = ref<string | null>(null)
   const hoveredPoiId = ref<string | null>(null)
+  /** 地图上点开的地块 / 建筑详情（与 focusedPoiId 互斥：同一时间只开一张详情卡片） */
+  const featureDetail = ref<FeatureDetailState | null>(null)
+  let detailToken = 0
   const overviews = ref<Record<string, DistrictOverview>>({})
   const loadingOverview = ref(false)
   const error = ref<string | null>(null)
@@ -131,12 +144,47 @@ export const useDistrictStore = defineStore('district', () => {
   }
 
   function focusPoi(id: string | null) {
+    if (id) closeFeature()
     focusedPoiId.value = id
+  }
+
+  /** 点击地图上的地块 / 建筑：打开详情卡片并加载详情 */
+  async function openFeature(kind: 'plot' | 'building', id: number, lngLat: [number, number]) {
+    focusedPoiId.value = null
+    const token = ++detailToken
+    featureDetail.value = { kind, id, lngLat, data: null, error: null }
+    try {
+      const data = await api.mapFeature(kind, id)
+      if (token === detailToken) featureDetail.value = { kind, id, lngLat, data, error: null }
+    } catch (e) {
+      if (token === detailToken) featureDetail.value = { kind, id, lngLat, data: null, error: (e as Error).message }
+    }
+  }
+
+  function closeFeature() {
+    detailToken++
+    featureDetail.value = null
+  }
+
+  /** 关闭当前打开的详情卡片（地块 / 建筑 / 设施）；没有打开的返回 false */
+  function closeDetail(): boolean {
+    if (featureDetail.value) {
+      closeFeature()
+      return true
+    }
+    if (focusedPoiId.value) {
+      focusedPoiId.value = null
+      return true
+    }
+    return false
   }
 
   async function select(code: string) {
     if (!features.value.has(code)) return
-    if (code !== selectedCode.value) clearFacilities()
+    if (code !== selectedCode.value) {
+      clearFacilities()
+      closeFeature()
+    }
     selectedCode.value = code
     writeHash()
     if (!overviews.value[code]) {
@@ -155,6 +203,7 @@ export const useDistrictStore = defineStore('district', () => {
     selectedCode.value = null
     highlightPlotStatus.value = null
     clearFacilities()
+    closeFeature()
     writeHash()
     homeTick.value++
   }
@@ -189,8 +238,8 @@ export const useDistrictStore = defineStore('district', () => {
   }
 
   return {
-    boundaries, features, meta, lineage, selectedCode, hoveredCode, highlightPlotStatus, facilityCategory, facilityList, facilityLoading, focusedPoiId, hoveredPoiId, overviews, loadingOverview, error, lang, notesOpen, homeTick,
+    boundaries, features, meta, lineage, selectedCode, hoveredCode, highlightPlotStatus, facilityCategory, facilityList, facilityLoading, focusedPoiId, hoveredPoiId, featureDetail, overviews, loadingOverview, error, lang, notesOpen, homeTick,
     list, listTotal, listHasMore, listLoading, listQuery,
-    selected, overview, dataVersion, toggleFacilities, focusPoi, clearFacilities, load, resetList, loadMore, select, deselect, goHome, setLang, readHash,
+    selected, overview, dataVersion, toggleFacilities, focusPoi, openFeature, closeFeature, closeDetail, clearFacilities, load, resetList, loadMore, select, deselect, goHome, setLang, readHash,
   }
 })

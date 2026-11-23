@@ -9,4 +9,6 @@ public class PoiRow {
     public String subtype;
     public double lon;
     public double lat;
+    /** 详情字段 JSON 文本 */
+    public String attrs;
 }

@@ -37,35 +37,36 @@
     <delete id="deleteAllBuildings">DELETE FROM stat.map_building</delete>
 
     <insert id="insertBuildings">
-        INSERT INTO stat.map_building (district_code, building_id, height, under_construction, geom)
-        SELECT v.code, v.building_id, v.height, v.uc,
+        INSERT INTO stat.map_building (district_code, building_id, height, under_construction, attrs, geom)
+        SELECT v.code, v.building_id, v.height, v.uc, coalesce(v.attrs::jsonb, '{}'::jsonb),
                ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform(ST_GeomFromEWKB(decode(v.hex, 'hex')), 3857)), 3))
         FROM (VALUES
         <foreach collection="list" item="b" separator=",">
-            (#{b.code}, #{b.buildingId}, #{b.height}::numeric, #{b.underConstruction}::boolean, #{b.ewkbHex})
+            (#{b.code}, #{b.buildingId}, #{b.height}::numeric, #{b.underConstruction}::boolean, #{b.attrs}, #{b.ewkbHex})
         </foreach>
-        ) AS v(code, building_id, height, uc, hex)
+        ) AS v(code, building_id, height, uc, attrs, hex)
     </insert>
 
     <delete id="deleteAllPlots">DELETE FROM stat.map_plot</delete>
 
     <insert id="insertPlots">
-        INSERT INTO stat.map_plot (district_code, plot_id, status, use_desc, geom)
-        SELECT v.code, v.plot_id, v.status, v.use_desc,
+        INSERT INTO stat.map_plot (district_code, plot_id, status, use_desc, attrs, geom)
+        SELECT v.code, v.plot_id, v.status, v.use_desc, coalesce(v.attrs::jsonb, '{}'::jsonb),
                ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform(ST_GeomFromEWKB(decode(v.hex, 'hex')), 3857)), 3))
         FROM (VALUES
         <foreach collection="list" item="p" separator=",">
-            (#{p.code}, #{p.plotId}, #{p.status}, #{p.useDesc}, #{p.ewkbHex})
+            (#{p.code}, #{p.plotId}, #{p.status}, #{p.useDesc}, #{p.attrs}, #{p.ewkbHex})
         </foreach>
-        ) AS v(code, plot_id, status, use_desc, hex)
+        ) AS v(code, plot_id, status, use_desc, attrs, hex)
     </insert>
 
     <delete id="deleteAllPois">DELETE FROM stat.map_poi</delete>
 
     <insert id="insertPois">
-        INSERT INTO stat.map_poi (district_code, category, source_id, name_en, name_ar, subtype, lon, lat) VALUES
+        INSERT INTO stat.map_poi (district_code, category, source_id, name_en, name_ar, subtype, lon, lat, attrs) VALUES
         <foreach collection="list" item="p" separator=",">
-            (#{p.code}, #{p.category}, #{p.sourceId}, #{p.nameEn}, #{p.nameAr}, #{p.subtype}, #{p.lon}, #{p.lat})
+            (#{p.code}, #{p.category}, #{p.sourceId}, #{p.nameEn}, #{p.nameAr}, #{p.subtype}, #{p.lon}, #{p.lat},
+             coalesce(#{p.attrs}::jsonb, '{}'::jsonb))
         </foreach>
     </insert>
 

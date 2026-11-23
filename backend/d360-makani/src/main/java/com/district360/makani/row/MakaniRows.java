@@ -57,6 +57,8 @@ public final class MakaniRows {
         public String plotId;
         public String status;
         public String useDesc;
+        /** 详情字段 JSON 文本 */
+        public String attrs;
         public String geomHex;
     }
 
@@ -69,6 +71,8 @@ public final class MakaniRows {
         public String subtype;
         public double lon;
         public double lat;
+        /** 详情字段 JSON 文本 */
+        public String attrs;
     }
 
     public static class Building {
@@ -76,6 +80,8 @@ public final class MakaniRows {
         public String buildingId;
         public BigDecimal height;
         public boolean underConstruction;
+        /** 详情字段 JSON 文本 */
+        public String attrs;
         public String geomHex;
     }
 }

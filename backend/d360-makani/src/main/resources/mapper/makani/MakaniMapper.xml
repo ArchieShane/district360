@@ -7,6 +7,9 @@
         WITH d AS (SELECT objectid, shape FROM ${t.district} WHERE shape IS NOT NULL)
     </sql>
 
+    <!-- 详情字段（attrs）：空串、N/A、undefined 一律视为无值；jsonb_strip_nulls 去掉无值的键 -->
+    <sql id="txt">CASE WHEN lower(trim(${c})) IN ('', 'n/a', 'na', 'undefined', 'null', '-') THEN NULL ELSE trim(${c}) END</sql>
+
     <!-- 中心点落在区面内；用 ST_Centroid 而不是 ST_PointOnSurface，避免源数据里的无效多边形报错 -->
     <sql id="inDistrict">x.shape &amp;&amp; d.shape AND ST_Intersects(d.shape, ST_Centroid(x.shape))</sql>
 
@@ -96,6 +99,18 @@
                x.buildingid AS building_id,
                round(coalesce(nullif(x.buildingheight, 0), x.buildingnumberoffloors * 3.5, 6)::numeric, 1) AS height,
                (x.physicalstatus IN ('underConstruction', 'Under Construction')) AS under_construction,
+               jsonb_strip_nulls(jsonb_build_object(
+                   'name', <include refid="txt"><property name="c" value="x.nameenglish"/></include>,
+                   'nameAr', <include refid="txt"><property name="c" value="x.namearabic"/></include>,
+                   'popularName', <include refid="txt"><property name="c" value="x.namepopularenglish"/></include>,
+                   'floors', nullif(x.buildingnumberoffloors, 0),
+                   'physicalStatus', <include refid="txt"><property name="c" value="x.physicalstatus"/></include>,
+                   'usageType', <include refid="txt"><property name="c" value="x.primaryusagetype"/></include>,
+                   'primaryUse', <include refid="txt"><property name="c" value="x.primaryuseengdesc"/></include>,
+                   'secondaryUsage', <include refid="txt"><property name="c" value="x.secondaryusagetype"/></include>,
+                   'community', <include refid="txt"><property name="c" value="x.communitynameeng"/></include>,
+                   'completionDate', x.completiondate::date
+               ))::text AS attrs,
                encode(ST_AsEWKB(ST_Force2D(x.shape)), 'hex') AS geom_hex
         FROM d JOIN ${t.building} x ON <include refid="inDistrict"/>
         WHERE x.shape IS NOT NULL
@@ -115,6 +130,26 @@
                    ELSE 'other'
                END AS status,
                coalesce(nullif(trim(x.primaryuseengdesc), ''), 'Undefined') AS use_desc,
+               jsonb_strip_nulls(jsonb_build_object(
+                   'plotNo', <include refid="txt"><property name="c" value="x.sectornumber_plotid"/></include>,
+                   'community', <include refid="txt"><property name="c" value="x.communityeng"/></include>,
+                   'areaM2', round(nullif(x.plotcalculatedarea, 0)),
+                   'constructionStatus', <include refid="txt"><property name="c" value="x.construction_status"/></include>,
+                   'serviceStatus', <include refid="txt"><property name="c" value="x.servicestatus"/></include>,
+                   'landUse', <include refid="txt"><property name="c" value="x.elms_landusename_e"/></include>,
+                   'secondaryUse', <include refid="txt"><property name="c" value="x.secuseeng"/></include>,
+                   'planningStatus', <include refid="txt"><property name="c" value="x.planningstatus"/></include>,
+                   'allocationStatus', <include refid="txt"><property name="c" value="x.elms_allocationstatus"/></include>,
+                   'allocation', <include refid="txt"><property name="c" value="x.elms_plotallocation_name_e"/></include>,
+                   'ownership', <include refid="txt"><property name="c" value="x.ownershiptype"/></include>,
+                   'devCode', <include refid="txt"><property name="c" value="x.devcode"/></include>,
+                   'far', <include refid="txt"><property name="c" value="x.devcode_far"/></include>,
+                   'maxGfaM2', round(nullif(x.devcode_maxgfa, 0)),
+                   'maxHeight', nullif(<include refid="txt"><property name="c" value="x.maxallowableheights"/></include>, '0'),
+                   'investmentZone', <include refid="txt"><property name="c" value="x.investment_name"/></include>,
+                   'permitType', <include refid="txt"><property name="c" value="x.permit_lasttype"/></include>,
+                   'permitDate', x.permit_lastdate::date
+               ))::text AS attrs,
                encode(ST_AsEWKB(ST_Force2D(x.shape)), 'hex') AS geom_hex
         FROM d JOIN ${t.plot} x ON <include refid="inDistrict"/>
         WHERE x.shape IS NOT NULL
@@ -125,12 +160,39 @@
         <include refid="districtCte"/>
         SELECT d.objectid AS district_key, 'school' AS category, x.objectid::text AS source_id,
                x.adek_sch_name_en AS name_en, x.adek_sch_name_ar AS name_ar, x.adek_sch_education_type_en AS subtype,
-               ST_X(ST_Centroid(x.shape)) AS lon, ST_Y(ST_Centroid(x.shape)) AS lat
+               ST_X(ST_Centroid(x.shape)) AS lon, ST_Y(ST_Centroid(x.shape)) AS lat,
+               jsonb_strip_nulls(jsonb_build_object(
+                   'curriculum', <include refid="txt"><property name="c" value="x.adek_sch_curriculum_en"/></include>,
+                   'gender', <include refid="txt"><property name="c" value="x.adek_sch_gender_en"/></include>,
+                   'grades', <include refid="txt"><property name="c" value="x.adek_sch_grades_en"/></include>,
+                   'cycle', <include refid="txt"><property name="c" value="x.adek_sch_cycle_en"/></include>,
+                   'students', x.adek_n_students,
+                   'capacity', nullif(x.adek_sch_capacity, 0),
+                   'teachingStaff', x.adek_n_teaching_staff,
+                   'totalStaff', x.adek_n_total_staff,
+                   'rating', <include refid="txt"><property name="c" value="x.adek_sch_latest_irtqaa_result"/></include>,
+                   'feeCategory', <include refid="txt"><property name="c" value="x.adek_sch_tuition_fee_category"/></include>,
+                   'avgFeeAed', nullif(x.adek_sch_average_tuition_fee, 0),
+                   'academicYear', <include refid="txt"><property name="c" value="x.adek_sch_academic_year"/></include>,
+                   'community', <include refid="txt"><property name="c" value="x.adek_sch_community_en"/></include>,
+                   'esisId', <include refid="txt"><property name="c" value="x.adek_sch_esis_id"/></include>
+               ))::text AS attrs
         FROM d JOIN ${t.school} x ON <include refid="inDistrict"/>
         UNION ALL
         SELECT d.objectid, 'medical', x.objectid::text,
                x.facility_name_in_english, x.facility_name_in_arabic, x.facility_type,
-               ST_X(ST_Centroid(x.shape)), ST_Y(ST_Centroid(x.shape))
+               ST_X(ST_Centroid(x.shape)), ST_Y(ST_Centroid(x.shape)),
+               jsonb_strip_nulls(jsonb_build_object(
+                   'subType', <include refid="txt"><property name="c" value="x.facility_sub_type"/></include>,
+                   'specialities', <include refid="txt"><property name="c" value="x.specialities_subspecialities"/></include>,
+                   'isPublic', <include refid="txt"><property name="c" value="x.is_public"/></include>,
+                   'beds', nullif(<include refid="txt"><property name="c" value="x.bed_capacity"/></include>, '0'),
+                   'emergency', <include refid="txt"><property name="c" value="x.emergency_level"/></include>,
+                   'address', <include refid="txt"><property name="c" value="x.address_name_in_english"/></include>,
+                   'licenseNo', <include refid="txt"><property name="c" value="x.facility_license_number"/></include>,
+                   'licenseStatus', <include refid="txt"><property name="c" value="x.permanent_status"/></include>,
+                   'licenseExpiry', x.date_expiration::date
+               ))::text
         FROM d JOIN ${t.doh} x ON <include refid="inDistrict"/>
         WHERE x.facility_category = 'Medical'
         <if test="exclude != null and exclude.size() > 0">
@@ -141,7 +203,7 @@
         UNION ALL
         SELECT d.objectid, 'mosque', x.objectid::text,
                NULL, coalesce(nullif(trim(x."اسم_المسجد"), ''), 'مسجد ' || coalesce(x."رقم_المسجد", x.objectid::text)), x."صفة_المسجد_1",
-               ST_X(ST_Centroid(x.shape)), ST_Y(ST_Centroid(x.shape))
+               ST_X(ST_Centroid(x.shape)), ST_Y(ST_Centroid(x.shape)), '{}'
         FROM d JOIN ${t.mosque} x ON <include refid="inDistrict"/>
     </select>
 

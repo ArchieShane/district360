@@ -168,4 +168,26 @@ export interface FacilityItem {
   nameAr: string | null
   subtype: string | null
   location: [number, number]
+  /** 详情字段（学校：curriculum / grades / students…；医疗：subType / specialities / beds…），没有值的键不返回 */
+  attrs: Record<string, unknown>
+}
+
+/** 地图点击地块 / 建筑的详情（GET /map/plots/{id}、/map/buildings/{id}） */
+export interface MapFeatureDetail {
+  kind: 'plot' | 'building'
+  id: number
+  code: string
+  refId?: string
+  /** 地块：constructed / under_construction / vacant_serviced / vacant_unserviced / other */
+  status?: string
+  useDesc?: string
+  /** 建筑：高度（米） */
+  height?: number
+  underConstruction?: boolean
+  location: [number, number]
+  attrs: Record<string, unknown>
+  /** 地块：上面的建筑数 */
+  buildings?: number
+  /** 建筑：所在地块 */
+  plot?: { id: number; plotId?: string; plotNo?: string }
 }

@@ -6,13 +6,19 @@ import com.district360.app.web.dto.BlockStatus;
 import com.district360.app.web.dto.DistrictListItem;
 import com.district360.app.web.dto.DistrictOverview;
 import com.district360.app.web.dto.FacilityItem;
+import com.district360.app.web.dto.MapFeatureDetail;
 import com.district360.app.web.dto.MetaInfo;
 import com.district360.app.web.dto.PageResult;
 import com.district360.stat.mapper.StatQueryMapper;
 import com.district360.stat.row.District360Row;
 import com.district360.stat.row.DistrictListRow;
 import com.district360.stat.row.LandUseRow;
+import com.district360.stat.row.MapFeatureRow;
 import com.district360.stat.row.SourceStatusRow;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -20,10 +26,12 @@ import java.math.RoundingMode;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 /** 只读统计库，组装接口返回。 */
 @Service
@@ -34,11 +42,13 @@ public class DistrictService {
     private final StatQueryMapper query;
     private final LandUseProperties landUse;
     private final EtlService etl;
+    private final ObjectMapper json;
 
-    public DistrictService(StatQueryMapper query, LandUseProperties landUse, EtlService etl) {
+    public DistrictService(StatQueryMapper query, LandUseProperties landUse, EtlService etl, ObjectMapper json) {
         this.query = query;
         this.landUse = landUse;
         this.etl = etl;
+        this.json = json;
     }
 
     public PageResult<DistrictListItem> listDistricts(int page, int size, String q) {
@@ -111,8 +121,30 @@ public class DistrictService {
             throw new NoSuchElementException("没有这个区: " + code);
         }
         return query.listPois(code, category).stream()
-                .map(p -> new FacilityItem(p.sourceId, p.category, p.nameEn, p.nameAr, p.subtype, new double[]{p.lon, p.lat}))
+                .map(p -> new FacilityItem(p.sourceId, p.category, p.nameEn, p.nameAr, p.subtype, new double[]{p.lon, p.lat},
+                        facilityAttrs(p.attrs)))
                 .toList();
+    }
+
+    /** 地图点击地块的详情。 */
+    public MapFeatureDetail plot(long id) {
+        MapFeatureRow r = query.findPlot(id);
+        if (r == null) {
+            throw new NoSuchElementException("没有这个地块: " + id);
+        }
+        return new MapFeatureDetail("plot", r.id, r.code, r.refId, r.status, r.useDesc, null, null,
+                new double[]{r.lon, r.lat}, attrs(r.attrs), r.relatedCount, null);
+    }
+
+    /** 地图点击建筑的详情。 */
+    public MapFeatureDetail building(long id) {
+        MapFeatureRow r = query.findBuilding(id);
+        if (r == null) {
+            throw new NoSuchElementException("没有这栋建筑: " + id);
+        }
+        var plot = r.relatedId == null ? null : new MapFeatureDetail.PlotRef(r.relatedId, r.relatedRef, r.relatedName);
+        return new MapFeatureDetail("building", r.id, r.code, r.refId, null, null, r.height, r.underConstruction,
+                new double[]{r.lon, r.lat}, attrs(r.attrs), null, plot);
     }
 
     public String boundaries() {
@@ -139,6 +171,53 @@ public class DistrictService {
     }
 
     // ------------------------------------------------------------------------------------------
+
+    private ObjectNode attrs(String text) {
+        if (text == null || text.isBlank()) {
+            return json.createObjectNode();
+        }
+        try {
+            JsonNode n = json.readTree(text);
+            return n instanceof ObjectNode o ? o : json.createObjectNode();
+        } catch (Exception e) {
+            return json.createObjectNode();
+        }
+    }
+
+    /**
+     * 设施详情字段。医疗的 specialities 在源表里是 JSON 文本
+     * （[{"Speciality":"Pathology","Sub Speciality":"Hematology"}]），这里整理成去重后的专科名数组；解析不了就原样保留。
+     */
+    private ObjectNode facilityAttrs(String text) {
+        ObjectNode a = attrs(text);
+        JsonNode spec = a.get("specialities");
+        if (spec != null && spec.isTextual()) {
+            try {
+                JsonNode arr = json.readTree(spec.asText());
+                if (arr.isArray()) {
+                    Set<String> names = new LinkedHashSet<>();
+                    for (JsonNode e : arr) {
+                        String main = e.path("Speciality").asText("").trim();
+                        String sub = e.path("Sub Speciality").asText("").trim();
+                        String name = sub.isEmpty() || sub.equalsIgnoreCase(main) ? main : main.isEmpty() ? sub : main + " · " + sub;
+                        if (!name.isEmpty()) {
+                            names.add(name);
+                        }
+                    }
+                    ArrayNode out = json.createArrayNode();
+                    names.forEach(out::add);
+                    if (out.isEmpty()) {
+                        a.remove("specialities");
+                    } else {
+                        a.set("specialities", out);
+                    }
+                }
+            } catch (Exception ignored) {
+                // 不是 JSON：按普通文本展示
+            }
+        }
+        return a;
+    }
 
     /** 宜居库明确标为不在评估范围（param_district_scope.in_scope = false）。NULL 视为在范围内（旧数据、样例数据）。 */
     private static boolean outOfScope(Boolean inScope) {

@@ -98,15 +98,15 @@ public class MakaniExtractor implements StatExtractor<MakaniSnapshot> {
                 .map(r -> new MakaniSnapshot.LandUse(codeByKey.get(r.districtKey), r.useDesc, r.plotCount))
                 .toList();
         List<MakaniSnapshot.Building> buildings = mapper.buildings(t).stream()
-                .map(r -> new MakaniSnapshot.Building(codeByKey.get(r.districtKey), r.buildingId, r.height, r.underConstruction, r.geomHex))
+                .map(r -> new MakaniSnapshot.Building(codeByKey.get(r.districtKey), r.buildingId, r.height, r.underConstruction, r.attrs, r.geomHex))
                 .toList();
 
         List<MakaniSnapshot.Plot> plotShapes = mapper.plotShapes(t).stream()
-                .map(r -> new MakaniSnapshot.Plot(codeByKey.get(r.districtKey), r.plotId, r.status, r.useDesc, r.geomHex))
+                .map(r -> new MakaniSnapshot.Plot(codeByKey.get(r.districtKey), r.plotId, r.status, r.useDesc, r.attrs, r.geomHex))
                 .toList();
 
         List<MakaniSnapshot.Poi> pois = mapper.pois(t, props.getMedicalExcludeNamePatterns()).stream()
-                .map(r -> new MakaniSnapshot.Poi(codeByKey.get(r.districtKey), r.category, r.sourceId, r.nameEn, r.nameAr, r.subtype, r.lon, r.lat))
+                .map(r -> new MakaniSnapshot.Poi(codeByKey.get(r.districtKey), r.category, r.sourceId, r.nameEn, r.nameAr, r.subtype, r.lon, r.lat, r.attrs))
                 .toList();
 
         log.info("makani 抽取完成：{} 个区，{} 条土地利用，{} 栋建筑，{} 个地块，{} 个公共设施点",

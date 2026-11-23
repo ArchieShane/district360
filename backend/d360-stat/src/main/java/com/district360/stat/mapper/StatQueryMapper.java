@@ -3,6 +3,7 @@ package com.district360.stat.mapper;
 import com.district360.stat.row.District360Row;
 import com.district360.stat.row.DistrictListRow;
 import com.district360.stat.row.LandUseRow;
+import com.district360.stat.row.MapFeatureRow;
 import com.district360.stat.row.MonthlyRow;
 import com.district360.stat.row.PoiRow;
 import com.district360.stat.row.ScopeRow;
@@ -34,6 +35,12 @@ public interface StatQueryMapper {
     List<PoiRow> listPois(@Param("code") String code, @Param("category") String category);
 
     TileRow plotTile(@Param("z") int z, @Param("x") int x, @Param("y") int y);
+
+    /** 地图点击详情：地块（id = map_plot.id，即瓦片里的 id 属性）。 */
+    MapFeatureRow findPlot(@Param("id") long id);
+
+    /** 地图点击详情：建筑（id = map_building.id，即瓦片里的 id 属性）。 */
+    MapFeatureRow findBuilding(@Param("id") long id);
 
     List<SourceStatusRow> listSourceStatus();
 

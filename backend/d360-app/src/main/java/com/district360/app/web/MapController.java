@@ -1,6 +1,8 @@
 package com.district360.app.web;
 
 import com.district360.app.service.DistrictService;
+import com.district360.app.web.dto.MapFeatureDetail;
+import com.district360.common.api.ApiResponse;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -33,13 +35,25 @@ public class MapController {
                 .body(service.boundaries());
     }
 
-    /** 建筑体块矢量瓦片（图层名 buildings，属性 code / height / uc）。 */
+    /** 建筑体块矢量瓦片（图层名 buildings，属性 id / code / height / uc）。 */
     @GetMapping("/tiles/buildings/{z}/{x}/{y}.pbf")
     public ResponseEntity<byte[]> buildings(@PathVariable int z, @PathVariable int x, @PathVariable int y) {
         return tile(z, x, y, () -> service.buildingTile(z, x, y));
     }
 
-    /** 地块矢量瓦片（图层名 plots，属性 code / plot_id / status / use_desc），选中区后按建设状态高亮。 */
+    /** 地图点击地块：源表详情字段 + 地块上的建筑数。id 为地块瓦片里的 id 属性。 */
+    @GetMapping("/plots/{id}")
+    public ApiResponse<MapFeatureDetail> plot(@PathVariable long id) {
+        return ApiResponse.ok(service.plot(id));
+    }
+
+    /** 地图点击建筑：源表详情字段 + 所在地块。id 为建筑瓦片里的 id 属性。 */
+    @GetMapping("/buildings/{id}")
+    public ApiResponse<MapFeatureDetail> building(@PathVariable long id) {
+        return ApiResponse.ok(service.building(id));
+    }
+
+    /** 地块矢量瓦片（图层名 plots，属性 id / code / plot_id / status / use_desc），选中区后按建设状态高亮。 */
     @GetMapping("/tiles/plots/{z}/{x}/{y}.pbf")
     public ResponseEntity<byte[]> plots(@PathVariable int z, @PathVariable int x, @PathVariable int y) {
         return tile(z, x, y, () -> service.plotTile(z, x, y));

@@ -1,4 +1,4 @@
-import type { ApiResponse, DistrictFeatureCollection, DistrictListItem, DistrictOverview, FacilityCategory, FacilityItem, LineageInfo, MetaInfo, PageResult } from './types'
+import type { ApiResponse, DistrictFeatureCollection, DistrictListItem, DistrictOverview, FacilityCategory, FacilityItem, LineageInfo, MapFeatureDetail, MetaInfo, PageResult } from './types'
 
 /**
  * 接口地址用相对路径：页面挂在什么路径下（开发时 /，生产时 /district360/ 等二级路由），接口就跟着走，
@@ -34,6 +34,8 @@ export const api = {
   facilities: (code: string, category: FacilityCategory) =>
     get<FacilityItem[]>(`/districts/${encodeURIComponent(code)}/facilities/${category}`),
   lineage: () => get<LineageInfo>('/lineage'),
+  /** 地图点击详情：id 为瓦片里的 id 属性 */
+  mapFeature: (kind: 'plot' | 'building', id: number) => get<MapFeatureDetail>(`/map/${kind}s/${id}`),
   plotTilesUrl: (v: string) => `${ABS_BASE()}/map/tiles/plots/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,
   buildingTilesUrl: (v: string) => `${ABS_BASE()}/map/tiles/buildings/{z}/{x}/{y}.pbf?v=${encodeURIComponent(v)}`,
 }

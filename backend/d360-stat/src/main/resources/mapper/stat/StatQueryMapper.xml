@@ -78,6 +78,7 @@
         WITH bounds AS (SELECT ST_TileEnvelope(#{z}, #{x}, #{y}) AS env),
              mvt AS (
                  SELECT ST_AsMVTGeom(b.geom, bounds.env, 4096, 64, true) AS geom,
+                        b.id AS id,
                         b.district_code AS code,
                         b.height::float8 AS height,
                         b.under_construction AS uc
@@ -88,16 +89,43 @@
     </select>
 
     <select id="listPois" resultType="com.district360.stat.row.PoiRow">
-        SELECT source_id, category, name_en, name_ar, subtype, lon, lat
+        SELECT source_id, category, name_en, name_ar, subtype, lon, lat, attrs::text AS attrs
         FROM stat.map_poi
         WHERE district_code = #{code} AND category = #{category}
         ORDER BY lower(coalesce(name_en, name_ar)), source_id
+    </select>
+
+    <!-- 地图点击详情：地块，附带「中心点落在地块内」的建筑数 -->
+    <select id="findPlot" resultType="com.district360.stat.row.MapFeatureRow">
+        SELECT p.id, p.district_code AS code, p.plot_id AS ref_id, p.status, p.use_desc, p.attrs::text AS attrs,
+               ST_X(c.pt) AS lon, ST_Y(c.pt) AS lat,
+               (SELECT count(*) FROM stat.map_building b
+                WHERE b.geom &amp;&amp; p.geom AND ST_Intersects(p.geom, ST_PointOnSurface(b.geom)))::int AS related_count
+        FROM stat.map_plot p
+        CROSS JOIN LATERAL (SELECT ST_Transform(ST_PointOnSurface(p.geom), 4326) AS pt) c
+        WHERE p.id = #{id}
+    </select>
+
+    <!-- 地图点击详情：建筑，附带所在地块（建筑内一点落在的地块） -->
+    <select id="findBuilding" resultType="com.district360.stat.row.MapFeatureRow">
+        SELECT b.id, b.district_code AS code, b.building_id AS ref_id, b.height, b.under_construction, b.attrs::text AS attrs,
+               ST_X(ST_Transform(s.pt, 4326)) AS lon, ST_Y(ST_Transform(s.pt, 4326)) AS lat,
+               pl.id AS related_id, pl.plot_id AS related_ref, pl.attrs ->> 'plotNo' AS related_name
+        FROM stat.map_building b
+        CROSS JOIN LATERAL (SELECT ST_PointOnSurface(b.geom) AS pt) s
+        LEFT JOIN LATERAL (
+            SELECT p.id, p.plot_id, p.attrs FROM stat.map_plot p
+            WHERE p.geom &amp;&amp; s.pt AND ST_Intersects(p.geom, s.pt)
+            ORDER BY ST_Area(p.geom) LIMIT 1
+        ) pl ON true
+        WHERE b.id = #{id}
     </select>
 
     <select id="plotTile" resultType="com.district360.stat.row.TileRow">
         WITH bounds AS (SELECT ST_TileEnvelope(#{z}, #{x}, #{y}) AS env),
              mvt AS (
                  SELECT ST_AsMVTGeom(p.geom, bounds.env, 4096, 64, true) AS geom,
+                        p.id AS id,
                         p.district_code AS code,
                         p.plot_id AS plot_id,
                         p.status AS status,

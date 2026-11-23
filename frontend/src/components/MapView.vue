@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type LngLatBoundsLike, type Map as MlMap } from 'maplibre-gl'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api/client'
 import type { DistrictFeatureCollection, DistrictFeatureProps, FacilityItem } from '../api/types'
 import { useDistrictStore } from '../stores/district'
 import { escapeHtml, nf } from '../utils/format'
+import DetailCard from './DetailCard.vue'
 
 /**
  * 在线底图（MapLibre，默认 CARTO dark-matter）+ makani 全部区的边界与名称标签 + 建筑 MVT 3D 拉伸。
@@ -22,7 +23,10 @@ let ready = false
 let hoverId: number | null = null
 let selectedId: number | null = null
 let selectedMarker: maplibregl.Marker | null = null
-let poiMarker: maplibregl.Marker | null = null
+/** 详情卡片的屏幕位置（锚点经纬度投影），随地图移动更新 */
+const card = ref<{ x: number; y: number; below: boolean; shift: number } | null>(null)
+/** 卡片半宽 + 边距（卡片宽 300px） */
+const CARD_HALF = 162
 
 const STYLE = import.meta.env.VITE_BASEMAP_STYLE || 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 /** 「全景」视角：默认阿布扎比岛及周边；可用 VITE_HOME_BOUNDS=minLon,minLat,maxLon,maxLat 覆盖 */
@@ -60,20 +64,47 @@ function applyPoiEmphasis() {
   map.setPaintProperty('pois', 'circle-stroke-width', ['case', hot, 3, 1.5])
 }
 
-/** 定位到某个设施：飞过去并显示名称标签 */
+/** 定位到某个设施：飞过去；名称和详情由详情卡片显示（卡片在 DOM 上层，不会被 3D 建筑挡住） */
 function focusPoi(id: string | null) {
-  poiMarker?.remove()
-  poiMarker = null
   const f = id ? store.facilityList.find(x => x.id === id) : undefined
   if (!map || !f) return
   map.flyTo({ center: f.location, zoom: Math.max(map.getZoom(), 16.5), pitch: 55, duration: 1100 })
-  // 标签 + 连接线 + 定位点都放在标记里：设施常在 3D 建筑内部，地图上的圆点会被楼体挡住
-  const div = document.createElement('div')
-  div.className = 'poi-mk ' + f.category
-  const sub = f.nameEn && f.nameAr ? `<small dir="auto">${escapeHtml(f.nameAr)}</small>` : ''
-  div.innerHTML = `<div class="poi-pin"><span dir="auto">${escapeHtml(f.nameEn || f.nameAr || f.id)}</span>${sub}</div>`
-    + '<div class="poi-stem"></div><div class="poi-dot"></div>'
-  poiMarker = new maplibregl.Marker({ element: div, anchor: 'bottom' }).setLngLat(f.location).addTo(map)
+}
+
+/** 详情卡片锚点：点开的地块 / 建筑的点击位置，或定位到的设施 */
+const cardAnchor = computed<[number, number] | null>(() => {
+  if (store.featureDetail) return store.featureDetail.lngLat
+  const f = store.focusedPoiId ? store.facilityList.find(x => x.id === store.focusedPoiId) : undefined
+  return f ? f.location : null
+})
+
+function updateCard() {
+  const a = cardAnchor.value
+  if (!map || !a) {
+    card.value = null
+    return
+  }
+  const p = map.project(a)
+  const w = map.getCanvas().clientWidth
+  const h = map.getCanvas().clientHeight
+  // 锚点移出视野就先不显示
+  if (p.x < -20 || p.y < -20 || p.x > w + 20 || p.y > h + 20) {
+    card.value = null
+    return
+  }
+  // 卡片左右不压到区列表和右侧面板：卡片整体平移，连接线和定位点仍在锚点
+  const minX = props.listWidth + 24 + CARD_HALF
+  const maxX = w - (store.selectedCode ? props.panelWidth : 0) - 12 - CARD_HALF
+  const cx = maxX > minX ? Math.min(Math.max(p.x, minX), maxX) : p.x
+  card.value = { x: p.x, y: p.y, below: p.y < Math.min(430, h * 0.55), shift: cx - p.x }
+}
+
+/** 点开详情的地块 / 建筑高亮 */
+function applyFeatureHighlight() {
+  if (!map || !map.getLayer('plots-selected')) return
+  const d = store.featureDetail
+  map.setFilter('plots-selected', ['==', ['get', 'id'], d?.kind === 'plot' ? d.id : -1])
+  map.setPaintProperty('buildings-3d', 'fill-extrusion-color', buildingColor(store.selectedCode))
 }
 
 const PLOT_STATUS_KEY: Record<string, string> = {
@@ -98,7 +129,12 @@ function flyTo(d: DistrictFeatureProps) {
 
 function buildingColor(code: string | null): ExpressionSpecification {
   if (!code) return ['case', ['get', 'uc'], '#8A6A3A', '#5B6878']
-  return ['case', ['==', ['get', 'code'], code], ['case', ['get', 'uc'], '#FFB547', '#A9D0F7'], '#3A4553']
+  const d = store.featureDetail
+  const sel = d?.kind === 'building' ? d.id : -1
+  return ['case',
+    ['==', ['get', 'id'], sel], '#7CF3D0',
+    ['==', ['get', 'code'], code], ['case', ['get', 'uc'], '#FFB547', '#A9D0F7'],
+    '#3A4553']
 }
 
 function points(fc: DistrictFeatureCollection): GeoJSON.FeatureCollection {
@@ -149,6 +185,41 @@ function applyPlotHighlight() {
 function plotTipHtml(p: Record<string, unknown>): string {
   const key = PLOT_STATUS_KEY[String(p.status)] ?? 'other'
   return `<b>${t('land.plot')} ${escapeHtml(String(p.plot_id ?? ''))}</b>${t('land.ps.' + key)} · ${escapeHtml(String(p.use_desc ?? ''))}`
+    + `<br><span class="hint">${t('detail.hint')}</span>`
+}
+
+function buildingTipHtml(p: Record<string, unknown>): string {
+  const h = Number(p.height)
+  const uc = p.uc === true || p.uc === 'true'
+  return `<b>${t('detail.buildingTip')}</b>${Number.isFinite(h) ? nf(h, 0) + ' m' : ''}${uc ? ' · ' + t('land.uc') : ''}`
+    + `<br><span class="hint">${t('detail.hint')}</span>`
+}
+
+/** 选中区内点击：设施点 > 建筑 > 地块（返回是否命中，命中时由详情卡片接管） */
+function onMapClick(e: maplibregl.MapMouseEvent) {
+  if (!map || !store.selectedCode) return
+  const code = store.selectedCode
+  const layers = ['pois', 'buildings-3d', 'plots-fill'].filter(l => map!.getLayer(l))
+  const hits = map.queryRenderedFeatures(e.point, { layers })
+  const poi = hits.find(f => f.layer.id === 'pois')
+  if (poi) {
+    const id = poi.properties?.id
+    if (id != null) store.focusPoi(String(id))
+    return
+  }
+  const lngLat: [number, number] = [e.lngLat.lng, e.lngLat.lat]
+  const building = hits.find(f => f.layer.id === 'buildings-3d' && f.properties?.code === code)
+  if (building && building.properties?.id != null) {
+    void store.openFeature('building', Number(building.properties.id), lngLat)
+    return
+  }
+  const plot = hits.find(f => f.layer.id === 'plots-fill')
+  if (plot && plot.properties?.id != null) {
+    void store.openFeature('plot', Number(plot.properties.id), lngLat)
+    return
+  }
+  // 点在选中区内的空白处：关闭详情；点到别的区由区图层的点击处理切换
+  if (hits.length === 0) store.closeDetail()
 }
 
 function applyHover(code: string | null) {
@@ -211,6 +282,10 @@ function addLayers(fc: DistrictFeatureCollection) {
     paint: { 'line-color': PLOT_COLOR, 'line-width': 0.8, 'line-opacity': 0.7 },
   })
   map.addLayer({
+    id: 'plots-selected', type: 'line', source: 'plots', 'source-layer': 'plots', filter: ['==', ['get', 'id'], -1],
+    paint: { 'line-color': '#FFFFFF', 'line-width': 3, 'line-opacity': 0.95 },
+  })
+  map.addLayer({
     id: 'buildings-3d', type: 'fill-extrusion', source: 'buildings', 'source-layer': 'buildings', minzoom: 12,
     paint: {
       'fill-extrusion-color': buildingColor(null),
@@ -263,10 +338,7 @@ function addLayers(fc: DistrictFeatureCollection) {
       'circle-pitch-alignment': 'viewport',
     },
   })
-  map.on('click', 'pois', e => {
-    const id = e.features?.[0]?.properties?.id as string | undefined
-    if (id) store.focusPoi(String(id))
-  })
+  map.on('click', onMapClick)
   map.on('mouseenter', 'pois', e => {
     const id = e.features?.[0]?.properties?.id
     store.hoveredPoiId = id != null ? String(id) : null
@@ -280,8 +352,15 @@ function addLayers(fc: DistrictFeatureCollection) {
   const onHover = (code: string | undefined, point: maplibregl.Point) => {
     store.hoveredCode = code ?? null
     const d = code ? store.features.get(code) : undefined
-    // 选中区内悬停到地块上：显示地块编号、建设状态、用途
-    const plot = store.selectedCode ? map!.queryRenderedFeatures(point, { layers: ['plots-fill'] })[0] : undefined
+    // 选中区内悬停到建筑 / 地块上：建筑显示高度，地块显示编号、建设状态、用途
+    const inner = store.selectedCode ? map!.queryRenderedFeatures(point, { layers: ['buildings-3d', 'plots-fill'] }) : []
+    const bld = inner.find(f => f.layer.id === 'buildings-3d' && f.properties?.code === store.selectedCode)
+    if (bld) {
+      tip.value = { x: point.x, y: point.y, html: buildingTipHtml(bld.properties ?? {}) }
+      map!.getCanvas().style.cursor = 'pointer'
+      return
+    }
+    const plot = inner.find(f => f.layer.id === 'plots-fill')
     if (plot) {
       tip.value = { x: point.x, y: point.y, html: plotTipHtml(plot.properties ?? {}) }
       map!.getCanvas().style.cursor = 'pointer'
@@ -334,6 +413,8 @@ onMounted(() => {
     ready = true
     init()
   })
+  map.on('move', updateCard)
+  map.on('resize', updateCard)
   window.addEventListener('keydown', onKey)
 })
 
@@ -342,8 +423,11 @@ onBeforeUnmount(() => {
   map?.remove()
 })
 
+/** Esc：先关详情卡片，再取消选中区 */
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && store.selectedCode) store.deselect()
+  if (e.key !== 'Escape') return
+  if (store.closeDetail()) return
+  if (store.selectedCode) store.deselect()
 }
 
 watch(() => store.boundaries, fc => {
@@ -365,19 +449,22 @@ watch(() => store.hoveredCode, code => applyHover(code))
 watch(() => store.highlightPlotStatus, () => applyPlotHighlight())
 watch(() => store.facilityList, list => {
   ;(map?.getSource('pois') as GeoJSONSource | undefined)?.setData(poiCollection(list))
-  if (!list.length) focusPoi(null)
 })
 watch(() => store.focusedPoiId, id => {
   focusPoi(id)
   applyPoiEmphasis()
 })
+watch(cardAnchor, () => updateCard())
+watch(() => [store.featureDetail?.kind, store.featureDetail?.id], () => applyFeatureHighlight())
 watch(() => store.hoveredPoiId, () => applyPoiEmphasis())
 watch(() => store.homeTick, () => flyHome())
+watch(() => [props.panelWidth, props.listWidth, store.selectedCode], () => updateCard())
 watch(() => store.lang, () => renderSelectedMarker())
 </script>
 
 <template>
   <div ref="el" class="map"></div>
+  <DetailCard v-if="card" :x="card.x" :y="card.y" :below="card.below" :shift="card.shift" />
   <div v-if="tip" class="tip" :style="{ left: tip.x + 14 + 'px', top: tip.y + 14 + 'px' }" v-html="tip.html"></div>
 </template>
 
@@ -397,6 +484,10 @@ watch(() => store.lang, () => renderSelectedMarker())
   color: var(--tm);
   z-index: 6;
   white-space: nowrap;
+}
+.tip :deep(.hint) {
+  font-size: 11.5px;
+  color: var(--tq);
 }
 .tip :deep(b) {
   display: block;

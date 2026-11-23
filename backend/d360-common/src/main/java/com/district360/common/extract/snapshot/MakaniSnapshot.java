@@ -71,8 +71,9 @@ public record MakaniSnapshot(
      * 地块（EPSG:4326，EWKB hex），供地图按建设状态高亮。
      *
      * @param status constructed / under_construction / vacant_serviced / vacant_unserviced / other，与面板「地块状态」4 类一致
+     * @param attrs  详情字段（JSON 文本），供地图点击详情
      */
-    public record Plot(String code, String plotId, String status, String useDesc, String ewkbHex) {
+    public record Plot(String code, String plotId, String status, String useDesc, String attrs, String ewkbHex) {
     }
 
     /**
@@ -80,12 +81,13 @@ public record MakaniSnapshot(
      *
      * @param category school / medical / mosque
      * @param subtype  学校：Public / Private；医疗：facility_type；清真寺：جامع / مسجد
+     * @param attrs    详情字段（JSON 文本），供点击详情
      */
     public record Poi(String code, String category, String sourceId, String nameEn, String nameAr, String subtype,
-                      double lon, double lat) {
+                      double lon, double lat, String attrs) {
     }
 
-    /** 建筑体块（EPSG:4326，EWKB hex）。 */
-    public record Building(String code, String buildingId, BigDecimal height, boolean underConstruction, String ewkbHex) {
+    /** 建筑体块（EPSG:4326，EWKB hex）；attrs 为详情字段（JSON 文本）。 */
+    public record Building(String code, String buildingId, BigDecimal height, boolean underConstruction, String attrs, String ewkbHex) {
     }
 }
