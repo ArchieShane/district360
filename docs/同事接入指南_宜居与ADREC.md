@@ -158,8 +158,7 @@ new AdrecSnapshot(
 
 ## 5. 宜居同事：接入步骤（附参考示例）
 
-> 源库：`10.255.254.109:5443 / liveability_data_20260730`。
-> ⚠️ 109 服务器目前存在硬件导致的数据损坏，**只读、不要写**（详见第 10 节）。
+> 源库：`10.255.254.111:15432 / liveability_data_20260730`（2026-11-22 从 109 迁来并已修复，账号与 109 相同）。
 
 ### 第 1 步：配置数据源
 
@@ -167,7 +166,7 @@ new AdrecSnapshot(
 
 ```yaml
     liveability:
-      url: jdbc:postgresql://10.255.254.109:5443/liveability_data_20260730
+      url: jdbc:postgresql://10.255.254.111:15432/liveability_data_20260730
       username: <账号>
       password: "<密码>"
 ```
@@ -405,8 +404,8 @@ GROUP BY 1 ORDER BY 1;
 | 项 | 情况 |
 |---|---|
 | 统计库 | `10.255.254.101:15432/district360`（PostgreSQL 12 + PostGIS 3.4），已建好，表由程序启动时自动创建 |
-| makani 源库 | 暂用 109 上的 `makani_sync_full`（`makani_1119` 的建筑表被硬件故障写坏） |
-| 109 服务器 | 2026-11-21 发现内存 / 磁盘硬件故障：数据被持续写坏，大批量写入时数据库两次崩溃恢复。**只读、不要写**，等 DBA 处理。Liveability 库也在 109 上，抽取时如果遇到「invalid memory alloc」「compressed data is corrupt」之类报错，大概率是这个原因，请告诉 makani 组 |
+| makani / 宜居源库 | `10.255.254.111:15432`：makani 用 `makani_sync_full`，宜居用 `liveability_data_20260730`。2026-11-22 从 109 迁来，迁移时发现的损坏已修复 |
+| 109 服务器 | 2026-11-21 发现内存 / 磁盘硬件故障，数据被持续写坏。项目已不再连 109 的库，**不要再往 109 写数据** |
 | 配置 | 所有数据源都在 `application-local.yml`（随代码提交，内网库）；生产环境用环境变量覆盖。`metric-lineage.yml` 里的 `planned-db` 只在没配数据源时显示，部署不用改 |
 
 ---

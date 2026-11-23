@@ -51,7 +51,7 @@ docs/                         原型、字段对照、方案文档
 内网开发库的地址和账号密码都写在 `backend/d360-app/src/main/resources/application-local.yml`（默认激活 `local` profile），拉下代码即可直接运行：
 
 - 统计库 `d360.datasource.stat`：当前为 `10.255.254.101:15432/district360`（PostgreSQL 12 + PostGIS 3.4）；
-- makani 源库 `d360.datasource.makani` + `d360.makani.schema / table-prefix`：当前为 109 上的 `makani_sync_full`。
+- makani 源库 `d360.datasource.makani` + `d360.makani.schema / table-prefix`：当前为 `10.255.254.111:15432/makani_sync_full`；宜居源库同在 111 上（`liveability_data_20260730`）。
 
 新建统计库时先执行 `CREATE DATABASE district360;` 并在库里 `CREATE EXTENSION postgis;`，表由 Flyway 在后端启动时自动创建。也可以用环境变量覆盖（`D360_STAT_DB_URL`、`D360_MAKANI_DB_URL`、`D360_*_DB_USER`、`D360_*_DB_PASSWORD`、`D360_MAKANI_SCHEMA`、`D360_MAKANI_TABLE_PREFIX`）。
 
@@ -92,7 +92,7 @@ makani 源表的位置全部由配置决定，表全名 = `<schema>.<table-prefi
 - 改完重启后端，再执行一次抽取（`POST /api/v1/admin/etl/makani`）；
 - 指标悬浮提示里的库名、表名会自动跟着配置变。
 
-> 当前本地配置指向 `makani_sync_full`：2026-11-21 发现 109 服务器存在硬件导致的数据损坏（makani_1119 建筑表），暂用全量库测试，详见 docs 方案文档「实现状态」。
+> 当前本地配置指向 111 上的 `makani_sync_full`：2026-11-21 发现 109 服务器存在硬件导致的数据损坏，源库已于 2026-11-22 迁到 10.255.254.111:15432 并修复，过程见 [docs/109数据库迁移步骤.md](docs/109数据库迁移步骤.md)。
 
 ## 接口
 

@@ -39,12 +39,12 @@ d360:
   datasource:
     # 统计库：接口唯一的数据源
     stat:
-      url: ${D360_STAT_DB_URL:jdbc:postgresql://10.255.254.109:5443/district360?currentSchema=stat,public}
+      url: ${D360_STAT_DB_URL:jdbc:postgresql://10.255.254.101:15432/district360?currentSchema=stat,public}
       username: ${D360_STAT_DB_USER:}
       password: ${D360_STAT_DB_PASSWORD:}
     # makani 源库：只给 MakaniExtractor 用
     makani:
-      url: ${D360_MAKANI_DB_URL:jdbc:postgresql://10.255.254.109:5443/makani_1119}
+      url: ${D360_MAKANI_DB_URL:jdbc:postgresql://10.255.254.111:15432/makani_1119}
       username: ${D360_MAKANI_DB_USER:}
       password: ${D360_MAKANI_DB_PASSWORD:}
     # 宜居 / ADREC：配置 url 后对应模块才启用（见 application-local.example.yml）

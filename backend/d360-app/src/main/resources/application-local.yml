@@ -5,8 +5,9 @@
 #   首次使用新库前需要先建库并安装 PostGIS（建表由 Flyway 在后端启动时自动完成）：
 #     CREATE DATABASE district360;  然后在 district360 里执行  CREATE EXTENSION IF NOT EXISTS postgis;
 #
-# makani 源库：暂用全量库 makani_sync_full（109 上 makani_1119 的建筑表有损坏）；
-#   换回 makani_1119 时，把 makani 的 url、schema、table-prefix 三项改回去。
+# makani / 宜居源库：2026-11-22 起从 109 切到 10.255.254.111:15432（109 硬件损坏，库已迁到 111 并修复，账号与 109 相同）。
+#   makani 仍用全量库 makani_sync_full；
+#   要改用 makani_1119（同在 111 上），把 makani 的 url、schema、table-prefix 三项一起改。
 d360:
   datasource:
     stat:
@@ -14,11 +15,11 @@ d360:
       username: postgres
       password: "postgres"
     makani:
-      url: jdbc:postgresql://10.255.254.109:5443/makani_sync_full
+      url: jdbc:postgresql://10.255.254.111:15432/makani_sync_full
       username: postgres
       password: "freedo"
     liveability:
-      url: jdbc:postgresql://10.255.254.109:5443/liveability_data_20260730
+      url: jdbc:postgresql://10.255.254.111:15432/liveability_data_20260730
       username: postgres
       password: "freedo"
     # ADREC 源库为只读。配置 URL 后启用抽取，坐标 SRID 以源方确认值为准。
