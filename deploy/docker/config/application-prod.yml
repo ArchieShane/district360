@@ -32,6 +32,19 @@ d360:
       password: "<密码>"
       source-srid: 4326
 
+    # ODS 源库（V1.0 主题库抽取用，只读；d360-ods 模块）。配置 url 后才启用 ods-spatial 等抽取器，
+    # 结果写统计库同一个库里的 theme schema（空间下钻 sp_* 等表，由 Flyway 创建）。
+    # 手动触发：POST /api/v1/admin/etl/ods-spatial；全量约 160 万行，单事务写入。
+    ods:
+      url: jdbc:postgresql://<ODS库IP>:<端口>/<ODS库名>
+      username: <用户名>
+      password: "<密码>"
+
+  # ODS 源表位置：表全名 = <schema>.<table-prefix><表名>，例如 ods.ods_makani_udm_district
+  ods:
+    schema: ods
+    table-prefix: ods_
+
   # makani 源表位置：表全名 = <schema>.<table-prefix><表名>
   #   全量库 makani_sync_full / 生产库：schema = public，table-prefix = ""
   #   数据治理库 makani_1119          ：schema = ods，   table-prefix = ods_makani_

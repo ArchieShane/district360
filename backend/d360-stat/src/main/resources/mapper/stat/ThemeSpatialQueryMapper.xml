@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 空间下钻读查询（/api/v2/space）。只读 theme.sp_*。
+  ${level} ${col} ${layer} ${table} ${dimExpr} ${areaExpr} ${extra} 只来自 d360-app 的白名单枚举，请求参数一律 #{}。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeSpatialQueryMapper">
+
+    <!-- 显示名称 -->
+    <sql id="plotName">'Plot ' || coalesce(nullif(${a}.plot_number, ''), ${a}.plot_id, ${a}.gisid)</sql>
+    <sql id="buildingName">
+        coalesce(nullif(trim(${a}.name_en), ''),
+                 initcap(lower(nullif(nullif(${a}.primary_usage_type, 'UNDEFINED'), ''))),
+                 nullif(${a}.primary_use, ''),
+                 'Building')
+        || ' ' || coalesce(nullif(${a}.building_id, ''), ${a}.building_internal_id::text, ${a}.bdms_building_id::text, ${a}.building_key)
+    </sql>
+    <sql id="floorName">coalesce(nullif(${a}.floor_number, ''), 'Floor ' || ${a}.floor_seq)</sql>
+    <sql id="unitName">coalesce(nullif(${a}.floor_number, '') || '-', '') || coalesce(nullif(${a}.unit_number, ''), ${a}.unit_key)</sql>
+    <sql id="communityName">coalesce(nullif(${a}.name_en, ''), nullif(${a}.composite_name_en, ''), ${a}.community_id)</sql>
+
+    <!-- 外包框、中心、简化几何 -->
+    <sql id="geo">
+        ST_XMin(${a}.geom) AS minx, ST_YMin(${a}.geom) AS miny, ST_XMax(${a}.geom) AS maxx, ST_YMax(${a}.geom) AS maxy,
+        ST_X(coalesce(${a}.centroid, theme.inner_point(${a}.geom))) AS cx, ST_Y(coalesce(${a}.centroid, theme.inner_point(${a}.geom))) AS cy,
+        ST_AsGeoJSON(ST_SimplifyPreserveTopology(${a}.geom, ${tol}), 6)::text AS geojson
+    </sql>
+    <sql id="geoNoCentroid">
+        ST_XMin(${a}.geom) AS minx, ST_YMin(${a}.geom) AS miny, ST_XMax(${a}.geom) AS maxx, ST_YMax(${a}.geom) AS maxy,
+        ST_X(theme.inner_point(${a}.geom)) AS cx, ST_Y(theme.inner_point(${a}.geom)) AS cy,
+        ST_AsGeoJSON(${a}.geom, 7)::text AS geojson
+    </sql>
+
+    <select id="node" resultType="java.util.LinkedHashMap">
+        <choose>
+            <when test="level == 'emirate'">
+                SELECT 'AD' AS key, 'Emirate of Abu Dhabi' AS name, 'إمارة أبوظبي' AS name_ar,
+                       ST_XMin(e) AS minx, ST_YMin(e) AS miny, ST_XMax(e) AS maxx, ST_YMax(e) AS maxy,
+                       ST_X(ST_Centroid(e)) AS cx, ST_Y(ST_Centroid(e)) AS cy, NULL AS geojson,
+                       (SELECT round(sum(area_km2), 1) FROM theme.sp_municipality) AS area_km2
+                FROM (SELECT ST_Extent(geom)::geometry AS e FROM theme.sp_district) x
+            </when>
+            <when test="level == 'municipality'">
+                SELECT m.municipality_code AS key, m.name_en AS name, m.name_ar,
+                       m.municipality_code, m.municipality_id, m.area_km2,
+                       <include refid="geo"><property name="a" value="m"/><property name="tol" value="0.0005"/></include>
+                FROM theme.sp_municipality m
+                WHERE m.municipality_code = #{key}
+            </when>
+            <when test="level == 'district'">
+                SELECT d.district_key AS key, d.name_en AS name, d.name_ar,
+                       d.municipality_code, m.name_en AS municipality_name,
+                       d.district_id, d.popular_name_en, d.population, d.area_km2,
+                       <include refid="geo"><property name="a" value="d"/><property name="tol" value="0.00003"/></include>
+                FROM theme.sp_district d
+                LEFT JOIN theme.sp_municipality m ON m.municipality_code = d.municipality_code
+                WHERE d.district_key = #{key}
+            </when>
+            <when test="level == 'community'">
+                SELECT c.community_key AS key, <include refid="communityName"><property name="a" value="c"/></include> AS name, c.name_ar,
+                       c.municipality_code, m.name_en AS municipality_name,
+                       c.district_key, d.name_en AS district_name,
+                       c.community_id, c.popular_name_en, c.composite_name_en, c.area_km2,
+                       <include refid="geo"><property name="a" value="c"/><property name="tol" value="0.00001"/></include>
+                FROM theme.sp_community c
+                LEFT JOIN theme.sp_district d ON d.district_key = c.district_key
+                LEFT JOIN theme.sp_municipality m ON m.municipality_code = c.municipality_code
+                WHERE c.community_key = #{key}
+            </when>
+            <when test="level == 'plot'">
+                SELECT p.plot_key AS key, <include refid="plotName"><property name="a" value="p"/></include> AS name, NULL AS name_ar,
+                       p.municipality_code, m.name_en AS municipality_name,
+                       p.district_key, d.name_en AS district_name,
+                       p.community_key, <include refid="communityName"><property name="a" value="c"/></include> AS community_name,
+                       p.gisid, p.plot_id, p.plot_number, p.elms_plot_id, p.area_sqm, p.planned_area_sqm,
+                       p.construction_status, p.service_status, p.planning_status, p.plot_status, p.primary_use, p.parent_land_use,
+                       p.land_use, p.secondary_use, p.ownership_type, p.allocation_status, p.investment_name, p.devcode,
+                       p.devcode_category, p.devcode_far, p.devcode_max_gfa, p.max_heights, p.zone_tpss, p.sector_tpss, p.project_id,
+                       p.permit_last_type, p.permit_last_date::date AS permit_last_date, p.cancel_date::date AS cancel_date,
+                       p.src_district_en, p.src_community_en, p.modified_date::date AS modified_date,
+                       <include refid="geo"><property name="a" value="p"/><property name="tol" value="0"/></include>
+                FROM theme.sp_plot p
+                LEFT JOIN theme.sp_community c ON c.community_key = p.community_key
+                LEFT JOIN theme.sp_district d ON d.district_key = p.district_key
+                LEFT JOIN theme.sp_municipality m ON m.municipality_code = p.municipality_code
+                WHERE p.plot_key = #{key}
+            </when>
+            <when test="level == 'building'">
+                SELECT b.building_key AS key, <include refid="buildingName"><property name="a" value="b"/></include> AS name, b.name_ar,
+                       b.municipality_code, m.name_en AS municipality_name,
+                       b.district_key, d.name_en AS district_name,
+                       b.community_key, <include refid="communityName"><property name="a" value="c"/></include> AS community_name,
+                       b.plot_key, <include refid="plotName"><property name="a" value="p"/></include> AS plot_name,
+                       b.source, b.building_id, b.building_internal_id, b.bdms_building_id, b.gisid, b.physical_status,
+                       b.primary_usage_type, b.primary_use, b.secondary_usage_type, b.floors_count, b.height_m,
+                       b.completion_date::date AS completion_date, b.demolition_date::date AS demolition_date,
+                       b.start_date::date AS start_date, b.permit_id, b.construction_site_id, b.is_bdms,
+                       b.bdms_floors, b.bdms_units, round(ST_Area(b.geom::geography)::numeric, 1) AS footprint_sqm,
+                       <include refid="geo"><property name="a" value="b"/><property name="tol" value="0"/></include>
+                FROM theme.sp_building b
+                LEFT JOIN theme.sp_plot p ON p.plot_key = b.plot_key
+                LEFT JOIN theme.sp_community c ON c.community_key = b.community_key
+                LEFT JOIN theme.sp_district d ON d.district_key = b.district_key
+                LEFT JOIN theme.sp_municipality m ON m.municipality_code = b.municipality_code
+                WHERE b.building_key = #{key}
+            </when>
+            <when test="level == 'floor'">
+                SELECT f.floor_key AS key, <include refid="floorName"><property name="a" value="f"/></include> AS name, NULL AS name_ar,
+                       f.municipality_code, m.name_en AS municipality_name,
+                       f.district_key, d.name_en AS district_name,
+                       f.community_key, <include refid="communityName"><property name="a" value="c"/></include> AS community_name,
+                       f.plot_key, <include refid="plotName"><property name="a" value="p"/></include> AS plot_name,
+                       f.building_key, <include refid="buildingName"><property name="a" value="b"/></include> AS building_name,
+                       f.source, f.floor_id, f.bdms_building_id, f.floor_number, f.floor_seq, f.base_height_m, f.floor_height_m,
+                       f.area_sqm, f.building_status, f.plot_primary_use,
+                       (SELECT count(*) FROM theme.sp_floor x WHERE x.building_key = f.building_key) AS building_floors,
+                       <include refid="geoNoCentroid"><property name="a" value="f"/></include>
+                FROM theme.sp_floor f
+                LEFT JOIN theme.sp_building b ON b.building_key = f.building_key
+                LEFT JOIN theme.sp_plot p ON p.plot_key = f.plot_key
+                LEFT JOIN theme.sp_community c ON c.community_key = f.community_key
+                LEFT JOIN theme.sp_district d ON d.district_key = f.district_key
+                LEFT JOIN theme.sp_municipality m ON m.municipality_code = f.municipality_code
+                WHERE f.floor_key = #{key}
+            </when>
+            <when test="level == 'unit'">
+                SELECT u.unit_key AS key, <include refid="unitName"><property name="a" value="u"/></include> AS name, NULL AS name_ar,
+                       u.municipality_code, m.name_en AS municipality_name,
+                       u.district_key, d.name_en AS district_name,
+                       u.community_key, <include refid="communityName"><property name="a" value="c"/></include> AS community_name,
+                       u.plot_key, <include refid="plotName"><property name="a" value="p"/></include> AS plot_name,
+                       u.building_key, <include refid="buildingName"><property name="a" value="b"/></include> AS building_name,
+                       u.floor_key, <include refid="floorName"><property name="a" value="f"/></include> AS floor_name,
+                       u.unit_id, u.unit_number, u.unit_type, u.usage_type, u.classification, u.category, u.area_sqm,
+                       u.bedrooms, u.bathrooms, u.balcony_area_sqm, u.floor_number, u.base_height_m, u.floor_height_m,
+                       u.building_status,
+                       <include refid="geoNoCentroid"><property name="a" value="u"/></include>
+                FROM theme.sp_unit u
+                LEFT JOIN theme.sp_floor f ON f.floor_key = u.floor_key
+                LEFT JOIN theme.sp_building b ON b.building_key = u.building_key
+                LEFT JOIN theme.sp_plot p ON p.plot_key = u.plot_key
+                LEFT JOIN theme.sp_community c ON c.community_key = u.community_key
+                LEFT JOIN theme.sp_district d ON d.district_key = u.district_key
+                LEFT JOIN theme.sp_municipality m ON m.municipality_code = u.municipality_code
+                WHERE u.unit_key = #{key}
+            </when>
+        </choose>
+    </select>
+
+    <select id="stat" resultType="java.util.LinkedHashMap">
+        <choose>
+            <when test="level == 'emirate'">
+                SELECT (SELECT count(*) FROM theme.sp_municipality) AS municipalities,
+                       (SELECT count(*) FROM theme.sp_district) AS districts,
+                       sum(communities) AS communities, sum(plots) AS plots, sum(plots_constructed) AS plots_constructed,
+                       sum(plots_under_construction) AS plots_under_construction, sum(plots_not_constructed) AS plots_not_constructed,
+                       sum(plots_area_sqm) AS plots_area_sqm, sum(buildings) AS buildings,
+                       sum(buildings_under_construction) AS buildings_under_construction, sum(floors) AS floors,
+                       sum(units) AS units, sum(units_area_sqm) AS units_area_sqm
+                FROM theme.sp_node_stat WHERE level = 'municipality'
+            </when>
+            <when test="level == 'floor'">
+                SELECT count(*) AS units, coalesce(sum(area_sqm), 0) AS units_area_sqm,
+                       count(*) FILTER (WHERE bedrooms > 0) AS units_with_bedrooms, coalesce(sum(bedrooms), 0) AS bedrooms
+                FROM theme.sp_unit WHERE floor_key = #{key}
+            </when>
+            <when test="level == 'unit'">
+                SELECT 1 AS units
+            </when>
+            <otherwise>
+                SELECT
+                    <if test="level == 'municipality'">(SELECT count(*) FROM theme.sp_district WHERE municipality_code = #{key}) AS districts,</if>
+                    s.communities, s.plots, s.plots_constructed, s.plots_under_construction, s.plots_not_constructed,
+                    s.plots_area_sqm, s.buildings, s.buildings_under_construction, s.floors, s.units, s.units_area_sqm
+                FROM (SELECT 1) one
+                LEFT JOIN theme.sp_node_stat s ON s.level = #{level} AND s.node_key = #{key}
+            </otherwise>
+        </choose>
+    </select>
+
+    <!-- ============================== 下一级列表 ============================== -->
+
+    <sql id="childFrom">
+        <choose>
+            <when test="child == 'municipality'">
+                FROM theme.sp_municipality x
+                LEFT JOIN theme.sp_node_stat s ON s.level = 'municipality' AND s.node_key = x.municipality_code
+                WHERE 1 = 1
+                <if test="q != null">AND (x.name_en ILIKE '%' || #{q} || '%' OR x.municipality_code ILIKE #{q})</if>
+            </when>
+            <when test="child == 'district'">
+                FROM theme.sp_district x
+                LEFT JOIN theme.sp_node_stat s ON s.level = 'district' AND s.node_key = x.district_key
+                WHERE x.${col} = #{key}
+                <if test="q != null">AND (x.name_en ILIKE '%' || #{q} || '%' OR x.name_ar ILIKE '%' || #{q} || '%')</if>
+            </when>
+            <when test="child == 'community'">
+                FROM theme.sp_community x
+                LEFT JOIN theme.sp_node_stat s ON s.level = 'community' AND s.node_key = x.community_key
+                WHERE x.${col} = #{key}
+                <if test="q != null">AND (x.name_en ILIKE '%' || #{q} || '%' OR x.composite_name_en ILIKE '%' || #{q} || '%' OR x.community_id = #{q})</if>
+            </when>
+            <when test="child == 'plot'">
+                FROM theme.sp_plot x
+                LEFT JOIN theme.sp_node_stat s ON s.level = 'plot' AND s.node_key = x.plot_key
+                WHERE x.${col} = #{key} AND x.cancel_date IS NULL
+                <if test="q != null">AND (x.plot_number ILIKE '%' || #{q} || '%' OR x.gisid = #{q} OR x.plot_id = #{q})</if>
+            </when>
+            <when test="child == 'building'">
+                FROM theme.sp_building x
+                WHERE x.${col} = #{key}
+                <if test="q != null">AND (x.name_en ILIKE '%' || #{q} || '%' OR x.building_id = #{q} OR x.building_internal_id::text = #{q} OR x.bdms_building_id::text = #{q})</if>
+            </when>
+            <when test="child == 'floor'">
+                FROM theme.sp_floor x
+                WHERE x.${col} = #{key}
+                <if test="q != null">AND x.floor_number ILIKE '%' || #{q} || '%'</if>
+            </when>
+            <when test="child == 'unit'">
+                FROM theme.sp_unit x
+                WHERE x.${col} = #{key}
+                <if test="q != null">AND (x.unit_number ILIKE '%' || #{q} || '%' OR x.classification ILIKE '%' || #{q} || '%')</if>
+            </when>
+        </choose>
+    </sql>
+
+    <select id="children" resultType="java.util.LinkedHashMap">
+        <choose>
+            <when test="child == 'municipality'">
+                SELECT x.municipality_code AS "key", x.name_en AS "name", x.municipality_code AS "sub", x.area_km2 AS "areaKm2",
+                       (SELECT count(*) FROM theme.sp_district d WHERE d.municipality_code = x.municipality_code) AS "districts",
+                       s.communities AS "communities", s.plots AS "plots", s.buildings AS "buildings", s.units AS "units"
+            </when>
+            <when test="child == 'district'">
+                SELECT x.district_key AS "key", x.name_en AS "name", x.name_ar AS "sub", x.area_km2 AS "areaKm2",
+                       x.population AS "population", s.communities AS "communities", s.plots AS "plots",
+                       s.plots_constructed AS "plotsConstructed", s.buildings AS "buildings", s.units AS "units"
+            </when>
+            <when test="child == 'community'">
+                SELECT x.community_key AS "key", <include refid="communityName"><property name="a" value="x"/></include> AS "name",
+                       x.composite_name_en AS "sub", x.area_km2 AS "areaKm2",
+                       s.plots AS "plots", s.plots_constructed AS "plotsConstructed", s.buildings AS "buildings", s.units AS "units"
+            </when>
+            <when test="child == 'plot'">
+                SELECT x.plot_key AS "key", <include refid="plotName"><property name="a" value="x"/></include> AS "name",
+                       x.primary_use AS "sub", x.area_sqm AS "areaSqm", x.construction_status AS "status",
+                       x.primary_use AS "use", s.buildings AS "buildings", s.units AS "units"
+            </when>
+            <when test="child == 'building'">
+                SELECT x.building_key AS "key", <include refid="buildingName"><property name="a" value="x"/></include> AS "name",
+                       x.primary_use AS "sub", x.physical_status AS "status", x.source AS "source",
+                       x.floors_count AS "floorsCount", x.bdms_floors AS "floors", x.bdms_units AS "units", x.height_m AS "heightM"
+            </when>
+            <when test="child == 'floor'">
+                SELECT x.floor_key AS "key", <include refid="floorName"><property name="a" value="x"/></include> AS "name",
+                       x.source AS "sub", x.floor_seq AS "seq", x.base_height_m AS "baseHeightM", x.floor_height_m AS "floorHeightM",
+                       x.area_sqm AS "areaSqm",
+                       (SELECT count(*) FROM theme.sp_unit u WHERE u.floor_key = x.floor_key) AS "units"
+            </when>
+            <when test="child == 'unit'">
+                SELECT x.unit_key AS "key", <include refid="unitName"><property name="a" value="x"/></include> AS "name",
+                       x.classification AS "sub", x.unit_type AS "type", x.area_sqm AS "areaSqm",
+                       x.bedrooms AS "bedrooms", x.bathrooms AS "bathrooms", x.floor_key AS "floorKey"
+            </when>
+        </choose>
+        <include refid="childFrom"/>
+        ORDER BY
+        <choose>
+            <when test="child == 'floor'">x.floor_seq NULLS LAST</when>
+            <when test="child == 'unit'">x.base_height_m NULLS LAST, x.unit_number</when>
+            <when test="child == 'plot'">x.plot_number</when>
+            <when test="child == 'building'">x.bdms_units DESC NULLS LAST, x.height_m DESC NULLS LAST</when>
+            <otherwise>2</otherwise>
+        </choose>
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="childCount" resultType="long">
+        SELECT count(*) <include refid="childFrom"/>
+    </select>
+
+    <!-- ============================== 分组计数 ============================== -->
+
+    <select id="breakdown" resultType="java.util.LinkedHashMap">
+        SELECT ${dimExpr} AS "k", count(*) AS "n", round(coalesce(sum(${areaExpr}), 0)::numeric, 1) AS "area"
+        FROM theme.${table} x
+        WHERE ${extra}
+        <if test="col != null">AND x.${col} = #{key}</if>
+        GROUP BY 1
+        ORDER BY 2 DESC
+        LIMIT 24
+    </select>
+
+    <!-- ============================== 地图图层 ============================== -->
+
+    <select id="features" resultType="java.lang.String">
+        SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(f), '[]'::json))::text
+        FROM (
+        <choose>
+            <when test="layer == 'municipalities'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(ST_SimplifyPreserveTopology(x.geom, #{tol}), 5)::json,
+                       'properties', json_build_object('key', x.municipality_code, 'name', x.name_en, 'level', 'municipality',
+                                     'cx', ST_X(x.centroid), 'cy', ST_Y(x.centroid))) AS f
+                FROM theme.sp_municipality x
+            </when>
+            <when test="layer == 'districts'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(ST_SimplifyPreserveTopology(x.geom, #{tol}), 6)::json,
+                       'properties', json_build_object('key', x.district_key, 'name', x.name_en, 'level', 'district',
+                                     'm', x.municipality_code, 'cx', ST_X(x.centroid), 'cy', ST_Y(x.centroid),
+                                     'plots', s.plots, 'buildings', s.buildings, 'units', s.units,
+                                     'built', CASE WHEN s.plots > 0 THEN round(s.plots_constructed * 100.0 / s.plots, 1) END)) AS f
+                FROM theme.sp_district x
+                LEFT JOIN theme.sp_node_stat s ON s.level = 'district' AND s.node_key = x.district_key
+                <if test="col != null">WHERE x.${col} = #{key}</if>
+            </when>
+            <when test="layer == 'communities'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(ST_SimplifyPreserveTopology(x.geom, #{tol}), 6)::json,
+                       'properties', json_build_object('key', x.community_key, 'name',
+                                     <include refid="communityName"><property name="a" value="x"/></include>, 'level', 'community',
+                                     'cx', ST_X(x.centroid), 'cy', ST_Y(x.centroid),
+                                     'plots', s.plots, 'buildings', s.buildings, 'units', s.units,
+                                     'built', CASE WHEN s.plots > 0 THEN round(s.plots_constructed * 100.0 / s.plots, 1) END)) AS f
+                FROM theme.sp_community x
+                LEFT JOIN theme.sp_node_stat s ON s.level = 'community' AND s.node_key = x.community_key
+                WHERE x.${col} = #{key}
+            </when>
+            <when test="layer == 'plots'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.geom, 7)::json,
+                       'properties', json_build_object('key', x.plot_key, 'name',
+                                     <include refid="plotName"><property name="a" value="x"/></include>, 'level', 'plot',
+                                     's', x.construction_status, 'u', coalesce(x.primary_use, 'Undefined'),
+                                     'area', round(x.area_sqm, 0))) AS f
+                FROM theme.sp_plot x
+                WHERE x.${col} = #{key} AND x.cancel_date IS NULL
+                LIMIT #{limit}
+            </when>
+            <when test="layer == 'buildings'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.geom, 7)::json,
+                       'properties', json_build_object('key', x.building_key, 'name',
+                                     <include refid="buildingName"><property name="a" value="x"/></include>, 'level', 'building',
+                                     'src', x.source, 'st', x.physical_status, 'u', coalesce(x.primary_use, 'Undefined'),
+                                     'fd', x.bdms_floors IS NOT NULL,
+                                     'h', round(coalesce(nullif(x.height_m, 0), x.floors_count * 3.5, x.bdms_floors * 3.5, 6)::numeric, 1))) AS f
+                FROM theme.sp_building x
+                WHERE x.${col} = #{key}
+                LIMIT #{limit}
+            </when>
+            <when test="layer == 'floors'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.geom, 7)::json,
+                       'properties', json_build_object('key', x.floor_key, 'name',
+                                     <include refid="floorName"><property name="a" value="x"/></include>, 'level', 'floor',
+                                     'seq', x.floor_seq, 'b', coalesce(x.base_height_m, 0),
+                                     't', coalesce(x.base_height_m, 0) + coalesce(nullif(x.floor_height_m, 0), 3))) AS f
+                FROM theme.sp_floor x
+                WHERE x.${col} = #{key}
+                LIMIT #{limit}
+            </when>
+            <when test="layer == 'units'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.geom, 7)::json,
+                       'properties', json_build_object('key', x.unit_key, 'name',
+                                     <include refid="unitName"><property name="a" value="x"/></include>, 'level', 'unit',
+                                     'floor', x.floor_key, 'c', coalesce(x.classification, x.unit_type, 'Unknown'),
+                                     'b', coalesce(x.base_height_m, 0),
+                                     't', coalesce(x.base_height_m, 0) + coalesce(nullif(x.floor_height_m, 0), 3) - 0.15)) AS f
+                FROM theme.sp_unit x
+                WHERE x.${col} = #{key}
+                LIMIT #{limit}
+            </when>
+        </choose>
+        ) q
+    </select>
+
+    <!-- ============================== 搜索 ============================== -->
+
+    <select id="search" resultType="java.util.LinkedHashMap">
+        (SELECT 'district' AS "level", district_key AS "key", name_en AS "name", municipality_code AS "sub"
+         FROM theme.sp_district WHERE name_en ILIKE '%' || #{q} || '%' OR name_ar ILIKE '%' || #{q} || '%'
+         ORDER BY name_en LIMIT #{limit})
+        UNION ALL
+        (SELECT 'community', c.community_key, <include refid="communityName"><property name="a" value="c"/></include>, d.name_en
+         FROM theme.sp_community c LEFT JOIN theme.sp_district d ON d.district_key = c.district_key
+         WHERE c.name_en ILIKE '%' || #{q} || '%' OR c.composite_name_en ILIKE '%' || #{q} || '%'
+         ORDER BY c.name_en LIMIT #{limit})
+        UNION ALL
+        (SELECT 'plot', p.plot_key, <include refid="plotName"><property name="a" value="p"/></include>, d.name_en
+         FROM theme.sp_plot p LEFT JOIN theme.sp_district d ON d.district_key = p.district_key
+         WHERE p.gisid = #{q} OR p.plot_id = #{q} OR p.plot_number = #{q}
+         LIMIT #{limit})
+        UNION ALL
+        (SELECT 'building', b.building_key, <include refid="buildingName"><property name="a" value="b"/></include>, d.name_en
+         FROM theme.sp_building b LEFT JOIN theme.sp_district d ON d.district_key = b.district_key
+         WHERE b.building_id = #{q} OR b.building_internal_id::text = #{q} OR b.bdms_building_id::text = #{q}
+            OR (length(#{q}) >= 3 AND b.name_en ILIKE '%' || #{q} || '%')
+         LIMIT #{limit})
+    </select>
+
+    <select id="metaTables" resultType="java.util.LinkedHashMap">
+        SELECT table_name AS "table", theme AS "theme", title_zh AS "title", source_tables AS "sources",
+               extractor AS "extractor", row_count AS "rows", source_as_of AS "asOf", loaded_at AS "loadedAt"
+        FROM theme.meta_table
+        ORDER BY sort_no
+    </select>
+
+    <select id="lastRuns" resultType="java.util.LinkedHashMap">
+        SELECT DISTINCT ON (source) source AS "source", status AS "status", started_at AS "startedAt", finished_at AS "finishedAt",
+               row_count AS "rows", source_as_of AS "asOf", message AS "message"
+        FROM stat.etl_job_log
+        WHERE source LIKE #{prefix} || '%'
+        ORDER BY source, started_at DESC
+    </select>
+</mapper>

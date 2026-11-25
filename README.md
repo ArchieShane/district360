@@ -95,6 +95,14 @@ makani 源表的位置全部由配置决定，表全名 = `<schema>.<table-prefi
 
 > 当前本地配置指向 111 上的 `makani_sync_full`：2026-11-21 发现 109 服务器存在硬件导致的数据损坏，源库已于 2026-11-22 迁到 10.255.254.111:15432 并修复，过程见 [docs/109数据库迁移步骤.md](docs/109数据库迁移步骤.md)。
 
+## V1.0 空间下钻（ODS 主题库 + frontend-360）
+
+按产品原型 V1.0 从区域、社区、地块、建筑逐级下钻到楼层、单元。源数据由新模块 `backend/d360-ods` 从 ODS 库（`d360.datasource.ods`）抽取到本库的 `theme` schema，接口 `/api/v2/space/*`，前端为独立工程 `frontend-360/`。
+设计、主题表清单与 ODS 数据现状见 [docs/District360_V1.0_主题库设计.md](docs/District360_V1.0_主题库设计.md)，接口见 [docs/接口文档.md](docs/接口文档.md) 第 10 节。前端对接见 [docs/空间下钻接口_前端对接文档.md](docs/空间下钻接口_前端对接文档.md)。
+
+- 抽取：`POST /api/v1/admin/etl/ods-spatial`（也随每日定时任务运行）；升级前可在 ODS 库跑 `deploy/docker/check-ods-columns.sql` 检查字段。
+- 前端：`cd frontend-360 && npm ci && npm run dev`，打开 http://localhost:5174 ；开发代理目标用 `VITE_API_PROXY`（默认 http://localhost:8080）。
+
 ## 接口
 
 | 接口 | 用途 |
