@@ -63,6 +63,8 @@ curl http://127.0.0.1:8360/district360/api/v1/meta
 
 升级包（`district360-upgrade-*.tar.gz`）只含 `jar/` 和 `static/`：解压后覆盖到部署目录对应位置即可，**不会覆盖** `config/` 和 `.env`。
 
+如果新版抽取多读了源库字段，升级前先在离线环境的 makani 源库里执行 [check-makani-columns.sql](check-makani-columns.sql)。这个检查只读，结果为空才说明字段齐全、类型兼容。如果新版统计库迁移只加列不清表，升级后要手动触发一次抽取，或等 03:00 的定时抽取，新字段才会有值。
+
 ## 挂到域名的二级路由下（Nginx）
 
 容器内部已经带着 `/district360` 前缀，Nginx 原样转发、**不要去掉前缀**（`proxy_pass` 后面不写路径）：
