@@ -48,6 +48,18 @@ d360:
       username: ${D360_MAKANI_DB_USER:}
       password: ${D360_MAKANI_DB_PASSWORD:}
     # 宜居 / ADREC：配置 url 后对应模块才启用（见 application-local.example.yml）
+    # ODS（V1.0 主题库）：配置 d360.datasource.ods.url 后 d360-ods 才启用，写本库的 theme schema
+    #   环境变量：D360_DATASOURCE_ODS_URL / D360_DATASOURCE_ODS_USERNAME / D360_DATASOURCE_ODS_PASSWORD
+
+  # ODS 源表位置：表全名 = <schema>.<table-prefix><表名>，例如 ods.ods_makani_udm_district
+  #   fetch-size：流式读取每批行数；statement-timeout-seconds：单条 SQL 超时
+  #   municipality-codes：ods_makani_uae_all_municipalities.municipalityid → 市政编码（只取阿布扎比三个市政）
+  ods:
+    schema: ${D360_ODS_SCHEMA:ods}
+    table-prefix: ${D360_ODS_TABLE_PREFIX:ods_}
+    fetch-size: 5000
+    statement-timeout-seconds: 1800
+    municipality-codes: { 101: ADM, 102: AAM, 103: WRM }
 
   # makani 源表位置：表全名 = <schema>.<table-prefix><表名>，例如 ods.ods_makani_udm_district
   #   数据治理库 makani_1119      ：schema = ods，    table-prefix = ods_makani_

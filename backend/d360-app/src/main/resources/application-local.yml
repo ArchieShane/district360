@@ -22,6 +22,15 @@ d360:
       url: jdbc:postgresql://10.255.254.111:15432/liveability_data_20260730
       username: postgres
       password: "freedo"
+    # ODS 源库（V1.0 主题库：空间下钻等），d360-ods 抽取器读它，写统计库同库的 theme schema。
+    #   2026-11-25 起用 mock 库 makani_1119（ods schema，表名 ods_makani_*）：区域 216、社区 1864、地块 41 万、
+    #   建筑 38.3 万、BDMS 楼层 52.4 万、单元 72.8 万（地块、单元表 11-25 重新导入为全量；市政用 uae_all_municipalities）。
+    #   原 pop 库建筑、楼层表为空，换回时只改 url。
+    #   本地后端请关闭定时抽取（D360_ETL_ENABLED=false），避免与 109 线上每晚同时写同一个库。
+    ods:
+      url: jdbc:postgresql://10.255.254.111:15432/makani_1119?currentSchema=ods,public
+      username: postgres
+      password: "freedo"
     # ADREC 源库为只读。配置 URL 后启用抽取，坐标 SRID 以源方确认值为准。
     # 对应环境变量为 D360_DATASOURCE_ADREC_URL、D360_DATASOURCE_ADREC_USERNAME、
     # D360_DATASOURCE_ADREC_PASSWORD 和 D360_DATASOURCE_ADREC_SOURCESRID。

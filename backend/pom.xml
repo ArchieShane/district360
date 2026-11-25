@@ -23,6 +23,7 @@
         <module>d360-makani</module>
         <module>d360-liveability</module>
         <module>d360-adrec</module>
+        <module>d360-ods</module>
         <module>d360-app</module>
     </modules>
 
@@ -57,6 +58,11 @@
             <dependency>
                 <groupId>com.district360</groupId>
                 <artifactId>d360-adrec</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.district360</groupId>
+                <artifactId>d360-ods</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

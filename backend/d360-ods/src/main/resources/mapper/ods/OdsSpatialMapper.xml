@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  ODS → 主题库 · 空间下钻（市政 → 区域 → 社区 → 地块 → 建筑 → 楼层 → 单元）。
+
+  只做「源字段 → 主题字段」的映射和编码拼接，不做跨表关联：上下级关系写入主题库后统一关联
+  （d360-stat 的 ThemeSpatialWriteMapper.xml），避免在 ODS 上跑大表空间连接（ODS 表没有空间索引）。
+
+  几何：一律转二维、面转 MultiPolygon、EPSG:4326，以 EWKB hex 传给主题库。
+  编码：区域 = 市政-districtid（districtid 只在市政内唯一，216 个区已核对唯一）；
+        社区 = 市政-districtid-communityid（1864 个已核对唯一）；地块 = gisid；
+        建筑 = udm-buildinginternalid（为空时 udm-o<objectid>）；楼层 / 单元 = <市政>-<BDMS floorid / unitid>
+        （BDMS 编号只在市政内唯一，makani_1119 核对 floorid 5.4 万个、unitid 5.6 万个跨市政重复）。
+  改这里的取数口径时，同步更新 docs/District360_V1.0_主题库设计.md 与 deploy/docker/check-ods-columns.sql。
+-->
+<mapper namespace="com.district360.ods.mapper.OdsSpatialMapper">
+
+    <!-- 面几何 → MultiPolygon(4326) 的 EWKB hex；非面部分丢弃，SRID 为 0 的按 4326 处理 -->
+    <sql id="mpoly">
+        encode(ST_AsEWKB(ST_Multi(ST_CollectionExtract(ST_Force2D(
+            CASE WHEN ST_SRID(${col}) = 0 THEN ST_SetSRID(${col}, 4326) ELSE ST_Transform(${col}, 4326) END), 3))), 'hex')
+    </sql>
+
+    <!-- 只含数字的文本转 bigint（BDMS 编号是 numeric，可能带小数位 .00000000） -->
+    <sql id="numId">CASE WHEN ${col} IS NOT NULL THEN trunc(${col})::bigint END</sql>
+
+    <!-- BDMS 编号只在市政内唯一（ADM / AAM / WRM 各自编号），键里带上市政 -->
+    <sql id="bdmsMuni">coalesce(nullif(trim(municipalityeng), ''), 'NA')</sql>
+
+    <select id="municipalities" resultType="com.district360.common.theme.spatial.SpatialRows$Municipality" fetchSize="500">
+        SELECT CASE municipalityid
+                   <foreach collection="codes" index="id" item="code"> WHEN ${id} THEN #{code}</foreach>
+               END                AS municipality_code,
+               municipalityid     AS municipality_id,
+               nameen             AS name_en,
+               namear             AS name_ar,
+               <include refid="mpoly"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.municipality}
+        WHERE municipalityid IN (<foreach collection="codes" index="id" item="code" separator=",">${id}</foreach>)
+    </select>
+
+    <select id="districts" resultType="com.district360.common.theme.spatial.SpatialRows$District" fetchSize="500">
+        SELECT municipalityname || '-' || districtid AS district_key,
+               municipalityname                      AS municipality_code,
+               districtid                            AS district_id,
+               objectid                              AS src_objectid,
+               nameenglish                           AS name_en,
+               namearabic                            AS name_ar,
+               namepopularenglish                    AS popular_name_en,
+               population,
+               <include refid="mpoly"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.district}
+        WHERE districtid IS NOT NULL AND municipalityname IS NOT NULL
+    </select>
+
+    <select id="communities" resultType="com.district360.common.theme.spatial.SpatialRows$Community">
+        SELECT municipality || '-' || districtid || '-' || communityid AS community_key,
+               municipality || '-' || districtid                       AS district_key,
+               municipality                                            AS municipality_code,
+               CASE WHEN districtid ~ '^[0-9]+$' THEN districtid::int END AS district_id,
+               communityid                                             AS community_id,
+               objectid                                                AS src_objectid,
+               communitynameeng                                        AS name_en,
+               communitynameara                                        AS name_ar,
+               commpopnameeng                                          AS popular_name_en,
+               comnamecompositeeng                                     AS composite_name_en,
+               <include refid="mpoly"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.community}
+        WHERE communityid IS NOT NULL AND districtid IS NOT NULL
+    </select>
+
+    <!-- 全部地块（含已注销，cancel_date 非空），页面统计时再排除 -->
+    <select id="plots" resultType="com.district360.common.theme.spatial.SpatialRows$Plot">
+        SELECT gisid                      AS plot_key,
+               gisid,
+               plotid                     AS plot_id,
+               plotnumber                 AS plot_number,
+               elms_plotid                AS elms_plot_id,
+               coalesce(nullif(municipalityeng, ''), municipalityname) AS src_municipality,
+               districtid                 AS src_district_id,
+               districteng                AS src_district_en,
+               communityid                AS src_community_id,
+               communityeng               AS src_community_en,
+               calculatedarea             AS area_sqm,
+               plannedareametric          AS planned_area_sqm,
+               construction_status,
+               servicestatus              AS service_status,
+               planningstatus             AS planning_status,
+               status                     AS plot_status,
+               primaryuseengdesc          AS primary_use,
+               elms_parentlanduse_e       AS parent_land_use,
+               elms_landusename_e         AS land_use,
+               secuseeng                  AS secondary_use,
+               ownershiptype              AS ownership_type,
+               elms_allocationstatus      AS allocation_status,
+               investment_name,
+               devcode,
+               devcode_category,
+               devcode_far,
+               devcode_maxgfa             AS devcode_max_gfa,
+               maxallowableheights        AS max_heights,
+               zonetpss                   AS zone_tpss,
+               sectortpss                 AS sector_tpss,
+               projectid                  AS project_id,
+               permit_lasttype            AS permit_last_type,
+               permit_lastdate            AS permit_last_date,
+               canceldate                 AS cancel_date,
+               modifieddate               AS modified_date,
+               datareceiveddate           AS data_received_date,
+               <include refid="mpoly"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.plot}
+        WHERE gisid IS NOT NULL AND shape IS NOT NULL
+    </select>
+
+    <select id="buildings" resultType="com.district360.common.theme.spatial.SpatialRows$Building">
+        SELECT coalesce('udm-' || buildinginternalid, 'udm-o' || objectid) AS building_key,
+               'udm'                         AS source,
+               objectid                      AS udm_objectid,
+               buildingid                    AS building_id,
+               buildinginternalid            AS building_internal_id,
+               gisid,
+               elms_plotid                   AS elms_plot_id,
+               nameenglish                   AS name_en,
+               namearabic                    AS name_ar,
+               physicalstatus                AS physical_status,
+               primaryusagetype              AS primary_usage_type,
+               primaryuseengdesc             AS primary_use,
+               secondaryusagetype            AS secondary_usage_type,
+               buildingnumberoffloors        AS floors_count,
+               buildingheight                AS height_m,
+               completiondate                AS completion_date,
+               demolitiondate                AS demolition_date,
+               startdate                     AS start_date,
+               permitid                      AS permit_id,
+               constructionsiteid            AS construction_site_id,
+               is_bdms,
+               <include refid="mpoly"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.building}
+        WHERE shape IS NOT NULL
+    </select>
+
+    <select id="floors" resultType="com.district360.common.theme.spatial.SpatialRows$Floor">
+        SELECT <include refid="bdmsMuni"/> || '-' || trunc(floorid)::bigint AS floor_key,
+               trunc(floorid)::bigint        AS floor_id,
+               <include refid="numId"><property name="col" value="buildingid"/></include> AS bdms_building_id,
+               <include refid="bdmsMuni"/>   AS bdms_municipality,
+               floornumber                   AS floor_number,
+               floor_baseheight              AS base_height_m,
+               floorheight                   AS floor_height_m,
+               area_sqm,
+               bldg_buildingstatus           AS building_status,
+               plots_primaryuseeng           AS plot_primary_use,
+               <include refid="mpoly"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.floors}
+        WHERE floorid IS NOT NULL
+    </select>
+
+    <select id="units" resultType="com.district360.common.theme.spatial.SpatialRows$Unit">
+        SELECT <include refid="bdmsMuni"/> || '-' || trunc(unitid)::bigint AS unit_key,
+               trunc(unitid)::bigint         AS unit_id,
+               <include refid="numId"><property name="col" value="floorid"/></include>    AS floor_id,
+               <include refid="numId"><property name="col" value="buildingid"/></include> AS bdms_building_id,
+               <include refid="bdmsMuni"/>   AS bdms_municipality,
+               unitnumber                    AS unit_number,
+               unittype                      AS unit_type,
+               unitusagetype                 AS usage_type,
+               unitclassification            AS classification,
+               unitcategory                  AS category,
+               unitarea                      AS area_sqm,
+               unitnumbedroom                AS bedrooms,
+               unitnumbathroom               AS bathrooms,
+               unitbalconiesarea             AS balcony_area_sqm,
+               floornumber                   AS floor_number,
+               floor_baseheight              AS base_height_m,
+               floorheight                   AS floor_height_m,
+               bldg_buildingstatus           AS building_status,
+               <include refid="mpoly"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.units}
+        WHERE unitid IS NOT NULL
+    </select>
+
+    <select id="dataDate" resultType="java.time.LocalDate">
+        <!-- 只用区域表：单表重新导入（如 Navicat 拷贝）的表可能没有 ODS 入库时间列 trs_moye_input_time -->
+        SELECT max(trs_moye_input_time)::date FROM ${t.district}
+    </select>
+</mapper>

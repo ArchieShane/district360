@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 空间下钻：写入（分批 INSERT，主键冲突跳过）+ 写入后在主题库内关联上下级、汇总。
+
+  关联口径（与统计库一致：属性能对上用属性，对不上用「对象内点落在上级面内」）：
+    社区 → 区域   ：(municipality, districtid) 属性；对不上的按社区内点落在区域面内
+    地块 → 社区   ：(municipalityeng, districtid, communityid) 属性；对不上的按地块内点落在社区面内
+    建筑 → 地块   ：先按 gisid，再按建筑内点落在（未注销）地块面内；社区 / 区域随地块，没有地块的按位置
+    BDMS → 建筑   ：BDMS buildingid 与 udm 建筑编号不是一套（已核对 objectid / buildingid / buildinginternalid 都对不上），
+                   取该楼最低一层的面内一点落在哪个 udm 建筑面内；匹配不上的用楼层 / 单元外包面生成 bdms 建筑
+    楼层 → 建筑   ：BDMS buildingid；单元 → 楼层：floorid
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeSpatialWriteMapper">
+
+    <sql id="g">ST_GeomFromEWKB(decode(#{r.geomHex}, 'hex'))</sql>
+    <sql id="pt">theme.inner_point(ST_GeomFromEWKB(decode(#{r.geomHex}, 'hex')))</sql>
+
+    <insert id="insertMunicipalities">
+        INSERT INTO theme.sp_municipality (municipality_code, municipality_id, name_en, name_ar, centroid, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.municipalityCode}, #{r.municipalityId}, #{r.nameEn}, #{r.nameAr}, <include refid="pt"/>, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertDistricts">
+        INSERT INTO theme.sp_district (district_key, municipality_code, district_id, src_objectid, name_en, name_ar,
+                                       popular_name_en, population, centroid, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.districtKey}, #{r.municipalityCode}, #{r.districtId}, #{r.srcObjectid}, #{r.nameEn}, #{r.nameAr},
+             #{r.popularNameEn}, #{r.population}, <include refid="pt"/>, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertCommunities">
+        INSERT INTO theme.sp_community (community_key, district_key, municipality_code, district_id, community_id, src_objectid,
+                                        name_en, name_ar, popular_name_en, composite_name_en, centroid, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.communityKey}, #{r.districtKey}, #{r.municipalityCode}, #{r.districtId}, #{r.communityId}, #{r.srcObjectid},
+             #{r.nameEn}, #{r.nameAr}, #{r.popularNameEn}, #{r.compositeNameEn}, <include refid="pt"/>, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertPlots">
+        INSERT INTO theme.sp_plot (plot_key, gisid, plot_id, plot_number, elms_plot_id, src_municipality, src_district_id,
+                                   src_district_en, src_community_id, src_community_en, area_sqm, planned_area_sqm,
+                                   construction_status, service_status, planning_status, plot_status, primary_use,
+                                   parent_land_use, land_use, secondary_use, ownership_type, allocation_status, investment_name,
+                                   devcode, devcode_category, devcode_far, devcode_max_gfa, max_heights, zone_tpss, sector_tpss,
+                                   project_id, permit_last_type, permit_last_date, cancel_date, modified_date, data_received_date,
+                                   centroid, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.plotKey}, #{r.gisid}, #{r.plotId}, #{r.plotNumber}, #{r.elmsPlotId}, #{r.srcMunicipality}, #{r.srcDistrictId},
+             #{r.srcDistrictEn}, #{r.srcCommunityId}, #{r.srcCommunityEn}, #{r.areaSqm}, #{r.plannedAreaSqm},
+             #{r.constructionStatus}, #{r.serviceStatus}, #{r.planningStatus}, #{r.plotStatus}, #{r.primaryUse},
+             #{r.parentLandUse}, #{r.landUse}, #{r.secondaryUse}, #{r.ownershipType}, #{r.allocationStatus}, #{r.investmentName},
+             #{r.devcode}, #{r.devcodeCategory}, #{r.devcodeFar}, #{r.devcodeMaxGfa}, #{r.maxHeights}, #{r.zoneTpss}, #{r.sectorTpss},
+             #{r.projectId}, #{r.permitLastType}, #{r.permitLastDate}, #{r.cancelDate}, #{r.modifiedDate}, #{r.dataReceivedDate},
+             <include refid="pt"/>, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertBuildings">
+        INSERT INTO theme.sp_building (building_key, source, udm_objectid, building_id, building_internal_id, gisid, elms_plot_id,
+                                       name_en, name_ar, physical_status, primary_usage_type, primary_use, secondary_usage_type,
+                                       floors_count, height_m, completion_date, demolition_date, start_date, permit_id,
+                                       construction_site_id, is_bdms, centroid, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.buildingKey}, #{r.source}, #{r.udmObjectid}, #{r.buildingId}, #{r.buildingInternalId}, #{r.gisid}, #{r.elmsPlotId},
+             #{r.nameEn}, #{r.nameAr}, #{r.physicalStatus}, #{r.primaryUsageType}, #{r.primaryUse}, #{r.secondaryUsageType},
+             #{r.floorsCount}, #{r.heightM}, #{r.completionDate}, #{r.demolitionDate}, #{r.startDate}, #{r.permitId},
+             #{r.constructionSiteId}, #{r.isBdms}, <include refid="pt"/>, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertFloors">
+        INSERT INTO theme.sp_floor (floor_key, source, floor_id, bdms_building_id, bdms_municipality, floor_number, base_height_m,
+                                    floor_height_m, area_sqm, building_status, plot_primary_use, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.floorKey}, 'bdms_floors', #{r.floorId}, #{r.bdmsBuildingId}, #{r.bdmsMunicipality}, #{r.floorNumber}, #{r.baseHeightM}, #{r.floorHeightM},
+             #{r.areaSqm}, #{r.buildingStatus}, #{r.plotPrimaryUse}, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertUnits">
+        INSERT INTO theme.sp_unit (unit_key, unit_id, floor_id, bdms_building_id, bdms_municipality, unit_number, unit_type, usage_type,
+                                   classification, category, area_sqm, bedrooms, bathrooms, balcony_area_sqm, floor_number, base_height_m,
+                                   floor_height_m, building_status, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.unitKey}, #{r.unitId}, #{r.floorId}, #{r.bdmsBuildingId}, #{r.bdmsMunicipality}, #{r.unitNumber}, #{r.unitType}, #{r.usageType},
+             #{r.classification}, #{r.category}, #{r.areaSqm}, #{r.bedrooms}, #{r.bathrooms}, #{r.balconyAreaSqm}, #{r.floorNumber},
+             #{r.baseHeightM}, #{r.floorHeightM}, #{r.buildingStatus}, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <!-- ============================== 关联 ============================== -->
+
+    <!-- BDMS 编号只在市政内唯一：楼层 / 单元 / 建筑一律按 (bdms_municipality, 编号) 关联 -->
+    <insert id="deriveFloorsFromUnits">
+        INSERT INTO theme.sp_floor (floor_key, source, floor_id, bdms_building_id, bdms_municipality, floor_number, base_height_m,
+                                    floor_height_m, area_sqm, building_status, geom)
+        SELECT u.bdms_municipality || '-' || u.floor_id, 'bdms_units', u.floor_id, max(u.bdms_building_id), u.bdms_municipality,
+               max(u.floor_number), max(u.base_height_m), max(u.floor_height_m), sum(u.area_sqm), max(u.building_status),
+               ST_Multi(ST_CollectionExtract(ST_Collect(u.geom), 3))
+        FROM theme.sp_unit u
+        WHERE u.floor_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM theme.sp_floor f WHERE f.floor_key = u.bdms_municipality || '-' || u.floor_id)
+        GROUP BY u.bdms_municipality, u.floor_id
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <!-- 单元同步时先删上一次由单元推导的楼层 -->
+    <delete id="deleteDerivedFloors">
+        DELETE FROM theme.sp_floor WHERE source = 'bdms_units'
+    </delete>
+
+    <!-- 还没对应建筑的 BDMS 楼的代表点（最低一层面内一点）；全量抽取时就是全部 BDMS 楼 -->
+    <update id="createBdmsPoints">
+        CREATE TEMP TABLE tmp_bdms_pt ON COMMIT DROP AS
+        SELECT DISTINCT ON (f.bdms_municipality, f.bdms_building_id)
+               f.bdms_municipality AS muni, f.bdms_building_id AS id, theme.inner_point(f.geom) AS pt
+        FROM theme.sp_floor f
+        WHERE f.bdms_building_id IS NOT NULL AND f.geom IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM theme.sp_building b
+                          WHERE b.bdms_municipality = f.bdms_municipality AND b.bdms_building_id = f.bdms_building_id)
+        ORDER BY f.bdms_municipality, f.bdms_building_id, f.base_height_m NULLS LAST
+    </update>
+
+    <update id="indexBdmsPoints">
+        CREATE INDEX ON tmp_bdms_pt USING gist (pt)
+    </update>
+
+    <!--
+      还没对应 BDMS 的 udm 建筑面，复制到临时表再匹配：theme.sp_building 刚在本事务里整表删除重写，
+      旧行（含上一次的大外包面）的空间索引条目要等 VACUUM 才清掉，直接查主表每个点都要翻过这些死条目，会慢几十倍。
+    -->
+    <update id="createUdmFootprints">
+        CREATE TEMP TABLE tmp_udm_fp ON COMMIT DROP AS
+        SELECT building_key, geom, ST_Area(geom) AS a
+        FROM theme.sp_building
+        WHERE source = 'udm' AND bdms_building_id IS NULL AND geom IS NOT NULL
+    </update>
+
+    <update id="indexUdmFootprints">
+        CREATE INDEX ON tmp_udm_fp USING gist (geom)
+    </update>
+
+    <update id="analyzeUdmFootprints">
+        ANALYZE tmp_udm_fp
+    </update>
+
+    <!-- 临时表没有统计信息，规划器会按默认行数估算 -->
+    <update id="analyzeBdmsPoints">
+        ANALYZE tmp_bdms_pt
+    </update>
+
+    <update id="matchBdmsBuildings">
+        WITH m AS (
+            SELECT DISTINCT ON (t.muni, t.id) t.muni, t.id, b.building_key
+            FROM tmp_bdms_pt t
+            JOIN tmp_udm_fp b ON b.geom &amp;&amp; t.pt AND ST_Intersects(b.geom, t.pt)
+            WHERE t.pt IS NOT NULL
+            ORDER BY t.muni, t.id, b.a)
+        UPDATE theme.sp_building b
+           SET bdms_building_id = m.id, bdms_municipality = m.muni
+          FROM m
+         WHERE b.building_key = m.building_key
+    </update>
+
+    <insert id="insertBdmsBuildings">
+        WITH f AS (
+            SELECT bdms_municipality AS muni, bdms_building_id AS id, floor_id, building_status,
+                   coalesce(base_height_m, 0) + coalesce(floor_height_m, 0) AS top, geom
+            FROM theme.sp_floor
+            WHERE bdms_building_id IS NOT NULL AND geom IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM theme.sp_building b
+                              WHERE b.bdms_municipality = sp_floor.bdms_municipality AND b.bdms_building_id = sp_floor.bdms_building_id)),
+             g AS (
+            SELECT muni, id, max(building_status) AS status, count(DISTINCT floor_id) AS floors, nullif(max(top), 0) AS top,
+                   ST_Multi(ST_CollectionExtract(ST_ConvexHull(ST_Collect(geom)), 3)) AS geom
+            FROM f
+            GROUP BY muni, id)
+        INSERT INTO theme.sp_building (building_key, source, bdms_building_id, bdms_municipality, physical_status, floors_count,
+                                       height_m, centroid, geom)
+        SELECT 'bdms-' || muni || '-' || id, 'bdms', id, muni, status, floors, top, theme.inner_point(geom), geom
+        FROM g
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <!-- 单元同步后，只由已删除的推导楼层撑着的 bdms 建筑不再有楼层，删掉 -->
+    <delete id="deleteOrphanBdmsBuildings">
+        DELETE FROM theme.sp_building b
+         WHERE b.source = 'bdms'
+           AND NOT EXISTS (SELECT 1 FROM theme.sp_floor f
+                           WHERE f.bdms_municipality = b.bdms_municipality AND f.bdms_building_id = b.bdms_building_id)
+    </delete>
+
+    <insert id="fillMunicipalitiesFromDistricts">
+        INSERT INTO theme.sp_municipality (municipality_code, name_en, geom)
+        SELECT municipality_code, municipality_code, ST_Multi(ST_CollectionExtract(ST_Union(geom), 3))
+        FROM theme.sp_district
+        WHERE municipality_code NOT IN (SELECT municipality_code FROM theme.sp_municipality)
+        GROUP BY municipality_code
+    </insert>
+
+    <update id="fillAreas">
+        UPDATE theme.sp_municipality
+           SET area_km2 = round((ST_Area(geom::geography) / 1e6)::numeric, 3),
+               centroid = coalesce(centroid, theme.inner_point(geom));
+        UPDATE theme.sp_district SET area_km2 = round((ST_Area(geom::geography) / 1e6)::numeric, 3);
+        UPDATE theme.sp_community SET area_km2 = round((ST_Area(geom::geography) / 1e6)::numeric, 3)
+    </update>
+
+    <update id="linkCommunitiesToDistricts">
+        UPDATE theme.sp_community c SET district_key = NULL, municipality_code = NULL
+         WHERE NOT EXISTS (SELECT 1 FROM theme.sp_district d WHERE d.district_key = c.district_key);
+        UPDATE theme.sp_community c
+           SET district_key = d.district_key, municipality_code = d.municipality_code
+          FROM theme.sp_district d
+         WHERE c.district_key IS NULL
+           AND d.geom &amp;&amp; c.centroid AND ST_Intersects(d.geom, c.centroid)
+    </update>
+
+    <!-- 地块自带 municipalityeng + districtid + communityid，与社区编码同一套（makani_1119 抽查 2 万块 100% 对上） -->
+    <update id="linkPlotsByAttributes">
+        UPDATE theme.sp_plot p
+           SET community_key = c.community_key, district_key = c.district_key, municipality_code = c.municipality_code
+          FROM theme.sp_community c
+         WHERE c.community_key = p.src_municipality || '-' || p.src_district_id || '-' || p.src_community_id
+    </update>
+
+    <!-- 属性对不上的再按位置 -->
+    <update id="linkPlotsToCommunities">
+        UPDATE theme.sp_plot p
+           SET community_key = c.community_key, district_key = c.district_key, municipality_code = c.municipality_code
+          FROM theme.sp_community c
+         WHERE p.community_key IS NULL
+           AND c.geom &amp;&amp; p.centroid AND ST_Intersects(c.geom, p.centroid)
+    </update>
+
+    <update id="linkPlotsToDistricts">
+        UPDATE theme.sp_plot p
+           SET district_key = d.district_key, municipality_code = d.municipality_code
+          FROM theme.sp_district d
+         WHERE p.district_key IS NULL
+           AND d.geom &amp;&amp; p.centroid AND ST_Intersects(d.geom, p.centroid)
+    </update>
+
+    <update id="linkBuildingsByGisid">
+        UPDATE theme.sp_building b
+           SET plot_key = p.plot_key
+          FROM theme.sp_plot p
+         WHERE b.plot_key IS NULL AND b.gisid IS NOT NULL AND p.gisid = b.gisid
+    </update>
+
+    <update id="linkBuildingsByLocation">
+        UPDATE theme.sp_building b
+           SET plot_key = p.plot_key
+          FROM theme.sp_plot p
+         WHERE b.plot_key IS NULL AND p.cancel_date IS NULL
+           AND p.geom &amp;&amp; b.centroid AND ST_Intersects(p.geom, b.centroid)
+    </update>
+
+    <update id="propagateBuildingsFromPlots">
+        UPDATE theme.sp_building b
+           SET community_key = p.community_key, district_key = p.district_key, municipality_code = p.municipality_code
+          FROM theme.sp_plot p
+         WHERE p.plot_key = b.plot_key
+    </update>
+
+    <update id="linkBuildingsToCommunities">
+        UPDATE theme.sp_building b
+           SET community_key = c.community_key, district_key = c.district_key, municipality_code = c.municipality_code
+          FROM theme.sp_community c
+         WHERE b.community_key IS NULL
+           AND c.geom &amp;&amp; b.centroid AND ST_Intersects(c.geom, b.centroid)
+    </update>
+
+    <update id="linkFloorsToBuildings">
+        UPDATE theme.sp_floor f
+           SET building_key = b.building_key, plot_key = b.plot_key, community_key = b.community_key,
+               district_key = b.district_key, municipality_code = b.municipality_code
+          FROM theme.sp_building b
+         WHERE b.bdms_municipality = f.bdms_municipality AND b.bdms_building_id = f.bdms_building_id
+        <if test="onlyMissing">AND f.building_key IS NULL</if>
+    </update>
+
+    <update id="numberFloors">
+        UPDATE theme.sp_floor f
+           SET floor_seq = s.rn
+          FROM (SELECT floor_key,
+                       row_number() OVER (PARTITION BY coalesce(building_key, 'b' || bdms_municipality || bdms_building_id)
+                                          ORDER BY base_height_m NULLS LAST, floor_number) AS rn
+                FROM theme.sp_floor) s
+         WHERE s.floor_key = f.floor_key
+    </update>
+
+    <update id="linkUnitsToFloors">
+        UPDATE theme.sp_unit u
+           SET floor_key = f.floor_key, building_key = f.building_key, plot_key = f.plot_key,
+               community_key = f.community_key, district_key = f.district_key, municipality_code = f.municipality_code
+          FROM theme.sp_floor f
+         WHERE f.floor_key = u.bdms_municipality || '-' || u.floor_id
+    </update>
+
+    <update id="fillBuildingCounts">
+        UPDATE theme.sp_building SET bdms_floors = NULL, bdms_units = NULL
+         WHERE bdms_floors IS NOT NULL OR bdms_units IS NOT NULL;
+        UPDATE theme.sp_building b SET bdms_floors = s.n
+          FROM (SELECT building_key, count(*) AS n FROM theme.sp_floor WHERE building_key IS NOT NULL GROUP BY 1) s
+         WHERE s.building_key = b.building_key;
+        UPDATE theme.sp_building b SET bdms_units = s.n
+          FROM (SELECT building_key, count(*) AS n FROM theme.sp_unit WHERE building_key IS NOT NULL GROUP BY 1) s
+         WHERE s.building_key = b.building_key
+    </update>
+
+    <!-- 各级计数：每条记录按自己的各级编码展开（CROSS JOIN LATERAL VALUES），再按 (level, node_key) 汇总 -->
+    <insert id="computeNodeStats">
+        INSERT INTO theme.sp_node_stat (level, node_key, communities, plots, plots_constructed, plots_under_construction,
+                                        plots_not_constructed, plots_area_sqm, buildings, buildings_under_construction,
+                                        floors, units, units_area_sqm)
+        SELECT v.level, v.node_key,
+               sum(x.communities), sum(x.plots), sum(x.plots_constructed), sum(x.plots_uc), sum(x.plots_nc),
+               coalesce(sum(x.plots_area), 0), sum(x.buildings), sum(x.buildings_uc), sum(x.floors), sum(x.units),
+               coalesce(sum(x.units_area), 0)
+        FROM (
+            SELECT municipality_code, district_key, NULL::varchar AS community_key, NULL::varchar AS plot_key, NULL::varchar AS building_key,
+                   1 AS communities, 0 AS plots, 0 AS plots_constructed, 0 AS plots_uc, 0 AS plots_nc, 0::numeric AS plots_area,
+                   0 AS buildings, 0 AS buildings_uc, 0 AS floors, 0 AS units, 0::numeric AS units_area
+            FROM theme.sp_community
+            UNION ALL
+            SELECT municipality_code, district_key, community_key, NULL, NULL,
+                   0, 1,
+                   coalesce((construction_status = 'Constructed')::int, 0),
+                   coalesce((construction_status = 'Under Construction')::int, 0),
+                   coalesce((construction_status = 'Not Constructed')::int, 0),
+                   coalesce(area_sqm, 0), 0, 0, 0, 0, 0
+            FROM theme.sp_plot WHERE cancel_date IS NULL
+            UNION ALL
+            SELECT municipality_code, district_key, community_key, plot_key, NULL,
+                   0, 0, 0, 0, 0, 0, 1,
+                   (lower(replace(coalesce(physical_status, ''), ' ', '')) = 'underconstruction')::int, 0, 0, 0
+            FROM theme.sp_building
+            UNION ALL
+            SELECT municipality_code, district_key, community_key, plot_key, building_key,
+                   0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0
+            FROM theme.sp_floor
+            UNION ALL
+            SELECT municipality_code, district_key, community_key, plot_key, building_key,
+                   0, 0, 0, 0, 0, 0, 0, 0, 0, 1, coalesce(area_sqm, 0)
+            FROM theme.sp_unit
+        ) x
+        CROSS JOIN LATERAL (VALUES ('municipality', x.municipality_code), ('district', x.district_key),
+                                   ('community', x.community_key), ('plot', x.plot_key), ('building', x.building_key)) v(level, node_key)
+        WHERE v.node_key IS NOT NULL
+        GROUP BY v.level, v.node_key
+    </insert>
+
+    <update id="updateMeta">
+        UPDATE theme.meta_table
+           SET row_count = #{rows}, source_as_of = #{asOf}, loaded_at = now()
+         WHERE table_name = #{table}
+    </update>
+</mapper>
