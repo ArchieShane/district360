@@ -24,3 +24,9 @@ frontend/.env.*.local
 
 # Docker 部署包产物
 deploy/docker/out/
+
+# Frontend 360 (V1.0 空间下钻)
+frontend-360/node_modules/
+frontend-360/dist/
+frontend-360/.env.local
+frontend-360/.env.*.local
