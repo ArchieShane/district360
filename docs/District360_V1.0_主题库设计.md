@@ -58,7 +58,22 @@ Flyway：`V10__theme_spatial.sql`（空间）、`V11__theme_business.sql`（业�
 
 资本项目 `dev_capital_project`、建设许可 `dev_permit`、竣工 / 维修 / 拆除 `dev_building_application` 的源视图（view_gsec_*、view_emecs_dashboard、view_meps_*）在 pop 库为 0 行、makani_1119 里没有这些表，暂未接入。
 
-### 2.3 其他业务主题（已建表，待接入）
+### 2.3 市场（部分接入，`ods-mkt`，2026-11-26）
+
+迁移 V16。抽取器 `ods-mkt` 在每日定时里排在 `ods-spatial`、`ods-dev` 之后，读当前 ODS 库；**源表不存在时跳过该表**，在 `theme.meta_table.note` 记「ODS 无源表：…」，页面据此提示，导入后下次抽取自动接上。约 10 秒。
+
+| 表 | 行数（makani_1119） | ODS 源表 | 关联口径 |
+|---|---|---|---|
+| `mkt_tenancy` | 10,000（9,112 份租约、3,001 个单元） | makani_tbl_tawtheeq_all | gisid → 地块（9,973 条，99.7%），社区 / 区域随地块；单元级需 tbl_bdms_tawtheeq_link_data，当前 50 行桥接与样例对不上，暂不关联 |
+| `mkt_sale` / `mkt_mortgage` / `mkt_rent` | 0（源表未导入） | re_x_q21_matview_sale / mortgage / rent | 经纬度点落未注销地块、建筑；社区 / 区域随地块，没有地块的按点落社区（源 district / community 是文本，不用） |
+| `mkt_plot_transaction` | 0（源表未导入） | re_elms_buy_and_sell_f、re_elms_mortgages_f | elms_plot_id → 地块 |
+
+- **个人信息不入主题库**：Tawtheeq 的租户、出租人、联系人姓名不抽。
+- Tawtheeq `rental_value` 为**年租金**（AED；公寓中位数 72,000、合同平均约 1 年）。少数大额合同会把平均值拉高数倍（公寓平均 42 万），所以接口一律给**中位数**；单位面积租金用 Σ租金 ÷ Σ面积。
+- 样例数据起租 2010-12 至到期 2024-12；「生效中」按源状态 ACTIVE，部分已过到期日。
+- ADREC / ELMS 抽取 SQL 已在 pop 库（各 10 行样例）上验证可执行。
+
+### 2.4 其他业务主题（已建表，待接入）
 
 | 主题 | 表 | ODS 源表 | 空间归属 |
 |---|---|---|---|
