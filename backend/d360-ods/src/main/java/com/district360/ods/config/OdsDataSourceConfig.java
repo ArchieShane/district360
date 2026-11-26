@@ -1,6 +1,8 @@
 package com.district360.ods.config;
 
+import com.district360.ods.extract.OdsDevExtractor;
 import com.district360.ods.extract.OdsSpatialExtractor;
+import com.district360.ods.mapper.OdsDevMapper;
 import com.district360.ods.extract.OdsUnitExtractor;
 import com.district360.ods.mapper.OdsSpatialMapper;
 import com.zaxxer.hikari.HikariDataSource;
@@ -14,6 +16,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
 import javax.sql.DataSource;
@@ -61,12 +64,21 @@ public class OdsDataSourceConfig {
         return factory.getObject();
     }
 
+    /** 顺序即每日定时抽取的顺序：空间先跑，其他主题按空间结果关联。 */
     @Bean
+    @Order(1)
     public OdsSpatialExtractor odsSpatialExtractor(OdsSpatialMapper mapper, OdsProperties properties) {
         return new OdsSpatialExtractor(mapper, properties);
     }
 
     @Bean
+    @Order(2)
+    public OdsDevExtractor odsDevExtractor(OdsDevMapper mapper, OdsProperties properties) {
+        return new OdsDevExtractor(mapper, properties);
+    }
+
+    @Bean
+    @Order(3)
     public OdsUnitExtractor odsUnitExtractor(OdsSpatialMapper mapper, OdsProperties properties) {
         return new OdsUnitExtractor(mapper, properties);
     }

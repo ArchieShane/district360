@@ -1,4 +1,4 @@
--- 升级前检查：ODS 源库里有没有 ODS 空间抽取（d360-ods，source = ods-spatial）要用的字段，类型是否兼容（只读，不改任何数据）。
+-- 升级前检查：ODS 源库里有没有 ODS 抽取（d360-ods：ods-spatial、ods-dev）要用的字段，类型是否兼容（只读，不改任何数据）。
 -- 在 ODS 库里执行。使用前按 config/application-prod.yml 的 d360.ods.schema / table-prefix 改 params（默认 ods / ods_）。
 --
 -- 结果为空 = 全部通过。有结果 = 列出的字段缺失或类型不兼容，ods-spatial 抽取会失败（主题库保持旧数据），发给开发处理。
@@ -7,6 +7,60 @@ WITH params AS (
     SELECT 'ods'::text AS schema, 'ods_'::text AS table_prefix
 ),
 expected(tbl, col, kind) AS (VALUES
+    -- makani_masterplan_ud_masterplan_boundary（ods-dev）
+    ('makani_masterplan_ud_masterplan_boundary', 'shape', 'geom'),
+    ('makani_masterplan_ud_masterplan_boundary', 'projectid', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'projectno', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'project_name', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'stage_dm', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'approvalyear', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'developer_name', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'municipality', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'districtid', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'communityid', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'masterplan_level', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'projecttype_dm', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'projectlead', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'owner_name', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'parent_project_number', 'text'),
+    ('makani_masterplan_ud_masterplan_boundary', 'trs_moye_input_time', 'date'),
+    -- makani_masterplan_ud_plot（ods-dev）
+    ('makani_masterplan_ud_plot', 'shape', 'geom'),
+    ('makani_masterplan_ud_plot', 'objectid', 'num'),
+    ('makani_masterplan_ud_plot', 'objectid_1', 'num'),
+    ('makani_masterplan_ud_plot', 'projectid', 'text'),
+    ('makani_masterplan_ud_plot', 'masterplan_type', 'text'),
+    ('makani_masterplan_ud_plot', 'masterplan_approvalstatus', 'text'),
+    ('makani_masterplan_ud_plot', 'udm_gisid', 'text'),
+    ('makani_masterplan_ud_plot', 'udm_plotnumber', 'text'),
+    ('makani_masterplan_ud_plot', 'registered_land_use', 'text'),
+    ('makani_masterplan_ud_plot', 'level_1_allocation_type_eng', 'text'),
+    ('makani_masterplan_ud_plot', 'level_2_luc_description_eng_new', 'text'),
+    ('makani_masterplan_ud_plot', 'md_plot_area', 'num'),
+    ('makani_masterplan_ud_plot', 'floor_area_ratio', 'num'),
+    ('makani_masterplan_ud_plot', 'building_storey', 'num'),
+    ('makani_masterplan_ud_plot', 'number_of_buildings', 'num'),
+    ('makani_masterplan_ud_plot', 'residential_population', 'num'),
+    ('makani_masterplan_ud_plot', 'total_residential_units', 'num'),
+    ('makani_masterplan_ud_plot', 'hotel_rooms', 'num'),
+    ('makani_masterplan_ud_plot', 'total_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'calc_total_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'residential_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'office_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'retail_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'hotel_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'industrial_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'commercial_recreation_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'religious_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'education_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'healthcare_gfa', 'num'),
+    ('makani_masterplan_ud_plot', 'community_facilities_gfa', 'num'),
+    -- makani_udm_constructionsite（ods-dev）
+    ('makani_udm_constructionsite', 'shape', 'geom'),
+    ('makani_udm_constructionsite', 'objectid', 'num'),
+    ('makani_udm_constructionsite', 'constructionsiteid', 'num'),
+    ('makani_udm_constructionsite', 'description', 'text'),
+    ('makani_udm_constructionsite', 'municipalityname', 'text'),
     -- makani_uae_all_municipalities
     ('makani_uae_all_municipalities', 'shape', 'geom'),
     ('makani_uae_all_municipalities', 'municipalityid', 'num'),

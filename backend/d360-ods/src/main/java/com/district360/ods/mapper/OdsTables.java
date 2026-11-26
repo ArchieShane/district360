@@ -15,8 +15,14 @@ public class OdsTables {
     private final String building;
     private final String floors;
     private final String units;
+    private final String masterplanBoundary;
+    private final String masterplanPlot;
+    private final String constructionSite;
 
     public OdsTables(OdsProperties p) {
+        this.masterplanBoundary = p.table("makani_masterplan_ud_masterplan_boundary");
+        this.masterplanPlot = p.table("makani_masterplan_ud_plot");
+        this.constructionSite = p.table("makani_udm_constructionsite");
         this.municipality = p.table("makani_uae_all_municipalities");
         this.district = p.table("makani_udm_district");
         this.community = p.table("makani_udm_community");
@@ -33,4 +39,7 @@ public class OdsTables {
     public String getBuilding() { return building; }
     public String getFloors() { return floors; }
     public String getUnits() { return units; }
+    public String getMasterplanBoundary() { return masterplanBoundary; }
+    public String getMasterplanPlot() { return masterplanPlot; }
+    public String getConstructionSite() { return constructionSite; }
 }

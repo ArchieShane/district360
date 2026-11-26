@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  ODS → 主题库 · 开发建设（总体规划、总规地块、在建工地）。只做字段映射和清洗，空间归属写入后在主题库里关联。
+
+  清洗：
+    - stage_dm 原值带版本号和拼写差异（Detailed (3)、Detailed: MinorAmendment (2) …），归一为 6 类，原值保留在 stage_raw；
+    - municipality 是全称（Abu Dhabi / Al Ain / Western Region），转成市政编码；
+    - approvalyear 是文本，只认 4 位数字；
+    - 总规地块 total_gfa 为空时用 calc_total_gfa。
+  改这里的口径时同步更新 docs/District360_V1.0_主题库设计.md 与 deploy/docker/check-ods-columns.sql。
+-->
+<mapper namespace="com.district360.ods.mapper.OdsDevMapper">
+
+    <sql id="mpoly">
+        encode(ST_AsEWKB(ST_Multi(ST_CollectionExtract(ST_Force2D(
+            CASE WHEN ST_SRID(${col}) = 0 THEN ST_SetSRID(${col}, 4326) ELSE ST_Transform(${col}, 4326) END), 3))), 'hex')
+    </sql>
+
+    <sql id="txt">nullif(trim(${col}), '')</sql>
+
+    <select id="masterPlans" resultType="com.district360.common.theme.dev.DevRows$MasterPlan">
+        SELECT projectid                                   AS project_id,
+               <include refid="txt"><property name="col" value="projectno"/></include>      AS project_no,
+               <include refid="txt"><property name="col" value="project_name"/></include>   AS project_name,
+               CASE
+                   WHEN stage_dm ILIKE 'Detailed%Minor%'  THEN 'Minor Amendment'
+                   WHEN stage_dm ILIKE 'Detailed%Time%'   THEN 'Time Extension'
+                   WHEN stage_dm ILIKE 'Detailed%'        THEN 'Detailed'
+                   WHEN stage_dm ILIKE 'Concept%'         THEN 'Concept'
+                   WHEN stage_dm ILIKE 'Enquiry%'         THEN 'Enquiry'
+                   ELSE 'Other'
+               END                                         AS stage,
+               stage_dm                                    AS stage_raw,
+               CASE WHEN approvalyear ~ '^[0-9]{4}$' THEN approvalyear::int END AS approval_year,
+               <include refid="txt"><property name="col" value="developer_name"/></include> AS developer_name,
+               municipality                                AS src_municipality,
+               CASE municipality WHEN 'Abu Dhabi' THEN 'ADM' WHEN 'Al Ain' THEN 'AAM' WHEN 'Western Region' THEN 'WRM' END AS municipality_code,
+               <include refid="txt"><property name="col" value="districtid"/></include>     AS src_district_id,
+               <include refid="txt"><property name="col" value="communityid"/></include>    AS src_community_id,
+               <include refid="txt"><property name="col" value="masterplan_level"/></include> AS masterplan_level,
+               <include refid="txt"><property name="col" value="projecttype_dm"/></include> AS project_type,
+               <include refid="txt"><property name="col" value="projectlead"/></include>    AS project_lead,
+               <include refid="txt"><property name="col" value="owner_name"/></include>     AS owner_name,
+               <include refid="txt"><property name="col" value="parent_project_number"/></include> AS parent_project_no,
+               <include refid="mpoly"><property name="col" value="shape"/></include>        AS geom_hex
+        FROM ${t.masterplanBoundary}
+        WHERE projectid IS NOT NULL AND shape IS NOT NULL
+    </select>
+
+    <select id="masterPlanPlots" resultType="com.district360.common.theme.dev.DevRows$MasterPlanPlot">
+        SELECT coalesce(objectid_1, objectid)              AS src_objectid,
+               projectid                                   AS project_id,
+               <include refid="txt"><property name="col" value="masterplan_type"/></include>  AS masterplan_type,
+               <include refid="txt"><property name="col" value="masterplan_approvalstatus"/></include> AS approval_status,
+               <include refid="txt"><property name="col" value="udm_gisid"/></include>        AS udm_gisid,
+               <include refid="txt"><property name="col" value="udm_plotnumber"/></include>   AS udm_plot_number,
+               <include refid="txt"><property name="col" value="registered_land_use"/></include> AS registered_land_use,
+               <include refid="txt"><property name="col" value="level_1_allocation_type_eng"/></include> AS land_use_l1,
+               <include refid="txt"><property name="col" value="level_2_luc_description_eng_new"/></include> AS land_use_l2,
+               md_plot_area                                AS plot_area_sqm,
+               floor_area_ratio                            AS far,
+               building_storey                             AS building_storeys,
+               number_of_buildings                         AS buildings,
+               residential_population,
+               total_residential_units,
+               hotel_rooms,
+               coalesce(total_gfa, calc_total_gfa)         AS total_gfa,
+               residential_gfa, office_gfa, retail_gfa, hotel_gfa, industrial_gfa,
+               commercial_recreation_gfa, religious_gfa, education_gfa, healthcare_gfa, community_facilities_gfa,
+               <include refid="mpoly"><property name="col" value="shape"/></include>          AS geom_hex
+        FROM ${t.masterplanPlot}
+    </select>
+
+    <select id="constructionSites" resultType="com.district360.common.theme.dev.DevRows$ConstructionSite">
+        SELECT coalesce(constructionsiteid::text, 'o' || objectid) AS site_id,
+               <include refid="txt"><property name="col" value="description"/></include>      AS description,
+               <include refid="txt"><property name="col" value="municipalityname"/></include> AS municipality_code,
+               <include refid="mpoly"><property name="col" value="shape"/></include>          AS geom_hex
+        FROM ${t.constructionSite}
+        WHERE shape IS NOT NULL
+    </select>
+
+    <select id="dataDate" resultType="java.time.LocalDate">
+        SELECT max(trs_moye_input_time)::date FROM ${t.masterplanBoundary}
+    </select>
+</mapper>
