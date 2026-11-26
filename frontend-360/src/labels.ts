@@ -213,3 +213,11 @@ export const AST_ATTR: Record<string, string> = {
 /** 尚未接入的主题页签：对应主题库 theme.meta_table.theme */
 export const PENDING_TABS: { id: string; name: string; theme: string; note: string }[] = [
 ]
+
+/** 宜居评分配色（与原型 Liveability 指标图层一致）：45 分及以下红、67.5 黄、90 分及以上绿；无评分灰 */
+export function livColor(v: number | null | undefined): string {
+  if (v == null) return '#5B6270'
+  const t = Math.min(Math.max((v - 45) / 45, 0), 1)
+  const mix = (a: string, b: string, k: number) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('')
+  return t < 0.5 ? mix('#D7303A', '#F2D45C', t * 2) : mix('#F2D45C', '#3FB45F', t * 2 - 1)
+}

@@ -8,6 +8,7 @@ import DevTab from './DevTab.vue'
 import MktTab from './MktTab.vue'
 import OpsTab from './OpsTab.vue'
 import AstTab from './AstTab.vue'
+import LivTab from './LivTab.vue'
 
 /**
  * 右侧 360 面板（原型的 #panel）：标题、层级条、标签、页签。
@@ -169,6 +170,7 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
         <button v-if="node.childLevel" :class="{ on: tab === 'list' }" @click="tab = 'list'">{{ LEVEL_NAME[node.childLevel] }}<i>{{ num(node.childCount) }}</i></button>
         <button :class="{ on: tab === 'dev' }" @click="tab = 'dev'">开发建设</button>
         <button :class="{ on: tab === 'mkt' }" @click="tab = 'mkt'">市场</button>
+        <button :class="{ on: tab === 'liv' }" @click="tab = 'liv'">宜居</button>
         <button :class="{ on: tab === 'ops' }" @click="tab = 'ops'">城市运行</button>
         <button :class="{ on: tab === 'ast' }" @click="tab = 'ast'">设施</button>
         <button v-for="t in PENDING_TABS" :key="t.id" :class="{ on: tab === t.id }" @click="tab = t.id">{{ t.name }}<i>待接入</i></button>
@@ -233,6 +235,8 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
       <ChildList v-else-if="tab === 'list'" :node="node" @go="(l, k) => emit('go', l, k)" />
 
       <AstTab v-else-if="tab === 'ast'" :node="node" @focus="(x, y) => emit('focus', x, y)" />
+
+      <LivTab v-else-if="tab === 'liv'" :node="node" @go="(l, k) => emit('go', l, k)" />
 
       <OpsTab v-else-if="tab === 'ops'" :node="node" :meta="meta" @focus="(x, y) => emit('focus', x, y)" />
 

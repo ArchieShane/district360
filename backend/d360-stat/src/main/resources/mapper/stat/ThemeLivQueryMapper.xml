@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  宜居页签读查询。评分不经 ODS：直接读 v1 每日从宜居库抽取的 stat.stat_district_liveability（区域粒度），
+  经 stat.dim_district（市政 + makani_district_id）对到主题库 theme.sp_district.district_key。
+  排名只在评估范围内（in_scope 不为 false）按在途评分（score_current）降序；范围外的区不给评分，只给公园。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeLivQueryMapper">
+
+    <select id="districts" resultType="java.util.LinkedHashMap">
+        WITH l AS (
+            SELECT d.district_key, d.municipality_code, coalesce(d.name_en, x.name_en) AS name, x.name_ar,
+                   (s.in_scope IS DISTINCT FROM false) AS in_scope,
+                   s.score_existing, s.score_current, s.score_target, s.parks, s.park_area_ha, s.park_gap_ha, s.is_sample,
+                   s.source_as_of
+            FROM stat.stat_district_liveability s
+                     JOIN stat.dim_district x ON x.code = s.district_code
+                     JOIN theme.sp_district d ON d.municipality_code = upper(x.municipality) AND d.district_id = x.makani_district_id
+        ), r AS (
+            SELECT l.*,
+                   CASE WHEN in_scope THEN rank() OVER (PARTITION BY in_scope ORDER BY score_current DESC) END AS rk,
+                   CASE WHEN in_scope THEN rank() OVER (PARTITION BY in_scope, municipality_code ORDER BY score_current DESC) END AS muni_rk,
+                   count(*) FILTER (WHERE in_scope) OVER () AS scope_n,
+                   count(*) FILTER (WHERE in_scope) OVER (PARTITION BY municipality_code) AS muni_scope_n
+            FROM l
+        )
+        SELECT district_key AS "key", name AS "name", name_ar AS "nameAr", municipality_code AS "municipalityCode",
+               in_scope AS "inScope",
+               CASE WHEN in_scope THEN score_existing END AS "existing",
+               CASE WHEN in_scope THEN score_current END AS "pipeline",
+               CASE WHEN in_scope THEN score_target END AS "target",
+               CASE WHEN in_scope THEN round(score_target - score_current, 2) END AS "gap",
+               rk AS "rank", scope_n AS "rankOf", muni_rk AS "muniRank", muni_scope_n AS "muniRankOf",
+               parks AS "parks", park_area_ha AS "parkAreaHa", park_gap_ha AS "parkGapHa", is_sample AS "sample",
+               to_char(source_as_of, 'YYYY-MM-DD') AS "asOf"
+        FROM r
+        WHERE true
+        <if test="municipality != null">AND municipality_code = #{municipality}</if>
+        <if test="district != null">AND district_key = #{district}</if>
+        ORDER BY in_scope DESC, score_current DESC NULLS LAST, name
+    </select>
+</mapper>

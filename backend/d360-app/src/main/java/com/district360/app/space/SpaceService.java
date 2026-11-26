@@ -3,6 +3,7 @@ package com.district360.app.space;
 import com.district360.app.web.dto.PageResult;
 import com.district360.stat.mapper.ThemeAstQueryMapper;
 import com.district360.stat.mapper.ThemeDevQueryMapper;
+import com.district360.stat.mapper.ThemeLivQueryMapper;
 import com.district360.stat.mapper.ThemeMktQueryMapper;
 import com.district360.stat.mapper.ThemeOpsQueryMapper;
 import com.district360.stat.mapper.ThemeSpatialQueryMapper;
@@ -41,14 +42,17 @@ public class SpaceService {
     private final ThemeMktQueryMapper mktMapper;
     private final ThemeOpsQueryMapper opsMapper;
     private final ThemeAstQueryMapper astMapper;
+    private final ThemeLivQueryMapper livMapper;
 
     public SpaceService(ThemeSpatialQueryMapper mapper, ThemeDevQueryMapper devMapper, ThemeMktQueryMapper mktMapper,
-                        ThemeOpsQueryMapper opsMapper, ThemeAstQueryMapper astMapper) {
+                        ThemeOpsQueryMapper opsMapper, ThemeAstQueryMapper astMapper,
+                        ThemeLivQueryMapper livMapper) {
         this.mapper = mapper;
         this.devMapper = devMapper;
         this.mktMapper = mktMapper;
         this.opsMapper = opsMapper;
         this.astMapper = astMapper;
+        this.livMapper = livMapper;
     }
 
     public NodeDetail node(SpaceLevel level, String key) {
@@ -223,6 +227,67 @@ public class SpaceService {
         out.put("bySubtype", subtypes);
         out.put("items", items);
         return out;
+    }
+
+    /**
+     * 宜居页签：评分只有区域粒度（v1 stat.stat_district_liveability，每日从宜居库抽取）。
+     * 酋长国 / 市政：范围内各区评分排名与汇总；区域：本区评分、排名、公园；社区及以下：按所在区域。
+     */
+    public Map<String, Object> liv(SpaceLevel level, String key) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        if (level == SpaceLevel.EMIRATE || level == SpaceLevel.MUNICIPALITY) {
+            List<Map<String, Object>> list = livMapper.districts(level == SpaceLevel.EMIRATE ? null : key, null);
+            out.put("scope", Map.of("level", level.id(), "key", key));
+            out.put("summary", livSummary(list));
+            out.put("districts", list);
+            return out;
+        }
+        String district = key;
+        if (level != SpaceLevel.DISTRICT) {
+            Map<String, Object> row = mapper.node(level.id(), key);
+            if (row == null || row.get("key") == null) {
+                throw new NoSuchElementException("没有这个" + level.id() + ": " + key);
+            }
+            Object d = row.get("district_key");
+            district = d == null ? null : d.toString();
+        }
+        out.put("scope", district == null ? null : Map.of("level", "district", "key", district));
+        if (district != null) {
+            List<Map<String, Object>> one = livMapper.districts(null, district);
+            out.put("district", one.isEmpty() ? null : one.get(0));
+        }
+        return out;
+    }
+
+    /** 范围内区数、平均评分（现状 / 在途 / 目标）、公园合计与缺口合计、数据日期。 */
+    private static Map<String, Object> livSummary(List<Map<String, Object>> list) {
+        int n = 0;
+        double ex = 0, cu = 0, tg = 0, gap = 0, area = 0;
+        long parks = 0;
+        String asOf = null;
+        for (Map<String, Object> r : list) {
+            if (r.get("parks") instanceof Number p) parks += p.longValue();
+            if (r.get("parkAreaHa") instanceof Number a) area += a.doubleValue();
+            if (r.get("parkGapHa") instanceof Number g) gap += g.doubleValue();
+            if (r.get("asOf") != null && (asOf == null || asOf.compareTo(r.get("asOf").toString()) < 0)) asOf = r.get("asOf").toString();
+            if (Boolean.TRUE.equals(r.get("inScope")) && r.get("pipeline") instanceof Number c) {
+                n++;
+                cu += c.doubleValue();
+                ex += ((Number) r.get("existing")).doubleValue();
+                tg += ((Number) r.get("target")).doubleValue();
+            }
+        }
+        Map<String, Object> s = new LinkedHashMap<>();
+        s.put("districts", list.size());
+        s.put("inScope", n);
+        s.put("avgExisting", n == 0 ? null : Math.round(ex / n * 100) / 100.0);
+        s.put("avgPipeline", n == 0 ? null : Math.round(cu / n * 100) / 100.0);
+        s.put("avgTarget", n == 0 ? null : Math.round(tg / n * 100) / 100.0);
+        s.put("parks", parks);
+        s.put("parkAreaHa", Math.round(area * 10) / 10.0);
+        s.put("parkGapHa", Math.round(gap * 10) / 10.0);
+        s.put("asOf", asOf);
+        return s;
     }
 
     /** 主题页签的统计范围：建筑 / 楼层 / 单元按所在地块；没有地块时 key 为 null。 */

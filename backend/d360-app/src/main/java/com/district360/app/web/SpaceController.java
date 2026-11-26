@@ -74,6 +74,12 @@ public class SpaceController {
         return ApiResponse.ok(service.ast(SpaceLevel.of(level), key));
     }
 
+    /** 宜居页签：区域评分、排名、公园（酋长国 / 市政给各区排名，社区及以下按所在区域）。 */
+    @GetMapping("/nodes/{level}/{key}/liv")
+    public ApiResponse<Map<String, Object>> liv(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.liv(SpaceLevel.of(level), key));
+    }
+
     /** 地图图层（GeoJSON FeatureCollection，EPSG:4326）。 */
     @GetMapping("/nodes/{level}/{key}/layers/{layer}.geojson")
     public ResponseEntity<String> layer(@PathVariable String level, @PathVariable String key, @PathVariable String layer) {

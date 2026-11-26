@@ -2,11 +2,11 @@
 import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type Map as MlMap, type StyleSpecification } from 'maplibre-gl'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { api, LEVELS, type Layer, type Level, type NodeDetail, type NodeRef } from '../api'
-import { AST_CATEGORY, colorOf, LEVEL_NAME, PLOT_STATUS } from '../labels'
+import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS } from '../labels'
 
 /**
  * 地图：按当前层级加载对应图层，点击要素下钻。
- *   酋长国 / 市政：区域面（按建成率着色）+ 区名标签
+ *   酋长国 / 市政：区域面（按建成率着色；宜居页签时按在途评分着色）+ 区名标签
  *   区域：社区面 + 社区名标签 + 地块（建设状态色）+ 建筑 3D
  *   社区：地块 + 建筑 3D；地块：所在社区的地块（背景）+ 本地块建筑
  *   建筑：楼层半透明分层堆叠 + 单元按户型着色（3D，底标高 / 层高）
@@ -51,6 +51,10 @@ const STYLE: StyleSpecification = {
   ],
 }
 
+const AREA_COLOR = ['interpolate', ['linear'], ['coalesce', ['get', 'built'], 0], 0, '#2B4C7E', 50, '#3D6DF2', 100, '#8FE3FF'] as unknown as ExpressionSpecification
+const AREA_OPACITY = (base: number) => ['case', ['boolean', ['feature-state', 'hover'], false], base + 0.22, base] as unknown as ExpressionSpecification
+const LIV_LEGEND = { title: '宜居在途评分', items: [{ n: '90 及以上', c: livColor(90) }, { n: '67.5', c: livColor(67.5) }, { n: '45 及以下', c: livColor(45) }, { n: '不在评估范围', c: livColor(null) }] }
+
 const PLOT_COLOR: ExpressionSpecification = ['match', ['get', 's'],
   ...Object.entries(PLOT_STATUS).flatMap(([k, v]) => [k, v.c]), '#6B7280'] as unknown as ExpressionSpecification
 
@@ -58,8 +62,7 @@ function addLayers(m: MlMap) {
   SOURCES.forEach(s => m.addSource(s, { type: 'geojson', data: EMPTY, generateId: true }))
   // 区域 / 社区 / 市政面：按建成率着色，悬停提亮
   m.addLayer({ id: 'area-fill', type: 'fill', source: 'area', paint: {
-    'fill-color': ['interpolate', ['linear'], ['coalesce', ['get', 'built'], 0], 0, '#2B4C7E', 50, '#3D6DF2', 100, '#8FE3FF'],
-    'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.42, 0.2] } })
+    'fill-color': AREA_COLOR, 'fill-opacity': AREA_OPACITY(0.2) } })
   m.addLayer({ id: 'area-line', type: 'line', source: 'area', paint: { 'line-color': '#9CC4FF', 'line-width': 1, 'line-opacity': 0.75 } })
   m.addLayer({ id: 'plot-fill', type: 'fill', source: 'plot', paint: {
     'fill-color': PLOT_COLOR, 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.7, 0.42] } })
@@ -136,6 +139,7 @@ async function show(n: NodeDetail) {
   markers.forEach(mk => mk.remove())
   markers = []
   legend.value = null
+  paintLiv(n)
   const results = await Promise.all(layers.map(l => api.layer(l.at.level, l.at.key, l.layer, signal).then(fc => ({ l, fc })).catch(() => null)))
   if (signal.aborted) return
   for (const r of results) {
@@ -170,6 +174,30 @@ async function showTheme(n: NodeDetail) {
     if (!on) { (m.getSource(src) as GeoJSONSource).setData(EMPTY); continue }
     api.layer(n.level, n.key, layer, sig).then(fc => { if (!sig.aborted) (m.getSource(src) as GeoJSONSource).setData(fc) }).catch(() => undefined)
   }
+}
+
+/** 宜居页签在酋长国 / 市政层级：区域面按在途评分着色（原型的 Liveability 指标图层）；其他情况恢复按建成率 */
+let livCtrl: AbortController | null = null
+async function paintLiv(n: NodeDetail) {
+  if (!map) return
+  livCtrl?.abort()
+  const m = map
+  const restore = () => {
+    m.setPaintProperty('area-fill', 'fill-color', AREA_COLOR)
+    m.setPaintProperty('area-fill', 'fill-opacity', AREA_OPACITY(0.2))
+    if (legend.value === LIV_LEGEND) legend.value = null
+  }
+  if (props.themeTab !== 'liv' || (n.level !== 'emirate' && n.level !== 'municipality')) { restore(); return }
+  livCtrl = new AbortController()
+  const sig = livCtrl.signal
+  try {
+    const v = await api.liv(n.level, n.key, sig)
+    if (sig.aborted || !map) return
+    const pairs = (v.districts ?? []).flatMap(d => [d.key, livColor(d.inScope ? d.pipeline : null)])
+    m.setPaintProperty('area-fill', 'fill-color', (pairs.length ? ['match', ['get', 'key'], ...pairs, livColor(null)] : livColor(null)) as unknown as ExpressionSpecification)
+    m.setPaintProperty('area-fill', 'fill-opacity', AREA_OPACITY(0.55))
+    legend.value = LIV_LEGEND
+  } catch { if (!sig.aborted) restore() }
 }
 
 /** 单元按户型着色；楼层 / 单元层级时选中单元提亮 */
@@ -264,7 +292,7 @@ onMounted(() => {
 onBeforeUnmount(() => { ctrl?.abort(); resizeObs?.disconnect(); map?.remove(); map = null })
 
 watch(() => props.node, n => { if (n) show(n) })
-watch(() => props.themeTab, () => { if (props.node) showTheme(props.node) })
+watch(() => props.themeTab, () => { if (props.node) { showTheme(props.node); paintLiv(props.node) } })
 watch(() => props.focus, f => { if (f && map) map.flyTo({ center: [f.lon, f.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 }) })
 watch(base, b => {
   map?.setLayoutProperty('sat', 'visibility', b === 'sat' ? 'visible' : 'none')

@@ -230,6 +230,50 @@ export interface Meta {
   runs: EtlRun[]
 }
 
+/** 宜居：一个区域的评分（只有区域粒度；inScope=false 时评分为 null，只有公园） */
+export interface LivDistrict {
+  key: string
+  name: string
+  nameAr?: string
+  municipalityCode: string
+  inScope: boolean
+  existing: number | null
+  /** 在途评分（原 Current），排名按它 */
+  pipeline: number | null
+  target: number | null
+  /** 目标 − 在途 */
+  gap: number | null
+  rank: number | null
+  rankOf: number
+  muniRank: number | null
+  muniRankOf: number
+  parks: number | null
+  parkAreaHa: number | null
+  parkGapHa: number | null
+  sample: boolean
+  asOf?: string
+}
+
+export interface LivSummary {
+  districts: number
+  inScope: number
+  avgExisting: number | null
+  avgPipeline: number | null
+  avgTarget: number | null
+  parks: number
+  parkAreaHa: number
+  parkGapHa: number
+  asOf?: string
+}
+
+/** /nodes/{level}/{key}/liv：酋长国 / 市政给 summary + districts；区域及以下给 district（社区及以下按所在区域） */
+export interface LivView {
+  scope: { level: Level; key: string } | null
+  summary?: LivSummary
+  districts?: LivDistrict[]
+  district?: LivDistrict | null
+}
+
 interface ApiResponse<T> {
   code: number
   message: string
@@ -259,6 +303,7 @@ export const api = {
     if (!res.ok) throw new Error(`请求失败：${res.status}`)
     return res.json()
   },
+  liv: (level: Level, key: string, signal?: AbortSignal) => get<LivView>(`/nodes/${level}/${enc(key)}/liv`, signal),
   ast: (level: Level, key: string, signal?: AbortSignal) => get<AstView>(`/nodes/${level}/${enc(key)}/ast`, signal),
   ops: (level: Level, key: string, signal?: AbortSignal) => get<OpsView>(`/nodes/${level}/${enc(key)}/ops`, signal),
   mkt: (level: Level, key: string, signal?: AbortSignal) => get<MktView>(`/nodes/${level}/${enc(key)}/mkt`, signal),
