@@ -244,3 +244,13 @@ export const TIER_TRIGGER: Record<string, string> = {
 export const FACILITY_CATEGORY: Record<string, string> = {
   critical: '关键', important: '重要', basic: '基础', other: '其他',
 }
+
+/** 需关注区域各指标的颜色与图标（与原型 Districts to watch 一致） */
+export const WATCH_STYLE: Record<string, { c: string; icon: string }> = {
+  gap: { c: '#FF5A5A', icon: '<circle cx="12" cy="12" r="8.2"/><circle cx="12" cy="12" r="3.4"/>' },
+  capex: { c: '#FFB23E', icon: '<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>' },
+  prj: { c: '#B58CFF', icon: '<circle cx="12" cy="12" r="8.4"/><path d="M12 7.2V12l3.4 2"/>' },
+  occ: { c: '#3DD6D0', icon: '<path d="M5 20V5h9v15M14 10h5v10M3 20h18M8 9h3M8 13h3M8 17h3"/>' },
+  park: { c: '#4C8DF6', icon: '<path d="M12 3.5 7 11h3l-4 6h12l-4-6h3zM12 17v3.5"/>' },
+  vio: { c: '#FF7AB6', icon: '<path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17.2v.2"/>' },
+}

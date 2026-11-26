@@ -9,15 +9,18 @@ import MktTab from './MktTab.vue'
 import OpsTab from './OpsTab.vue'
 import AstTab from './AstTab.vue'
 import LivTab from './LivTab.vue'
+import OverviewDash from './OverviewDash.vue'
 
 /**
  * 右侧 360 面板（原型的 #panel）：标题、层级条、标签、页签。
  * 已接入：空间下钻（概况、下级列表、属性）；开发建设 / 市场 / 城市运行 / 设施页签显示对应主题表的接入状态。
  */
-const props = defineProps<{ node: NodeDetail | null; meta: Meta | null; error: string | null }>()
+const props = defineProps<{ node: NodeDetail | null; meta: Meta | null; error: string | null; wantTab?: { tab: string; t: number } | null }>()
 const emit = defineEmits<{ go: [level: Level, key: string]; up: []; tab: [id: string]; focus: [lon: number, lat: number] }>()
 
 const tab = ref('ov')
+/** 外部（如需关注区域卡片）要求打开某个页签 */
+watch(() => props.wantTab, w => { if (w) tab.value = w.tab })
 watch(() => props.node?.level, () => { if (tab.value === 'list' && !props.node?.childLevel) tab.value = 'ov' })
 watch(tab, t => emit('tab', t), { immediate: true })
 
@@ -68,6 +71,9 @@ const derived = computed(() => {
   const src = String(info.value.source ?? '')
   return src === 'bdms' || src === 'bdms_units' ? SOURCE_NOTE[src] : null
 })
+
+/** 酋长国 / 市政 / 区域 / 社区的概况用五主题总览（原型 home view），地块及以下仍用数字卡 */
+const dashLevel = computed(() => ['emirate', 'municipality', 'district', 'community'].includes(props.node?.level ?? ''))
 
 interface Kpi { v: string; u?: string; l: string }
 const kpis = computed<Kpi[]>(() => {
@@ -185,7 +191,8 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
     <div v-else-if="node" class="pbody">
       <template v-if="tab === 'ov'">
         <section v-if="derived" class="card muted"><p>{{ derived }}。</p></section>
-        <section v-if="kpis.length" class="card">
+        <OverviewDash v-if="dashLevel" :node="node" @tab="t => (tab = t)" @go="(l, k) => emit('go', l, k)" />
+        <section v-else-if="kpis.length" class="card">
           <h2>{{ LEVEL_NAME[node.level] }}概况</h2>
           <div v-for="r in Math.ceil(kpis.length / 3)" :key="r" class="nums">
             <div v-for="k in kpis.slice((r - 1) * 3, r * 3)" :key="k.l"><b>{{ k.v }}<small v-if="k.u">{{ k.u }}</small></b><span>{{ k.l }}</span></div>
@@ -193,11 +200,13 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
         </section>
 
         <section v-if="plotStatus.length" class="card">
-          <h2>土地与建设<span class="src">theme.sp_plot</span></h2>
-          <div class="stack"><i v-for="x in plotStatus" :key="x.k" :style="{ flex: x.n, background: x.c }" /></div>
-          <div class="keys"><span v-for="x in plotStatus" :key="x.k"><i class="sw" :style="{ background: x.c }" />{{ x.n2 }}<b>{{ num(x.n) }}</b></span></div>
+          <h2>{{ dashLevel ? '土地用途' : '土地与建设' }}<span class="src">theme.sp_plot</span></h2>
+          <template v-if="!dashLevel">
+            <div class="stack"><i v-for="x in plotStatus" :key="x.k" :style="{ flex: x.n, background: x.c }" /></div>
+            <div class="keys"><span v-for="x in plotStatus" :key="x.k"><i class="sw" :style="{ background: x.c }" />{{ x.n2 }}<b>{{ num(x.n) }}</b></span></div>
+          </template>
           <template v-if="landUse.length">
-            <div class="sub">土地用途（按面积）</div>
+            <div v-if="!dashLevel" class="sub">土地用途（按面积）</div>
             <div class="keys"><span v-for="x in landUse" :key="x.k"><i class="sw" :style="{ background: x.c }" />{{ x.k }}<b>{{ x.p }}%</b></span></div>
           </template>
         </section>

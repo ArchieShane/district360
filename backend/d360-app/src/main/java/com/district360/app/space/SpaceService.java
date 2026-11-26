@@ -301,6 +301,39 @@ public class SpaceService {
         return s;
     }
 
+    /**
+     * 首页五主题总览（原型 Overview 的 Development / Assets / Market / Liveability / City operations 五块），
+     * 只取各主题的汇总，不带列表；只在酋长国 / 市政 / 区域 / 社区层级提供（地块及以下的概况是地块卡、建筑卡）。
+     * 地块建设状态、建筑用途前几类由节点视图（stat、breakdowns）提供，这里不重复。
+     */
+    public Map<String, Object> overview(SpaceLevel level, String key) {
+        if (level != SpaceLevel.EMIRATE && level != SpaceLevel.MUNICIPALITY && level != SpaceLevel.DISTRICT
+                && level != SpaceLevel.COMMUNITY) {
+            throw new IllegalArgumentException("首页总览只在酋长国、市政、区域、社区层级提供");
+        }
+        String col = level == SpaceLevel.EMIRATE ? null : level.col();
+        String k = level == SpaceLevel.EMIRATE ? null : key;
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("scope", Map.of("level", level.id(), "key", key));
+        Map<String, Object> dev = new LinkedHashMap<>();
+        dev.put("summary", devMapper.summary(col, k));
+        dev.put("stages", devMapper.stages(col, k));
+        out.put("dev", dev);
+        out.put("ast", astMapper.summary(col, k));
+        Map<String, Object> mkt = new LinkedHashMap<>();
+        mkt.put("tenancy", mktMapper.tenancySummary(col, k));
+        mkt.put("adrec", mktMapper.adrecSummary(col, k));
+        out.put("mkt", mkt);
+        out.put("ops", opsMapper.summary(col, k));
+        // 宜居：区域及社区给所在区域的评分与 CAPEX；酋长国 / 市政给平均分、CAPEX 合计、分档分布（不带区域列表）
+        Map<String, Object> liv = new LinkedHashMap<>(liv(level, key));
+        liv.remove("districts");
+        liv.remove("facilityGaps");
+        liv.remove("needs");
+        out.put("liv", liv);
+        return out;
+    }
+
     /** 主题页签的统计范围：建筑 / 楼层 / 单元按所在地块；没有地块时 key 为 null。 */
     private record Scope(SpaceLevel level, String key) {
         String col() { return level == SpaceLevel.EMIRATE ? null : level.col(); }

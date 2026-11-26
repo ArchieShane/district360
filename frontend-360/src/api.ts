@@ -317,6 +317,51 @@ export interface LivSummary {
   asOf?: string
 }
 
+/** 需关注区域的一项指标（原型 Districts to watch 的 6 项） */
+export interface WatchIndicator {
+  key: 'gap' | 'capex' | 'prj' | 'occ' | 'park' | 'vio'
+  name: string
+  /** 阈值文字，如「≥ 8 分」 */
+  threshold: string
+  /** false = 源数据未到位，暂不可算 */
+  available: boolean
+  /** 越过阈值的区数（不可算时为 null） */
+  count: number | null
+  /** 点卡片后打开的页签 */
+  tab: string
+  note?: string
+}
+
+/** 一个区越过的一项：value 为指标值（gap 分、capex AED、park %），其余为参照 */
+export interface WatchItem {
+  key: WatchIndicator['key']
+  value: number
+  pipeline?: number
+  target?: number
+  sharePct?: number
+  shareOf?: string
+  areaHa?: number
+  needHa?: number
+}
+
+export interface WatchDistrict {
+  key: string
+  name: string
+  municipalityCode: string
+  cx: number | null
+  cy: number | null
+  items: WatchItem[]
+}
+
+/** /nodes/{emirate|municipality}/{key}/watch */
+export interface WatchView {
+  scope: { level: Level; key: string }
+  indicators: WatchIndicator[]
+  maxCards: number
+  districts: WatchDistrict[]
+  asOf?: string
+}
+
 /** /nodes/{level}/{key}/liv：酋长国 / 市政给 summary + districts；区域及以下给 district（社区及以下按所在区域） */
 export interface LivView {
   scope: { level: Level; key: string } | null
@@ -356,6 +401,9 @@ export const api = {
     if (!res.ok) throw new Error(`请求失败：${res.status}`)
     return res.json()
   },
+  /** 首页五主题总览（酋长国 / 市政 / 区域 / 社区） */
+  overview: (level: Level, key: string, signal?: AbortSignal) => get<Record<string, unknown>>(`/nodes/${level}/${enc(key)}/overview`, signal),
+  watch: (level: Level, key: string, signal?: AbortSignal) => get<WatchView>(`/nodes/${level}/${enc(key)}/watch`, signal),
   liv: (level: Level, key: string, signal?: AbortSignal) => get<LivView>(`/nodes/${level}/${enc(key)}/liv`, signal),
   ast: (level: Level, key: string, signal?: AbortSignal) => get<AstView>(`/nodes/${level}/${enc(key)}/ast`, signal),
   ops: (level: Level, key: string, signal?: AbortSignal) => get<OpsView>(`/nodes/${level}/${enc(key)}/ops`, signal),

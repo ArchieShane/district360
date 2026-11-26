@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type Map as MlMap, type StyleSpecification } from 'maplibre-gl'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { api, LEVELS, type Layer, type Level, type NodeDetail, type NodeRef } from '../api'
-import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS } from '../labels'
+import { api, LEVELS, type Layer, type Level, type NodeDetail, type NodeRef, type WatchView } from '../api'
+import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS, WATCH_STYLE } from '../labels'
 
 /**
  * 地图：按当前层级加载对应图层，点击要素下钻。
@@ -12,7 +12,8 @@ import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS } from '../lab
  *   建筑：楼层半透明分层堆叠 + 单元按户型着色（3D，底标高 / 层高）
  *   楼层 / 单元：本层单元 + 整栋楼层轮廓；选中对象用白色描边
  */
-const props = defineProps<{ node: NodeDetail | null; themeTab?: string; focus?: { lon: number; lat: number; t: number } | null }>()
+const props = defineProps<{ node: NodeDetail | null; themeTab?: string; focus?: { lon: number; lat: number; t: number } | null;
+  watch?: WatchView | null; hot?: string | null }>()
 const emit = defineEmits<{ pick: [level: Level, key: string] }>()
 
 const el = ref<HTMLDivElement>()
@@ -64,6 +65,13 @@ function addLayers(m: MlMap) {
   m.addLayer({ id: 'area-fill', type: 'fill', source: 'area', paint: {
     'fill-color': AREA_COLOR, 'fill-opacity': AREA_OPACITY(0.2) } })
   m.addLayer({ id: 'area-line', type: 'line', source: 'area', paint: { 'line-color': '#9CC4FF', 'line-width': 1, 'line-opacity': 0.75 } })
+  // 需关注区域：按第一项越过的指标着色的光晕与描边（只画名单里的区）；悬停卡片的区填充提亮
+  m.addLayer({ id: 'watch-glow', type: 'line', source: 'area', filter: ['in', ['get', 'key'], ['literal', []]],
+    paint: { 'line-color': '#FF5A5A', 'line-width': 8, 'line-blur': 7, 'line-opacity': 0.7 }, layout: { 'line-join': 'round' } })
+  m.addLayer({ id: 'watch-line', type: 'line', source: 'area', filter: ['in', ['get', 'key'], ['literal', []]],
+    paint: { 'line-color': '#FF5A5A', 'line-width': 1.6 }, layout: { 'line-join': 'round' } })
+  m.addLayer({ id: 'watch-hot', type: 'fill', source: 'area', filter: ['==', ['get', 'key'], '__none__'],
+    paint: { 'fill-color': '#FFFFFF', 'fill-opacity': 0.28 } })
   m.addLayer({ id: 'plot-fill', type: 'fill', source: 'plot', paint: {
     'fill-color': PLOT_COLOR, 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.7, 0.42] } })
   m.addLayer({ id: 'plot-line', type: 'line', source: 'plot', minzoom: 13, paint: { 'line-color': 'rgba(255,255,255,0.45)', 'line-width': 0.6 } })
@@ -200,6 +208,23 @@ async function paintLiv(n: NodeDetail) {
   } catch { if (!sig.aborted) restore() }
 }
 
+/** 需关注区域在地图上的标注：只在酋长国 / 市政层级、且区面图层是这些区时画 */
+function paintWatch() {
+  if (!map || !ready) return
+  const n = props.node, w = props.watch
+  const on = !!w && !!n && (n.level === 'emirate' || n.level === 'municipality')
+  const list = on ? w!.districts : []
+  const keys = list.map(d => d.key)
+  const color = (list.length
+    ? ['match', ['get', 'key'], ...list.flatMap(d => [d.key, WATCH_STYLE[d.items[0].key]?.c ?? '#FF5A5A']), '#FF5A5A']
+    : '#FF5A5A') as unknown as ExpressionSpecification
+  for (const id of ['watch-glow', 'watch-line']) {
+    map.setFilter(id, ['in', ['get', 'key'], ['literal', keys]])
+    map.setPaintProperty(id, 'line-color', color)
+  }
+  map.setFilter('watch-hot', ['==', ['get', 'key'], on && props.hot ? props.hot : '__none__'])
+}
+
 /** 单元按户型着色；楼层 / 单元层级时选中单元提亮 */
 function paintUnits(fc: GeoJSON.FeatureCollection, n: NodeDetail) {
   if (!map) return
@@ -271,6 +296,7 @@ onMounted(() => {
     map!.resize()
     addLayers(map!)
     ready = true
+    paintWatch()
     if (props.node) show(props.node)
   })
   map.on('mousemove', e => {
@@ -292,6 +318,7 @@ onMounted(() => {
 onBeforeUnmount(() => { ctrl?.abort(); resizeObs?.disconnect(); map?.remove(); map = null })
 
 watch(() => props.node, n => { if (n) show(n) })
+watch(() => [props.watch, props.hot, props.node], () => paintWatch())
 watch(() => props.themeTab, () => { if (props.node) { showTheme(props.node); paintLiv(props.node) } })
 watch(() => props.focus, f => { if (f && map) map.flyTo({ center: [f.lon, f.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 }) })
 watch(base, b => {

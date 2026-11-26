@@ -14,7 +14,8 @@
                    (s.in_scope IS DISTINCT FROM false) AS in_scope,
                    s.score_existing, s.score_current, s.score_target, s.parks, s.park_area_ha, s.park_gap_ha, s.is_sample,
                    s.source_as_of, s.capex_aed, s.opex_aed, s.capex_tier_target_aed, s.tier, s.tier_rule, s.tier_triggers,
-                   s.liv_district_id, s.calc_version_id
+                   s.liv_district_id, s.calc_version_id,
+                   round(ST_X(theme.inner_point(d.geom))::numeric, 6) AS cx, round(ST_Y(theme.inner_point(d.geom))::numeric, 6) AS cy
             FROM stat.stat_district_liveability s
                      JOIN stat.dim_district x ON x.code = s.district_code
                      JOIN theme.sp_district d ON d.municipality_code = upper(x.municipality) AND d.district_id = x.makani_district_id
@@ -36,7 +37,7 @@
                parks AS "parks", park_area_ha AS "parkAreaHa", park_gap_ha AS "parkGapHa", is_sample AS "sample",
                capex_aed AS "capexAed", opex_aed AS "opexAed", capex_tier_target_aed AS "capexTierTargetAed",
                tier AS "tier", tier_rule AS "tierRule", tier_triggers AS "tierTriggers",
-               liv_district_id AS "livDistrictId", calc_version_id AS "calcVersionId",
+               liv_district_id AS "livDistrictId", calc_version_id AS "calcVersionId", cx AS "cx", cy AS "cy",
                to_char(source_as_of, 'YYYY-MM-DD') AS "asOf"
         FROM r
         WHERE true
