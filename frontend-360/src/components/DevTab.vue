@@ -33,6 +33,9 @@ const delivery = computed(() => s.value && s.value.mpPlotsLinked ? (s.value.mpPl
 const stages = computed(() => (dev.value?.stages ?? []).map(x => ({ ...x, n2: MP_STAGE[x.k]?.n ?? x.k, c: MP_STAGE[x.k]?.c ?? '#6B7280' })))
 const gfa = computed(() => dev.value?.gfaByUse ?? [])
 const ctrl0 = computed(() => dev.value?.plotControls?.[0])
+/** 竣工 / 拆除：udm_building 的 completion_date / demolition_date 累计（建设许可源表到位前的替代口径） */
+const st = computed(() => props.node.stat)
+const showCc = computed(() => ['emirate', 'municipality', 'district', 'community', 'plot'].includes(props.node.level) && (st.value.buildings ?? 0) > 0)
 const pending = computed(() => (props.meta?.tables ?? []).filter(t => t.theme === '开发建设' && !t.extractor))
 const scopeNote = computed(() => {
   const sc = dev.value?.scope
@@ -121,6 +124,16 @@ const big = (v: number | undefined) => !v ? '0' : v >= 1e6 ? num(v / 1e6, 2) + '
           <span>{{ area(x.areaSqm) }}</span><span>{{ num(x.buildings ?? 0) }}</span>
         </button>
       </div>
+    </section>
+
+    <section v-if="showCc" class="card">
+      <h2>竣工与拆除<span class="src">theme.sp_building · udm_building</span></h2>
+      <div class="nums">
+        <div><b>{{ num(st.buildingsCompleted) }}</b><span>有竣工日期的建筑</span></div>
+        <div><b>{{ num(st.buildingsDemolished) }}</b><span>有拆除日期的建筑</span></div>
+        <div><b>{{ num(st.buildingsUnderConstruction) }}</b><span>在建建筑</span></div>
+      </div>
+      <p style="margin-top:.6rem">累计口径，最近竣工 {{ st.lastCompletionDate ?? '—' }}，最近拆除 {{ st.lastDemolitionDate ?? '—' }}。udm_building 全酋长国只有约 1,900 栋建筑登记了竣工日期（最近一次 2021-04）；原型的竣工证书、拆除许可按月统计需等建设许可源表（MEPS）。</p>
     </section>
 
     <section v-if="pending.length" class="card muted">

@@ -156,7 +156,10 @@
                        sum(plots_under_construction) AS plots_under_construction, sum(plots_not_constructed) AS plots_not_constructed,
                        sum(plots_area_sqm) AS plots_area_sqm, sum(buildings) AS buildings,
                        sum(buildings_under_construction) AS buildings_under_construction, sum(floors) AS floors,
-                       sum(units) AS units, sum(units_area_sqm) AS units_area_sqm
+                       sum(units) AS units, sum(units_area_sqm) AS units_area_sqm, sum(units_area_outliers) AS units_area_outliers,
+                       sum(floors_area_sqm) AS floors_area_sqm, sum(plots_max_gfa_sqm) AS plots_max_gfa_sqm,
+                       sum(buildings_completed) AS buildings_completed, sum(buildings_demolished) AS buildings_demolished,
+                       max(last_completion_date) AS last_completion_date, max(last_demolition_date) AS last_demolition_date
                 FROM theme.sp_node_stat WHERE level = 'municipality'
             </when>
             <when test="level == 'floor'">
@@ -171,7 +174,9 @@
                 SELECT
                     <if test="level == 'municipality'">(SELECT count(*) FROM theme.sp_district WHERE municipality_code = #{key}) AS districts,</if>
                     s.communities, s.plots, s.plots_constructed, s.plots_under_construction, s.plots_not_constructed,
-                    s.plots_area_sqm, s.buildings, s.buildings_under_construction, s.floors, s.units, s.units_area_sqm
+                    s.plots_area_sqm, s.buildings, s.buildings_under_construction, s.floors, s.units, s.units_area_sqm,
+                    s.units_area_outliers, s.floors_area_sqm, s.plots_max_gfa_sqm, s.buildings_completed, s.buildings_demolished,
+                    s.last_completion_date, s.last_demolition_date
                 FROM (SELECT 1) one
                 LEFT JOIN theme.sp_node_stat s ON s.level = #{level} AND s.node_key = #{key}
             </otherwise>

@@ -60,6 +60,11 @@ function pick(it: AstItem) {
   if (it.cx != null && it.cy != null) emit('focus', it.cx, it.cy)
 }
 
+/** 建筑资产（原型 Assets 页签的 Building assets）：用节点自身汇总，不按设施的地块口径 */
+const bst = computed(() => props.node.stat)
+const showAssets = computed(() => ['emirate', 'municipality', 'district', 'community', 'plot'].includes(props.node.level) && (bst.value.buildings ?? 0) > 0)
+const ha = (v: number | undefined) => num((v ?? 0) / 1e4, 1)
+
 const capLabel: Record<AstCategory, string> = { school: '学位', medical: '床位', pharmacy: '', mosque: '礼拜人数', park: '面积' }
 </script>
 
@@ -68,6 +73,22 @@ const capLabel: Record<AstCategory, string> = { school: '学位', medical: '床�
   <section v-else-if="!ast" class="card muted"><p>加载中…</p></section>
   <section v-else-if="!ast.scope" class="card muted"><p>该建筑没有对应的地块，没有设施数据。</p></section>
   <template v-else-if="s">
+    <section v-if="showAssets" class="card">
+      <h2>建筑资产<span class="src">theme.sp_building · sp_floor · sp_unit</span></h2>
+      <div class="nums">
+        <div><b>{{ num(bst.buildings) }}</b><span>建筑 · 在建 {{ num(bst.buildingsUnderConstruction) }}</span></div>
+        <div><b>{{ num(bst.floors) }}</b><span>楼层（BDMS）</span></div>
+        <div><b>{{ num(bst.units) }}</b><span>单元（BDMS）</span></div>
+      </div>
+      <div class="nums">
+        <div><b>{{ ha(bst.floorsAreaSqm) }}<small>ha</small></b><span>建筑面积（楼层合计）</span></div>
+        <div><b>{{ ha(bst.unitsAreaSqm) }}<small>ha</small></b><span>使用面积（单元合计）</span></div>
+        <div><b>{{ ha(bst.plotsMaxGfaSqm) }}<small>ha</small></b><span>可建面积（地块管控合计）</span></div>
+      </div>
+      <p v-if="node.level !== 'plot'" style="margin-top:.6rem">不少地块没有可建面积登记，所以这里不算使用率；单个地块的使用率见地块概况。</p>
+      <p v-if="bst.unitsAreaOutliers" style="margin-top:.3rem">另有 {{ num(bst.unitsAreaOutliers) }} 个单元面积超过 10,000 m²，视为源数据异常，未计入使用面积。</p>
+    </section>
+
     <section class="card">
       <h2>公共设施<span class="src">theme.ast_facility</span></h2>
       <p v-if="scopeNote" style="margin:-.2rem 0 .5rem">{{ scopeNote }}</p>

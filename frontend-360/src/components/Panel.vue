@@ -81,17 +81,18 @@ const kpis = computed<Kpi[]>(() => {
     case 'community':
       return [
         { v: num(st.plots), l: '地块' }, { v: pct(st.plotsConstructed, st.plots), u: '%', l: '建成率' }, { v: num(st.buildings), l: '建筑' },
-        { v: num(st.floors), l: '楼层（BDMS）' }, { v: num(st.units), l: '单元（BDMS）' }, { v: num((st.unitsAreaSqm ?? 0) / 1e4, 1), u: 'ha', l: '单元面积' },
+        { v: num(st.floors), l: '楼层（BDMS）' }, { v: num(st.units), l: '单元（BDMS）' }, { v: num((st.floorsAreaSqm ?? 0) / 1e4, 1), u: 'ha', l: '建筑面积' },
       ]
     case 'plot':
       return [
         { v: area(Number(i.areaSqm)), l: '地块面积' }, { v: i.devcodeFar != null ? String(i.devcodeFar) : '—', l: '允许容积率' }, { v: num(i.devcodeMaxGfa), u: 'm²', l: '可建面积' },
-        { v: num(st.buildings), l: '建筑' }, { v: num(st.floors), l: '楼层' }, { v: num(st.units), l: '单元' },
+        { v: num(st.buildings), l: '建筑' }, { v: num(st.floorsAreaSqm), u: 'm²', l: '已建建筑面积' },
+        { v: i.devcodeMaxGfa ? pct(st.floorsAreaSqm, Number(i.devcodeMaxGfa)) : '—', u: i.devcodeMaxGfa ? '%' : '', l: '可建面积使用率' },
       ]
     case 'building':
       return [
-        { v: num(st.floors), l: '楼层' }, { v: num(st.units), l: '单元' }, { v: num(st.unitsAreaSqm), u: 'm²', l: '单元面积' },
-        { v: num(i.heightM, 1), u: 'm', l: '高度' }, { v: num(i.footprintSqm), u: 'm²', l: '基底面积' }, { v: num(i.floorsCount), l: '登记层数' },
+        { v: num(st.floors), l: '楼层' }, { v: num(i.heightM, 1), u: 'm', l: '高度' }, { v: num(st.units), l: '单元' },
+        { v: num(st.floorsAreaSqm), u: 'm²', l: '建筑面积' }, { v: num(st.unitsAreaSqm), u: 'm²', l: '使用面积' }, { v: num(i.floorsCount), l: '登记层数' },
       ]
     case 'floor':
       return [{ v: num(st.units), l: '单元' }, { v: num(st.unitsAreaSqm, 1), u: 'm²', l: '单元面积' }, { v: num(st.bedrooms), l: '卧室' }]

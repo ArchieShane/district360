@@ -112,7 +112,19 @@ export interface NodeStat {
   buildingsUnderConstruction?: number
   floors?: number
   units?: number
+  /** 使用面积：单元面积合计，不含单个 > 10,000 m² 的异常单元 */
   unitsAreaSqm?: number
+  /** 被排除的异常单元数 */
+  unitsAreaOutliers?: number
+  /** 建筑面积 GFA：楼层面积合计 */
+  floorsAreaSqm?: number
+  /** 可建面积：未注销地块 devcode_max_gfa 合计 */
+  plotsMaxGfaSqm?: number
+  /** udm_building 有竣工 / 拆除日期的建筑数与最近日期 */
+  buildingsCompleted?: number
+  buildingsDemolished?: number
+  lastCompletionDate?: string
+  lastDemolitionDate?: string
   bedrooms?: number
 }
 

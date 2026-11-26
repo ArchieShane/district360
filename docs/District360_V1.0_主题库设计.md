@@ -36,7 +36,7 @@ Flyway：`V10__theme_spatial.sql`（空间）、`V11__theme_business.sql`（业�
 | `sp_building` | 建筑 | `udm-<buildinginternalid>`；BDMS 推导的为 `bdms-<buildingid>` | `makani_udm_building` + BDMS | 先 gisid，再建筑内点落在未注销地块面内 |
 | `sp_floor` | 楼层 | BDMS floorid | `makani_bdms_floors_height`（缺的由单元推导） | BDMS buildingid → 建筑 |
 | `sp_unit` | 单元 | BDMS unitid | `makani_bdms_units_height` | floorid → 楼层 |
-| `sp_node_stat` | 各级汇总 | (level, node_key) | — | 每次抽取后重算：社区 / 地块 / 已建 / 在建 / 空置 / 建筑 / 楼层 / 单元 / 面积 |
+| `sp_node_stat` | 各级汇总 | (level, node_key) | — | 每次抽取后重算：社区 / 地块 / 已建 / 在建 / 空置 / 建筑 / 楼层 / 单元 / 面积；V19 起加建筑面积（楼层合计）、可建面积（devcode_max_gfa 合计）、竣工 / 拆除建筑数与最近日期，使用面积不计 > 10,000 m² 的异常单元并计数 |
 
 所有下级表冗余全部上级编码（`municipality_code / district_key / community_key / plot_key / building_key / floor_key`），接口按编码直接过滤。
 
