@@ -1,7 +1,9 @@
 package com.district360.liveability.mapper;
 
 import com.district360.liveability.row.LivDistrictRow;
+import com.district360.liveability.row.LivFacilityCountRow;
 import com.district360.liveability.row.LivFacilityGapRow;
+import com.district360.liveability.row.LivFacilityTypeRow;
 import com.district360.liveability.row.LivNeedRow;
 import com.district360.liveability.row.LivRunRow;
 import org.apache.ibatis.annotations.Param;
@@ -40,6 +42,12 @@ public interface LiveabilityMapper {
     /** 居民需求：理想社区调查本区得票占比前 limit 项；受访人数不足 minRespondents 时为空。 */
     List<LivNeedRow> needs(@Param("livDistrictId") int livDistrictId, @Param("version") long calcVersionId,
                            @Param("minRespondents") int minRespondents, @Param("limit") int limit);
+
+    /** 设施类型目录：原型 8 个领域内、fact_facilities 有数据的类型（当前 35 类）。 */
+    List<LivFacilityTypeRow> facilityCatalogue();
+
+    /** 一个区（范围）内各设施类型的现状数量，只含 types 内、数量大于 0 的。 */
+    List<LivFacilityCountRow> facilityTypeCounts(@Param("scope") String scopeEwkbHex, @Param("types") List<String> types);
 
     /** 数据日期：指定计算版本下 fact_district_scores.updated_at 的最大值。 */
     LocalDate dataDate(@Param("version") long calcVersionId);

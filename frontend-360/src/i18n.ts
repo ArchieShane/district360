@@ -110,6 +110,11 @@ const D: Record<string, string> = {
   '距目标': 'Gap to target', '分': 'pts', '分档规则': 'Tier rule',
   '现状 / 在途 / 目标对应宜居库的 Existing / Pipeline（原 Current）/ Target（原 LIV Action Plan）。发布版本': 'Existing / pipeline / target are the liveability Existing / Pipeline (formerly Current) / Target (formerly LIV Action Plan) stages. Published version ',
   '，数据日期': ', data date ', '该区域不在宜居评估范围，没有评分和分档。': 'This district is outside the liveability assessment, with no score or tier.',
+  '宜居 35 类': 'Liveability, 35 types', '设施合计': 'Facilities', '类型覆盖': 'Types present',
+  '领域': 'Domains', '前 5 类': 'Top 5 types', '按领域': 'By domain', '休闲娱乐': 'Leisure & Entertainment', '社会基础设施': 'Social Infrastructure',
+  '体育与游憩': 'Sport & Recreation', '交通基础设施': 'Infrastructure', '医疗健康': 'Health & Wellbeing', '文化与文学': 'Culture & Literature',
+  '公共安全': 'Safety & Security',
+  '宜居设施目录（dim_facility_types）的 8 个领域、35 类，按现状（Existing）设施计数；宜居数据只有区域粒度。': 'Liveability facility catalogue (dim_facility_types): 8 domains, 35 types, counting existing facilities. Liveability data is district-level only.',
   '最缺设施': 'Most lacking facilities', '前 3': 'Top 3', '设施类型': 'Facility type', '在途 / 分档目标': 'Pipeline / tier target', '行动计划后': 'after action plan',
   'FPP 类设施的在途供给评分都已达到本区分档目标。': 'All FPP facility types meet the tier target at the pipeline stage.', '没有分档，无法比较目标。': 'No tier, so no target to compare.',
   '供给评分 0–100；目标为本区分档（': 'Provision score 0–100; the target is the threshold for this district\'s tier (',
@@ -185,6 +190,8 @@ const PATTERNS: [RegExp, string][] = [
   [/^≥ ([\d,.]+) 分$/, '≥ $1 pts'],
   [/^≥ ([\d,.]+) 个$/, '≥ $1'],
   [/^(.+)概况$/, '$1 overview'],
+  [/^([\d,]+) 类中有 ([\d,]+) 类$/, '$2 of $1 types'],
+  [/^([\d,]+) \/ ([\d,]+) 类$/, '$1 / $2 types'],
 ]
 
 const CJK = /[　-〿一-鿿＀-￯]/

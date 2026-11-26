@@ -165,6 +165,37 @@
         LIMIT #{limit}
     </select>
 
+    <!--
+      设施类型目录（原型 Assets「all facility types (35) by domain」）：宜居方法论的设施类型维表 dim_facility_types，
+        取原型的 8 个领域（category），且 fact_facilities 里有数据的类型（Beaches 没有任何记录，不计）→ 当前 35 类。
+        不按 activate 过滤：Sport &amp; Recreation 整个领域 activate = false（不参与评分），但原型目录里有。
+    -->
+    <select id="facilityCatalogue" resultType="com.district360.liveability.row.LivFacilityTypeRow">
+        SELECT t.facility_type, coalesce(t.facility_type_label, t.facility_type) AS type_label,
+               t.category, coalesce(t.category_label, t.category) AS category_label
+        FROM dim_facility_types t
+        WHERE t.category IN ('Culture_And_Literature', 'Education', 'Health_And_Wellbeing', 'Infrastructure',
+                             'Leisure_And_Entertainment', 'Saftey_And_Security', 'Social_Infrastructure', 'Sport_And_Recreation')
+          AND EXISTS (SELECT 1 FROM fact_facilities f WHERE f.facility_type = t.facility_type)
+        ORDER BY t.category, t.facility_type
+    </select>
+
+    <!--
+      一个区各设施类型的现状数量：fact_facilities stage = Existing，几何有点有面，ST_PointOnSurface 落在范围内即计入
+        （与公园数同一口径）；只返回目录内、数量大于 0 的类型。
+    -->
+    <select id="facilityTypeCounts" resultType="com.district360.liveability.row.LivFacilityCountRow">
+        WITH s AS (SELECT ST_GeomFromEWKB(decode(#{scope}, 'hex')) AS g)
+        SELECT f.facility_type, count(*)::int AS n
+        FROM fact_facilities f, s
+        WHERE f.geom &amp;&amp; s.g
+          AND ST_Intersects(s.g, ST_PointOnSurface(f.geom))
+          AND f.stage = 'Existing'
+          AND f.facility_type IN
+          <foreach collection="types" item="t" open="(" separator="," close=")">#{t}</foreach>
+        GROUP BY f.facility_type
+    </select>
+
     <select id="dataDate" resultType="java.time.LocalDate">
         SELECT max(updated_at)::date FROM fact_district_scores WHERE calc_version_id = #{version}
     </select>

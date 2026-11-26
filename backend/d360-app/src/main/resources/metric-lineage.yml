@@ -409,10 +409,10 @@ d360:
         name-zh: 达标所需投资（CAPEX）
         name-en: CAPEX to target
         source: liveability
-        stat-column: stat_district_liveability.capex_aed
+        stat-column: stat_district_liveability.capex_tier_target_aed, capex_aed
         source-tables: ["dim_calc_versions", "dim_districts", "fact_budget"]
-        logic-zh: 按统计范围匹配 Liveability 的区（同上），取当前发布版本的 fact_budget.total_capex（AED，与宜居平台 Budget 卡片一致：新建设施按「Actioned by LIV」取行动计划数量，否则取分档目标缺口计价）。另存 total_opex 与 total_capex_tier_target（全部按分档目标缺口）。市政 / 全酋长国合计不按评估范围过滤。
-        logic-en: District matched by scope (as above); fact_budget.total_capex (AED) of the published calc version, as on the Liveability Budget card. total_opex and total_capex_tier_target are kept too. City totals are not filtered by assessment scope.
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），取当前发布版本的 fact_budget。产品口径（2026-11-26）：优先用 total_capex_tier_target（AED，全部按分档目标缺口计价）；为空时用 total_capex（宜居平台 Budget 卡片总额，新建设施按「Actioned by LIV」取行动计划数量，否则取分档目标缺口）。接口 capexBasis 标明用了哪个（tier_target / total）。宜居页签、首页总览、地图着色、需关注区域口径一致。市政 / 全酋长国合计不按评估范围过滤。
+        logic-en: District matched by scope (as above); fact_budget of the published calc version. total_capex_tier_target (AED, all gaps priced at the tier target) first; total_capex (Liveability Budget card total) when it is empty. capexBasis says which one was used. City totals are not filtered by assessment scope.
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
@@ -439,6 +439,23 @@ d360:
           FROM fact_prioritization_district_classification
           WHERE run_id = (SELECT run_id FROM run) AND district_id = (SELECT district_id FROM l)::text
 
+      liv_facility_types:
+        name-zh: 设施类型（35 类）
+        name-en: Facility types (35)
+        source: liveability
+        stat-column: stat_district_liv_facility_count
+        source-tables: ["dim_facility_types", "fact_facilities"]
+        logic-zh: 宜居库设施类型维表 dim_facility_types 中原型 8 个领域（Culture & Literature、Education、Health & Wellbeing、Infrastructure、Leisure & Entertainment、Safety & Security、Social Infrastructure、Sport & Recreation）且 fact_facilities 有数据的类型，当前 35 类（Beaches 无数据不计）。各类数量 = fact_facilities 中 stage = Existing、几何面内一点（ST_PointOnSurface）落在区范围内的条数，与公园数同一口径；市政、酋长国为各区合计，社区及以下按所在区域。
+        logic-en: Facility types of the 8 prototype domains in dim_facility_types that have rows in fact_facilities (35 today). Count = Existing facilities whose point-on-surface falls in the district; municipality and emirate sum their districts.
+        sql: |
+          SELECT t.category_label, t.facility_type_label, count(f.*) AS n
+          FROM dim_facility_types t
+          LEFT JOIN fact_facilities f ON f.facility_type = t.facility_type AND f.stage = 'Existing'
+               AND ST_Intersects(:district_scope, ST_PointOnSurface(f.geom))
+          WHERE t.category IN ('Culture_And_Literature', 'Education', 'Health_And_Wellbeing', 'Infrastructure',
+                               'Leisure_And_Entertainment', 'Saftey_And_Security', 'Social_Infrastructure', 'Sport_And_Recreation')
+            AND EXISTS (SELECT 1 FROM fact_facilities x WHERE x.facility_type = t.facility_type)
+          GROUP BY 1, 2
       liv_facility_gaps:
         name-zh: 区域最缺设施
         name-en: Most lacking facilities

@@ -58,6 +58,10 @@ public class LiveabilityExtractor implements StatExtractor<LiveabilitySnapshot> 
         if (run == null) {
             log.warn("Liveability 没有审批通过的优先级批次，分档与最缺设施留空");
         }
+        List<LiveabilitySnapshot.FacilityType> catalogue = mapper.facilityCatalogue().stream()
+                .map(t -> new LiveabilitySnapshot.FacilityType(t.facilityType, t.typeLabel, t.category, t.categoryLabel))
+                .toList();
+        List<String> types = catalogue.stream().map(LiveabilitySnapshot.FacilityType::facilityType).toList();
         List<LiveabilitySnapshot.District> out = new ArrayList<>();
         for (DistrictRef d : districts) {
             if (d.scopeEwkbHex() == null) {
@@ -76,15 +80,20 @@ public class LiveabilityExtractor implements StatExtractor<LiveabilitySnapshot> 
             List<LiveabilitySnapshot.Need> needs = mapper.needs(r.livDistrictId, version, MIN_RESPONDENTS, NEEDS).stream()
                     .map(n -> new LiveabilitySnapshot.Need(n.item, n.pct, n.votes, n.respondents))
                     .toList();
+            List<LiveabilitySnapshot.FacilityCount> counts = types.isEmpty() ? List.of()
+                    : mapper.facilityTypeCounts(d.scopeEwkbHex(), types).stream()
+                    .map(c -> new LiveabilitySnapshot.FacilityCount(c.facilityType, c.n))
+                    .toList();
             // 不在评估范围的区也放进来（inScope = false）：页面不展示得分，公园指标照常展示
             out.add(new LiveabilitySnapshot.District(
                     d.code(), r.inScope, r.livDistrictId, r.scoreExisting, r.scoreCurrent, r.scoreTarget,
                     r.parks, r.parkAreaHa, r.parkGapHa, r.capexAed, r.opexAed, r.capexTierTargetAed,
-                    r.tier, r.tierRule, r.tierTriggers, gaps, needs));
+                    r.tier, r.tierRule, r.tierTriggers, gaps, needs, counts));
         }
+        log.info("Liveability 设施类型目录 {} 类", catalogue.size());
         log.info("Liveability 抽取 {} 个区，其中在评估范围内 {} 个，有分档 {} 个，有调查结果 {} 个",
                 out.size(), out.stream().filter(x -> Boolean.TRUE.equals(x.inScope())).count(),
                 out.stream().filter(x -> x.tier() != null).count(), out.stream().filter(x -> !x.needs().isEmpty()).count());
-        return new LiveabilitySnapshot(mapper.dataDate(version), version, runId, out);
+        return new LiveabilitySnapshot(mapper.dataDate(version), version, runId, catalogue, out);
     }
 }

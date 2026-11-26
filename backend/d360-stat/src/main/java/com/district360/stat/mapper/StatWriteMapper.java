@@ -47,6 +47,18 @@ public interface StatWriteMapper {
 
     void insertLivNeeds(@Param("list") List<LivNeedRow> list);
 
+    void deleteAllLivFacilityTypes();
+
+    void insertLivFacilityTypes(@Param("list") List<LiveabilitySnapshot.FacilityType> list);
+
+    void deleteAllLivFacilityCounts();
+
+    void insertLivFacilityCounts(@Param("list") List<LivCountRow> list);
+
+    /** 区设施类型数量的一行：区编码、类型数量。 */
+    record LivCountRow(String code, LiveabilitySnapshot.FacilityCount c) {
+    }
+
     /** 区域最缺设施的一行：区编码、名次（1 起）、设施项目。 */
     record LivGapRow(String code, int rk, LiveabilitySnapshot.FacilityGap g) {
     }

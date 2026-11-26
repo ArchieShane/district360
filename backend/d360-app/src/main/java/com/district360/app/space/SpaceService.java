@@ -232,6 +232,85 @@ public class SpaceService {
         }
         out.put("bySubtype", subtypes);
         out.put("items", items);
+        out.put("facilityTypes", facilityTypes(level, key));
+        return out;
+    }
+
+    /** 设施类型前几类（原型 Public facilities 的 top 5 types） */
+    private static final int TOP_TYPES = 5;
+
+    /**
+     * 设施类型目录（宜居库 dim_facility_types，原型 8 个领域 35 类）与范围内现状数量（fact_facilities，stage = Existing）。
+     * 宜居数据只有区域粒度：酋长国 / 市政为各区合计，社区及以下按所在区域。目录尚未抽取时返回 null。
+     */
+    Map<String, Object> facilityTypes(SpaceLevel level, String key) {
+        String municipality = null;
+        String district = null;
+        if (level == SpaceLevel.MUNICIPALITY) {
+            municipality = key;
+        } else if (level == SpaceLevel.DISTRICT) {
+            district = key;
+        } else if (level != SpaceLevel.EMIRATE) {
+            Map<String, Object> row = mapper.node(level.id(), key);
+            Object d = row == null ? null : row.get("district_key");
+            if (d == null) {
+                return null;
+            }
+            district = d.toString();
+        }
+        List<Map<String, Object>> rows = livMapper.facilityTypes(municipality, district);
+        if (rows.isEmpty()) {
+            return null;
+        }
+        long total = 0;
+        int present = 0;
+        Map<String, Map<String, Object>> domains = new LinkedHashMap<>();
+        for (Map<String, Object> r : rows) {
+            int n = ((Number) r.get("n")).intValue();
+            total += n;
+            if (n > 0) present++;
+            Map<String, Object> dm = domains.computeIfAbsent((String) r.get("category"), c -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("category", c);
+                m.put("label", r.get("categoryLabel"));
+                m.put("n", 0L);
+                m.put("present", 0);
+                m.put("types", new ArrayList<Map<String, Object>>());
+                return m;
+            });
+            dm.put("n", (Long) dm.get("n") + n);
+            if (n > 0) dm.put("present", (Integer) dm.get("present") + 1);
+            Map<String, Object> t = new LinkedHashMap<>();
+            t.put("type", r.get("type"));
+            t.put("label", r.get("label"));
+            t.put("n", n);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> types = (List<Map<String, Object>>) dm.get("types");
+            types.add(t);
+        }
+        List<Map<String, Object>> top = rows.stream()
+                .filter(r -> ((Number) r.get("n")).intValue() > 0)
+                .sorted((a, b) -> Integer.compare(((Number) b.get("n")).intValue(), ((Number) a.get("n")).intValue()))
+                .limit(TOP_TYPES)
+                .map(r -> {
+                    Map<String, Object> t = new LinkedHashMap<>();
+                    t.put("type", r.get("type"));
+                    t.put("label", r.get("label"));
+                    t.put("category", r.get("category"));
+                    t.put("n", r.get("n"));
+                    return t;
+                })
+                .toList();
+        List<Map<String, Object>> domainList = new ArrayList<>(domains.values());
+        domainList.sort((a, b) -> Long.compare((Long) b.get("n"), (Long) a.get("n")));
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("scope", district != null ? Map.of("level", "district", "key", district)
+                : municipality != null ? Map.of("level", "municipality", "key", municipality) : Map.of("level", "emirate", "key", key));
+        out.put("total", total);
+        out.put("typesPresent", present);
+        out.put("typesInCatalogue", rows.size());
+        out.put("top", top);
+        out.put("domains", domainList);
         return out;
     }
 
@@ -325,7 +404,17 @@ public class SpaceService {
         dev.put("summary", devMapper.summary(col, k));
         dev.put("stages", devMapper.stages(col, k));
         out.put("dev", dev);
-        out.put("ast", astMapper.summary(col, k));
+        Map<String, Object> ast = new LinkedHashMap<>();
+        Map<String, Object> astSummary = astMapper.summary(col, k);
+        if (astSummary != null) {
+            ast.putAll(astSummary);
+        }
+        Map<String, Object> ft = facilityTypes(level, key);
+        if (ft != null) {
+            ft.remove("domains");
+        }
+        ast.put("facilityTypes", ft);
+        out.put("ast", ast);
         Map<String, Object> mkt = new LinkedHashMap<>();
         mkt.put("tenancy", mktMapper.tenancySummary(col, k));
         mkt.put("adrec", mktMapper.adrecSummary(col, k));

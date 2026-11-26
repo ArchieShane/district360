@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import { api, type AstView, type DevSummary, type Level, type LivDistrict, type LivSummary, type MktView, type NodeDetail, type OpsView } from '../api'
+import { api, type AstView, type DevSummary, type FacilityTypes, type Level, type LivDistrict, type LivSummary, type MktView, type NodeDetail, type OpsView } from '../api'
 import { num, pct } from '../format'
-import { AST_CATEGORY, LEVEL_NAME, livColor, PLOT_STATUS, TIER } from '../labels'
+import { AST_CATEGORY, FACILITY_DOMAIN, LEVEL_NAME, livColor, PLOT_STATUS, TIER } from '../labels'
 
 /**
  * 首页五主题总览（原型 Overview 的 home view）：开发建设、资产、房地产市场、宜居、城市运行各一块，
@@ -12,7 +12,7 @@ import { AST_CATEGORY, LEVEL_NAME, livColor, PLOT_STATUS, TIER } from '../labels
  */
 interface Overview {
   dev?: { summary?: DevSummary; stages?: { k: string; n: number }[] }
-  ast?: AstView['summary']
+  ast?: AstView['summary'] & { facilityTypes?: FacilityTypes | null }
   mkt?: { tenancy?: MktView['tenancy']; adrec?: MktView['adrec'] }
   ops?: OpsView['summary']
   liv?: { district?: LivDistrict | null; summary?: LivSummary }
@@ -60,6 +60,9 @@ const facilities = computed(() => {
     .filter(f => f.n > 0).sort((p, q) => q.n - p.n)
 })
 const facTotal = computed(() => facilities.value.reduce((s, f) => s + f.n, 0))
+/** 宜居 35 类设施目录（有时优先展示：合计、覆盖类型数、前 3 类） */
+const ft = computed(() => a.value?.facilityTypes ?? null)
+const ftTop = computed(() => (ft.value?.top ?? []).slice(0, 3).map(x => ({ ...x, c: FACILITY_DOMAIN[x.category]?.c ?? '#3DD6D0' })))
 
 const t = computed(() => ov.value?.mkt?.tenancy)
 const adrec = computed(() => ov.value?.mkt?.adrec)
@@ -110,7 +113,14 @@ const aed = (v: number | null | undefined) => v == null ? '—' : v >= 1e9 ? num
             <div v-for="x in bldTop" :key="x.k"><span :title="x.k">{{ x.k }}</span><i><u :style="{ width: (x.n / bldTop[0].n * 100) + '%', background: '#4C8DF6' }" /></i><b>{{ num(x.n) }}</b></div>
           </div>
         </div>
-        <div>
+        <div v-if="ft && ftTop.length">
+          <div class="bh"><span>公共设施</span><em>{{ ft.typesInCatalogue }} 类中有 {{ ft.typesPresent }} 类</em></div>
+          <div class="lead1"><b>{{ num(ft.total) }}</b><span>合计</span></div>
+          <div class="hb">
+            <div v-for="x in ftTop" :key="x.type"><span :title="x.label">{{ x.label }}</span><i><u :style="{ width: (x.n / ftTop[0].n * 100) + '%', background: x.c }" /></i><b>{{ num(x.n) }}</b></div>
+          </div>
+        </div>
+        <div v-else>
           <div class="bh"><span>公共设施</span><em>前 3 类</em></div>
           <div class="lead1"><b>{{ ov ? num(facTotal) : '…' }}</b><span>合计</span></div>
           <div class="hb">
