@@ -305,7 +305,7 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
         <section class="card muted">
           <h2>数据说明</h2>
           <p>全部数据来自 ODS 库（ods 架构），由 d360-ods 抽取工程写入主题库 theme，接口只读主题库。</p>
-          <p>当前 ODS：区域 216、社区 1,864 齐全；地块、BDMS 单元各只有 1 万行样例；udm 建筑台账、BDMS 楼层表为空，建筑与楼层由 BDMS 单元推导（标「推导数据」）。ODS 全量入库后重新抽取即可，无需改代码。</p>
+          <p>当前 ODS（makani_1119）：区域 216、社区 1,864、地块 41 万、udm 建筑 38 万、BDMS 楼层 52 万、单元 73 万均为全量；没有 udm 台账的建筑由 BDMS 楼层 / 单元推导（标「推导数据」）。各主题缺失的源表见对应页签的「待接入」。</p>
         </section>
       </template>
 

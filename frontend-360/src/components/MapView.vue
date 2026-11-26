@@ -3,6 +3,7 @@ import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type Map 
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { api, LEVELS, type Layer, type Level, type LivDistrict, type NearbyView, type NodeDetail, type NodeRef, type WatchView } from '../api'
 import { num } from '../format'
+import { lang, setLang } from '../i18n'
 import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS, POI_BY, POI_TYPES, TIER, WATCH_STYLE } from '../labels'
 
 /**
@@ -590,6 +591,7 @@ const hasLegend = computed(() => legend.value && legend.value.items.length)
       <button class="txt" :data-tip="base === 'sat' ? '切换深色底图' : '切换卫星影像'" @click="base = base === 'sat' ? 'dark' : 'sat'">{{ base === 'sat' ? '影像' : '深色' }}</button>
     </div>
     <div class="grp">
+      <button class="txt" :data-tip="lang === 'en' ? '切换到中文' : 'Switch to English'" :aria-label="lang === 'en' ? '中文' : 'English'" @click="setLang(lang === 'en' ? 'zh' : 'en')">{{ lang === 'en' ? '中' : 'EN' }}</button>
       <button class="txt" :class="{ on: three }" data-tip="三维视角" @click="three = !three">3D</button>
       <button aria-label="放大" @click="zoom(1)"><svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13" /></svg></button>
       <button aria-label="缩小" @click="zoom(-1)"><svg viewBox="0 0 24 24"><path d="M5.5 12h13" /></svg></button>
