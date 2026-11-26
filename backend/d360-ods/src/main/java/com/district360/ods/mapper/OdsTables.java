@@ -18,8 +18,20 @@ public class OdsTables {
     private final String masterplanBoundary;
     private final String masterplanPlot;
     private final String constructionSite;
+    private final String tawtheeq;
+    private final String reSale;
+    private final String reMortgage;
+    private final String reRent;
+    private final String elmsBuySell;
+    private final String elmsMortgage;
 
     public OdsTables(OdsProperties p) {
+        this.tawtheeq = p.table("makani_tbl_tawtheeq_all");
+        this.reSale = p.table("re_x_q21_matview_sale");
+        this.reMortgage = p.table("re_x_q21_matview_mortgage");
+        this.reRent = p.table("re_x_q21_matview_rent");
+        this.elmsBuySell = p.table("re_elms_buy_and_sell_f");
+        this.elmsMortgage = p.table("re_elms_mortgages_f");
         this.masterplanBoundary = p.table("makani_masterplan_ud_masterplan_boundary");
         this.masterplanPlot = p.table("makani_masterplan_ud_plot");
         this.constructionSite = p.table("makani_udm_constructionsite");
@@ -42,4 +54,10 @@ public class OdsTables {
     public String getMasterplanBoundary() { return masterplanBoundary; }
     public String getMasterplanPlot() { return masterplanPlot; }
     public String getConstructionSite() { return constructionSite; }
+    public String getTawtheeq() { return tawtheeq; }
+    public String getReSale() { return reSale; }
+    public String getReMortgage() { return reMortgage; }
+    public String getReRent() { return reRent; }
+    public String getElmsBuySell() { return elmsBuySell; }
+    public String getElmsMortgage() { return elmsMortgage; }
 }

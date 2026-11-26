@@ -1,4 +1,4 @@
--- 升级前检查：ODS 源库里有没有 ODS 抽取（d360-ods：ods-spatial、ods-dev）要用的字段，类型是否兼容（只读，不改任何数据）。
+-- 升级前检查：ODS 源库里有没有 ODS 抽取（d360-ods：ods-spatial、ods-dev、ods-mkt）要用的字段，类型是否兼容（只读，不改任何数据）。
 -- 在 ODS 库里执行。使用前按 config/application-prod.yml 的 d360.ods.schema / table-prefix 改 params（默认 ods / ods_）。
 --
 -- 结果为空 = 全部通过。有结果 = 列出的字段缺失或类型不兼容，ods-spatial 抽取会失败（主题库保持旧数据），发给开发处理。
@@ -7,6 +7,34 @@ WITH params AS (
     SELECT 'ods'::text AS schema, 'ods_'::text AS table_prefix
 ),
 expected(tbl, col, kind) AS (VALUES
+    -- makani_tbl_tawtheeq_all（ods-mkt；ADREC re_* 表可缺省，不在此检查）
+    ('makani_tbl_tawtheeq_all', 'tenancy_id', 'num'),
+    ('makani_tbl_tawtheeq_all', 'tenancy_contract_num', 'text'),
+    ('makani_tbl_tawtheeq_all', 'unit_id', 'num'),
+    ('makani_tbl_tawtheeq_all', 'property_id', 'num'),
+    ('makani_tbl_tawtheeq_all', 'gisid', 'text'),
+    ('makani_tbl_tawtheeq_all', 'tenancy_status_descr_e', 'text'),
+    ('makani_tbl_tawtheeq_all', 'rent_unit_status_descr_e', 'text'),
+    ('makani_tbl_tawtheeq_all', 'tenancy_start_date', 'date'),
+    ('makani_tbl_tawtheeq_all', 'tenancy_end_date', 'date'),
+    ('makani_tbl_tawtheeq_all', 'tenancy_termination_date', 'date'),
+    ('makani_tbl_tawtheeq_all', 'tenancy_cancelled_date', 'date'),
+    ('makani_tbl_tawtheeq_all', 'tenancy_closed_date', 'date'),
+    ('makani_tbl_tawtheeq_all', 'rental_value', 'num'),
+    ('makani_tbl_tawtheeq_all', 'unit_name', 'text'),
+    ('makani_tbl_tawtheeq_all', 'unit_type_descr_e', 'text'),
+    ('makani_tbl_tawtheeq_all', 'unit_usage_type_descr_e', 'text'),
+    ('makani_tbl_tawtheeq_all', 'total_area', 'num'),
+    ('makani_tbl_tawtheeq_all', 'num_bed_rooms', 'num'),
+    ('makani_tbl_tawtheeq_all', 'property_name', 'text'),
+    ('makani_tbl_tawtheeq_all', 'property_type_descr_e', 'text'),
+    ('makani_tbl_tawtheeq_all', 'property_usage_type_descr_e', 'text'),
+    ('makani_tbl_tawtheeq_all', 'actual_usage_name_e', 'text'),
+    ('makani_tbl_tawtheeq_all', 'year_of_construction', 'num'),
+    ('makani_tbl_tawtheeq_all', 'plotnumber', 'text'),
+    ('makani_tbl_tawtheeq_all', 'districtname_e', 'text'),
+    ('makani_tbl_tawtheeq_all', 'communityname_e', 'text'),
+    ('makani_tbl_tawtheeq_all', 'trs_moye_input_time', 'date'),
     -- makani_masterplan_ud_masterplan_boundary（ods-dev）
     ('makani_masterplan_ud_masterplan_boundary', 'shape', 'geom'),
     ('makani_masterplan_ud_masterplan_boundary', 'projectid', 'text'),

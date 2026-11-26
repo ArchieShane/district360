@@ -423,7 +423,7 @@
 
     <select id="metaTables" resultType="java.util.LinkedHashMap">
         SELECT table_name AS "table", theme AS "theme", title_zh AS "title", source_tables AS "sources",
-               extractor AS "extractor", row_count AS "rows", source_as_of AS "asOf", loaded_at AS "loadedAt"
+               extractor AS "extractor", note AS "note", row_count AS "rows", source_as_of AS "asOf", loaded_at AS "loadedAt"
         FROM theme.meta_table
         ORDER BY sort_no
     </select>

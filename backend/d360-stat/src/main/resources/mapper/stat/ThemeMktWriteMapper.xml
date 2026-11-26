@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 市场（ods-mkt）：写入 + 空间归属。
+
+  关联口径：
+    Tawtheeq 租约      ：gisid = sp_plot.gisid；社区 / 区域 / 市政随地块（单元级需 tbl_bdms_tawtheeq_link_data，当前样例对不上，暂不关联）
+    ADREC 买卖 / 抵押 / 租赁：经纬度点落在未注销地块面内、建筑面内；社区 / 区域随地块，没有地块的按点落社区（源表 district / community 是文本，不用）
+    ELMS 地块交易      ：elms_plot_id = sp_plot.elms_plot_id
+  依赖 theme.sp_*（先跑 ods-spatial）。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeMktWriteMapper">
+
+    <sql id="pt">CASE WHEN #{r.lon,jdbcType=DOUBLE}::float8 IS NOT NULL AND #{r.lat,jdbcType=DOUBLE}::float8 IS NOT NULL
+        THEN ST_SetSRID(ST_MakePoint(#{r.lon,jdbcType=DOUBLE}::float8, #{r.lat,jdbcType=DOUBLE}::float8), 4326) END</sql>
+
+    <insert id="insertTenancies">
+        INSERT INTO theme.mkt_tenancy (tenancy_id, contract_num, tawtheeq_unit_id, tawtheeq_property_id, gisid, tenancy_status,
+                                       unit_status, start_date, tenancy_end_date, termination_date, rental_value_aed, unit_name,
+                                       unit_type, unit_usage, unit_area_sqm, bedrooms, property_name, property_type, property_usage,
+                                       actual_usage, year_built, plot_number, src_district, src_community)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.tenancyId}, #{r.contractNum}, #{r.tawtheeqUnitId}, #{r.tawtheeqPropertyId}, #{r.gisid}, #{r.tenancyStatus},
+             #{r.unitStatus}, #{r.startDate}, #{r.tenancyEndDate}, #{r.terminationDate}, #{r.rentalValueAed}, #{r.unitName},
+             #{r.unitType}, #{r.unitUsage}, #{r.unitAreaSqm}, #{r.bedrooms}, #{r.propertyName}, #{r.propertyType}, #{r.propertyUsage},
+             #{r.actualUsage}, #{r.yearBuilt}, #{r.plotNumber}, #{r.srcDistrict}, #{r.srcCommunity})
+        </foreach>
+    </insert>
+
+    <insert id="insertSales">
+        INSERT INTO theme.mkt_sale (sale_application_id, contract_date, sale_type, price_aed, normalized_price_aed, sold_area_sqm,
+                                    rate_aed_sqm, src_municipality, src_district, src_community, land_plot, building_id, unit_floor,
+                                    property_category, property_type, property_layout, project_name, developer_name, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.saleApplicationId}, #{r.contractDate}, #{r.saleType}, #{r.priceAed}, #{r.normalizedPriceAed}, #{r.soldAreaSqm},
+             #{r.rateAedSqm}, #{r.srcMunicipality}, #{r.srcDistrict}, #{r.srcCommunity}, #{r.landPlot}, #{r.buildingId}, #{r.unitFloor},
+             #{r.propertyCategory}, #{r.propertyType}, #{r.propertyLayout}, #{r.projectName}, #{r.developerName}, <include refid="pt"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertMortgages">
+        INSERT INTO theme.mkt_mortgage (contract_id, start_date, end_date, amount_aed, general_category, contract_type, contract_status,
+                                        property_type, src_municipality, src_district, src_community, land_plot, building_id, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.contractId}, #{r.startDate}, #{r.endDate}, #{r.amountAed}, #{r.generalCategory}, #{r.contractType}, #{r.contractStatus},
+             #{r.propertyType}, #{r.srcMunicipality}, #{r.srcDistrict}, #{r.srcCommunity}, #{r.landPlot}, #{r.buildingId}, <include refid="pt"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertRents">
+        INSERT INTO theme.mkt_rent (contract_number, start_date, end_date, annual_value_aed, total_value_aed, rented_area_sqm,
+                                    application_type, contract_status, asset_class, property_type, project_name, developer_name,
+                                    src_municipality, src_district, src_community, land_plot, building_id, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.contractNumber}, #{r.startDate}, #{r.endDate}, #{r.annualValueAed}, #{r.totalValueAed}, #{r.rentedAreaSqm},
+             #{r.applicationType}, #{r.contractStatus}, #{r.assetClass}, #{r.propertyType}, #{r.projectName}, #{r.developerName},
+             #{r.srcMunicipality}, #{r.srcDistrict}, #{r.srcCommunity}, #{r.landPlot}, #{r.buildingId}, <include refid="pt"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertPlotTransactions">
+        INSERT INTO theme.mkt_plot_transaction (kind, txn_id, elms_plot_id, amount_aed, txn_date, project_name)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.kind}, #{r.txnId}, #{r.elmsPlotId}, #{r.amountAed}, #{r.txnDate}, #{r.projectName})
+        </foreach>
+    </insert>
+
+    <!-- ============================== 关联 ============================== -->
+
+    <update id="linkTenancies">
+        UPDATE theme.mkt_tenancy t
+           SET plot_key = p.plot_key, community_key = p.community_key, district_key = p.district_key,
+               municipality_code = p.municipality_code
+          FROM theme.sp_plot p
+         WHERE t.gisid IS NOT NULL AND p.gisid = t.gisid
+    </update>
+
+    <update id="linkByLocation">
+        UPDATE theme.${table} x
+           SET plot_key = p.plot_key, community_key = p.community_key, district_key = p.district_key,
+               municipality_code = p.municipality_code
+          FROM theme.sp_plot p
+         WHERE x.geom IS NOT NULL AND p.cancel_date IS NULL
+           AND p.geom &amp;&amp; x.geom AND ST_Intersects(p.geom, x.geom);
+        UPDATE theme.${table} x
+           SET community_key = c.community_key, district_key = c.district_key, municipality_code = c.municipality_code
+          FROM theme.sp_community c
+         WHERE x.community_key IS NULL AND x.geom IS NOT NULL
+           AND c.geom &amp;&amp; x.geom AND ST_Intersects(c.geom, x.geom);
+        UPDATE theme.${table} x
+           SET building_key = b.building_key
+          FROM theme.sp_building b
+         WHERE x.geom IS NOT NULL
+           AND b.geom &amp;&amp; x.geom AND ST_Intersects(b.geom, x.geom)
+    </update>
+
+    <update id="linkPlotTransactions">
+        UPDATE theme.mkt_plot_transaction x
+           SET plot_key = p.plot_key, community_key = p.community_key, district_key = p.district_key,
+               municipality_code = p.municipality_code
+          FROM theme.sp_plot p
+         WHERE x.elms_plot_id IS NOT NULL AND p.elms_plot_id = x.elms_plot_id
+    </update>
+</mapper>
