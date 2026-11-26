@@ -53,7 +53,7 @@ const chips = computed<string[]>(() => {
     case 'district':
       add(i.areaKm2, `${num(i.areaKm2, 2)} km²`); add(st.communities, `${num(st.communities)} 个社区`); add(st.plots, `${num(st.plots)} 个地块`); add(i.population, `人口 ${num(i.population)}`); break
     case 'community':
-      add(st.plots, `${num(st.plots)} 个地块`); add(i.areaKm2, `${num(i.areaKm2, 2)} km²`); add(st.buildings, `${num(st.buildings)} 栋建筑`); break
+      add(st.plots, `${num(st.plots)} 个地块`); add(i.areaKm2, `${num(i.areaKm2, 2)} km²`); add(st.buildings, `${num(st.buildings)} 栋建筑`); add(i.masterPlan, `总规 ${i.masterPlan}`); break
     case 'plot':
       add(i.areaSqm, area(Number(i.areaSqm))); add(i.primaryUse, String(i.primaryUse)); add(i.constructionStatus, PLOT_STATUS[String(i.constructionStatus)]?.n ?? String(i.constructionStatus)); add(true, `${num(st.buildings)} 栋建筑`); break
     case 'building':
@@ -107,6 +107,25 @@ const kpis = computed<Kpi[]>(() => {
   }
   return []
 })
+
+/** 楼层层级：同楼的上一层 / 下一层（原型楼层卡的上下翻层）；同楼楼层列表按楼层序号，按楼缓存 */
+const floorNav = shallowRef<{ prev: ChildItem | null; next: ChildItem | null; idx: number; total: number } | null>(null)
+const floorCache = new Map<string, ChildItem[]>()
+watch(() => props.node, async n => {
+  floorNav.value = null
+  if (!n || n.level !== 'floor') return
+  const b = n.path.find(p => p.level === 'building')
+  if (!b) return
+  let list = floorCache.get(b.key)
+  if (!list) {
+    try { list = (await api.children('building', b.key, 0, 500)).items } catch { return }
+    floorCache.set(b.key, list)
+  }
+  if (props.node !== n) return
+  const idx = list.findIndex(x => x.key === n.key)
+  if (idx < 0) return
+  floorNav.value = { prev: list[idx - 1] ?? null, next: list[idx + 1] ?? null, idx, total: list.length }
+}, { immediate: true })
 
 const plotStatus = computed(() => (bd.value.plotStatus ?? []).map(x => ({ ...x, n2: PLOT_STATUS[x.k]?.n ?? x.k, c: colorOf(x.k) })))
 const landUse = computed(() => {
@@ -166,6 +185,15 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
       <div class="lvl" aria-label="层级">
         <button v-for="b in bar" :key="b.lv" :class="b.cls" :disabled="!b.r || b.cls === 'on'" @click="b.r && emit('go', b.lv, b.r.key)">
           <span>{{ LEVEL_NAME[b.lv] }}</span><b>{{ b.r?.name ?? '—' }}</b>
+        </button>
+      </div>
+      <div v-if="floorNav" class="fnav">
+        <button :disabled="!floorNav.prev" :title="floorNav.prev ? '下一层：' + floorNav.prev.name : '已是最低层'" @click="floorNav.prev && emit('go', 'floor', floorNav.prev.key)">
+          <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>{{ floorNav.prev?.name ?? '—' }}
+        </button>
+        <span>第 {{ floorNav.idx + 1 }} / {{ floorNav.total }} 层</span>
+        <button :disabled="!floorNav.next" :title="floorNav.next ? '上一层：' + floorNav.next.name : '已是最高层'" @click="floorNav.next && emit('go', 'floor', floorNav.next.key)">
+          {{ floorNav.next?.name ?? '—' }}<svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6" /></svg>
         </button>
       </div>
       <div class="chips">

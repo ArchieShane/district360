@@ -107,4 +107,21 @@
         ORDER BY x.total_gfa DESC NULLS LAST
         LIMIT 10
     </select>
+
+    <!-- 所属总规名称：社区取该社区的总规（按面积最大的前 3 个，「 / 」连接）；地块取总规地块对应的总规 -->
+    <select id="masterPlanOf" resultType="java.lang.String">
+        <choose>
+            <when test="level == 'community'">
+                SELECT string_agg(project_name, ' / ' ORDER BY area_sqm DESC NULLS LAST)
+                FROM (SELECT project_name, area_sqm FROM theme.dev_masterplan
+                      WHERE community_key = #{key} AND project_name IS NOT NULL
+                      ORDER BY area_sqm DESC NULLS LAST LIMIT 3) t
+            </when>
+            <otherwise>
+                SELECT m.project_name FROM theme.dev_masterplan_plot mp JOIN theme.dev_masterplan m ON m.project_id = mp.project_id
+                WHERE mp.plot_key = #{key} AND m.project_name IS NOT NULL
+                LIMIT 1
+            </otherwise>
+        </choose>
+    </select>
 </mapper>

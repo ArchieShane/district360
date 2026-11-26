@@ -20,4 +20,10 @@ public interface ThemeAstQueryMapper {
     /** 设施列表（按容量 / 面积降序），带位置与详情字段 attrs。 */
     List<Map<String, Object>> items(@Param("col") String col, @Param("key") String key, @Param("category") String category,
                                     @Param("limit") int limit);
+
+    /** 地块周边 radius 米内的设施与公交站（不含地块上的设施），按距离升序。 */
+    List<Map<String, Object>> nearby(@Param("plot") String plotKey, @Param("radius") int radiusM);
+
+    /** 地块面内一点 {cx, cy}。 */
+    Map<String, Object> plotPoint(@Param("plot") String plotKey);
 }

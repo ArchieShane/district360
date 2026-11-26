@@ -26,6 +26,9 @@ public interface ThemeDevQueryMapper {
     /** 在建工地列表（按面积降序）。 */
     List<Map<String, Object>> sites(@Param("col") String col, @Param("key") String key, @Param("limit") int limit);
 
+    /** 所属总规名称（社区：面积最大的前 3 个；地块：对应总规）；没有时 null。level 只来自代码。 */
+    String masterPlanOf(@Param("level") String level, @Param("key") String key);
+
     /** 某地块的总规管控记录（容积率、层数、用途、规划面积等）。 */
     List<Map<String, Object>> plotControls(@Param("plotKey") String plotKey);
 }

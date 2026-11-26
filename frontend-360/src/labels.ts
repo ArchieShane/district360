@@ -85,6 +85,7 @@ export const INFO_LABEL: Record<string, string> = {
   bdmsFloors: '楼层数（BDMS）',
   bdmsUnits: '单元数（BDMS）',
   footprintSqm: '基底面积 m²',
+  masterPlan: '所属总规',
   floorId: '楼层编号',
   floorNumber: '楼层号',
   floorSeq: '自下而上序号',
@@ -254,3 +255,14 @@ export const WATCH_STYLE: Record<string, { c: string; icon: string }> = {
   park: { c: '#4C8DF6', icon: '<path d="M12 3.5 7 11h3l-4 6h12l-4-6h3zM12 17v3.5"/>' },
   vio: { c: '#FF7AB6', icon: '<path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17.2v.2"/>' },
 }
+
+/** 设施点位类别（设施 5 类 + 公交站），图层菜单、范围圈、周边设施共用 */
+export const POI_TYPES: { k: string; n: string; c: string }[] = [
+  ...Object.entries(AST_CATEGORY).map(([k, v]) => ({ k, n: v.n, c: v.c })),
+  { k: 'bus', n: '公交站', c: '#F0A64A' },
+]
+export const POI_BY: Record<string, { k: string; n: string; c: string }> = Object.fromEntries(POI_TYPES.map(x => [x.k, x]))
+
+/** 有 / 无 BDMS 分层数据的建筑颜色（与地图一致） */
+export const FD_COL = '#62E0FF'
+export const NFD_COL = '#7FA2FF'

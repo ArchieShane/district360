@@ -3,6 +3,7 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import { api, type AstCategory, type AstItem, type AstView, type NodeDetail } from '../api'
 import { num } from '../format'
 import { AST_ATTR, AST_CATEGORY, LEVEL_NAME } from '../labels'
+import NearbyCard from './NearbyCard.vue'
 
 /**
  * 设施页签（ods-ast）：学校（学位、在校生、使用率）、医疗（床位、医院）、药房、清真寺（礼拜人数）、公园（个数、面积），
@@ -73,6 +74,7 @@ const capLabel: Record<AstCategory, string> = { school: '学位', medical: '床�
   <section v-else-if="!ast" class="card muted"><p>加载中…</p></section>
   <section v-else-if="!ast.scope" class="card muted"><p>该建筑没有对应的地块，没有设施数据。</p></section>
   <template v-else-if="s">
+    <NearbyCard v-if="['plot', 'building', 'floor', 'unit'].includes(node.level)" :node="node" @focus="(x, y) => emit('focus', x, y)" />
     <section v-if="showAssets" class="card">
       <h2>建筑资产<span class="src">theme.sp_building · sp_floor · sp_unit</span></h2>
       <div class="nums">

@@ -23,11 +23,12 @@ let ctrl: AbortController | null = null
 /** 需关注区域：酋长国 / 市政层级才有；hot = 悬停中的区（地图高亮）；wantTab = 点卡片后要打开的页签 */
 const watchView = shallowRef<WatchView | null>(null)
 const hot = ref<string | null>(null)
+const watchShown = ref<string[]>([])
 const wantTab = ref<{ tab: string; t: number } | null>(null)
 let watchCtrl: AbortController | null = null
 watch(node, async n => {
   hot.value = null
-  if (!n || (n.level !== 'emirate' && n.level !== 'municipality')) { watchView.value = null; return }
+  if (!n || (n.level !== 'emirate' && n.level !== 'municipality')) { watchView.value = null; watchShown.value = []; return }
   if (watchView.value?.scope.level === n.level && watchView.value.scope.key === n.key) return
   watchCtrl?.abort()
   watchCtrl = new AbortController()
@@ -84,10 +85,10 @@ onBeforeUnmount(() => window.removeEventListener('hashchange', load))
 </script>
 
 <template>
-  <MapView :node="node" :theme-tab="tab" :focus="focus" :watch="watchView" :hot="hot" @pick="go" />
+  <MapView :node="node" :theme-tab="tab" :focus="focus" :watch="watchView" :hot="hot" :watch-shown="watchShown" @pick="go" />
   <Pickers :node="node" @go="go" />
   <SearchBox @go="go" />
-  <WatchRail v-if="watchView && watchView.districts.length" :view="watchView" @go="goWatch" @hot="k => (hot = k)" />
+  <WatchRail v-if="watchView && watchView.districts.length" :view="watchView" @go="goWatch" @hot="k => (hot = k)" @shown="k => (watchShown = k)" />
   <Panel :node="node" :meta="meta" :error="error" :want-tab="wantTab" @go="go" @up="up" @tab="t => (tab = t)"
          @focus="(lon, lat) => (focus = { lon, lat, t: Date.now() })" />
   <div v-if="loading" class="loading">加载中…</div>

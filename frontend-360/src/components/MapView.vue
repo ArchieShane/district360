@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type Map as MlMap, type StyleSpecification } from 'maplibre-gl'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { api, LEVELS, type Layer, type Level, type LivDistrict, type NodeDetail, type NodeRef, type WatchView } from '../api'
+import { api, LEVELS, type Layer, type Level, type LivDistrict, type NearbyView, type NodeDetail, type NodeRef, type WatchView } from '../api'
 import { num } from '../format'
-import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS, TIER, WATCH_STYLE } from '../labels'
+import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS, POI_BY, POI_TYPES, TIER, WATCH_STYLE } from '../labels'
 
 /**
  * 地图：按当前层级加载对应图层，点击要素下钻。
@@ -15,9 +15,11 @@ import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS, TIER, WATCH_S
  * 图层菜单（原型 Layers）：底图；地块按建设状态 / 土地用途着色；设施点位开关（学校、医疗、药房、清真寺、公园、公交站）；
  *   指标图层 —— 酋长国 / 市政的区域面按建成率 / 宜居分 / 达标投资 / 优先级着色，区域内的社区面按建成率着色
  *   （入住率、违规、销售额、事故缺数据，菜单里灰显）。
+ * 地块及以下：设施页签打开或勾选了设施点位时，画 500 / 1000 m 范围圈和圈内设施（原型选中地块后的范围圈）。
+ * 需关注区域：卡片列里显示的区画脉冲标记，并从卡片连线到标记（原型 Districts to watch 的连线）。
  */
 const props = defineProps<{ node: NodeDetail | null; themeTab?: string; focus?: { lon: number; lat: number; t: number } | null;
-  watch?: WatchView | null; hot?: string | null }>()
+  watch?: WatchView | null; hot?: string | null; watchShown?: string[] }>()
 const emit = defineEmits<{ pick: [level: Level, key: string] }>()
 
 const el = ref<HTMLDivElement>()
@@ -30,6 +32,21 @@ const areaLegend = shallowRef<Legend>(null)
 const plotLegend = shallowRef<Legend>(null)
 const unitLegend = shallowRef<Legend>(null)
 const legend = computed<Legend>(() => unitLegend.value ?? plotLegend.value ?? areaLegend.value)
+/** 第二组图例：周边设施（1 km 内个数）或勾选的设施点位 */
+const poiLegend = computed<Legend>(() => {
+  const shownCats = props.themeTab === 'ast' ? POI_TYPES.map(x => x.k) : poi.value
+  const nb = near.value
+  if (nearOn.value && nb?.counts) {
+    const items = POI_TYPES.filter(x => shownCats.includes(x.k)).map(x => ({ n: `${x.n} ${nb.counts?.[x.k]?.r1000 ?? 0}`, c: x.c }))
+    return items.length ? { title: '周边设施 · 1 km', items } : null
+  }
+  const items = POI_TYPES.filter(x => poi.value.includes(x.k)).map(x => ({ n: x.n, c: x.c }))
+  return items.length ? { title: '设施点位', items } : null
+})
+/** 周边设施（地块及以下） */
+const near = shallowRef<NearbyView | null>(null)
+const nearLevel = computed(() => ['plot', 'building', 'floor', 'unit'].includes(props.node?.level ?? ''))
+const nearOn = computed(() => nearLevel.value && (props.themeTab === 'ast' || poi.value.length > 0))
 
 /** 图层菜单 */
 type Kpi = 'built' | 'liv' | 'capex' | 'tier'
@@ -39,10 +56,7 @@ const plotMode = ref<'status' | 'use'>('status')
 const kpi = ref<Kpi | null>('built')
 /** 手动打开的设施点位（设施页签、城市运行页签打开时另外全显示） */
 const poi = ref<string[]>([])
-const POI: { k: string; n: string; c: string }[] = [
-  ...Object.entries(AST_CATEGORY).map(([k, v]) => ({ k, n: v.n, c: v.c })),
-  { k: 'bus', n: '公交站', c: '#4C8DF6' },
-]
+const POI = POI_TYPES
 const KPI_AREA: { k: Kpi; n: string }[] = [{ k: 'built', n: '建成率' }, { k: 'liv', n: '宜居分' }, { k: 'capex', n: '达标投资' }, { k: 'tier', n: '优先级' }]
 const KPI_PENDING = ['入住率', '违规', '销售额', '道路事故']
 const lv = computed(() => props.node?.level)
@@ -58,7 +72,7 @@ let hovered: { src: string; id: number } | null = null
 let resizeObs: ResizeObserver | null = null
 
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
-const SOURCES = ['area', 'plot', 'bld', 'flr', 'unit', 'sel', 'mp', 'site', 'bus', 'light', 'fac'] as const
+const SOURCES = ['area', 'plot', 'bld', 'flr', 'unit', 'sel', 'mp', 'site', 'bus', 'light', 'fac', 'ring', 'near'] as const
 /** 主题页签叠加的数据源：页签 → [数据源, 图层] */
 const THEME_LAYERS: Record<string, [Src, Layer][]> = {
   dev: [['mp', 'masterplans'], ['site', 'sites']],
@@ -135,6 +149,12 @@ function addLayers(m: MlMap) {
   m.addLayer({ id: 'bus-pt', type: 'circle', source: 'bus', paint: {
     'circle-color': '#4C8DF6', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 1.2,
     'circle-radius': ['case', ['boolean', ['feature-state', 'hover'], false], 7, 4.5] } })
+  // 地块周边：500 / 1000 m 范围圈（虚线）与圈内设施
+  m.addLayer({ id: 'ring-line', type: 'line', source: 'ring', paint: { 'line-color': '#FFFFFF', 'line-width': 1.4, 'line-opacity': 0.8, 'line-dasharray': [2, 2] } })
+  m.addLayer({ id: 'near-pt', type: 'circle', source: 'near', paint: {
+    'circle-color': ['match', ['get', 'c'], ...POI_TYPES.flatMap(x => [x.k, x.c]), '#8C929B'] as unknown as ExpressionSpecification,
+    'circle-stroke-color': '#0E1116', 'circle-stroke-width': 1,
+    'circle-radius': ['case', ['boolean', ['feature-state', 'hover'], false], 7, 4.5] } })
   m.addLayer({ id: 'sel-line', type: 'line', source: 'sel', paint: { 'line-color': '#FFFFFF', 'line-width': 2.4 } })
 }
 
@@ -180,6 +200,7 @@ async function show(n: NodeDetail) {
   unitLegend.value = null
   plotFc = EMPTY
   paintArea(n)
+  showNear()
   const results = await Promise.all(layers.map(l => api.layer(l.at.level, l.at.key, l.layer, signal).then(fc => ({ l, fc })).catch(() => null)))
   if (signal.aborted) return
   for (const r of results) {
@@ -300,8 +321,107 @@ function paintPoi() {
 }
 
 function togglePoi(k: string) {
+  const first = poi.value.length === 0
   poi.value = poi.value.includes(k) ? poi.value.filter(x => x !== k) : [...poi.value, k]
-  if (props.node) showTheme(props.node)
+  if (props.node) { showTheme(props.node); showNear(first && poi.value.length > 0) }
+}
+
+/** 范围圈：以 (lon, lat) 为圆心、r 米的近似圆（64 边形） */
+function circle(lon: number, lat: number, r: number): GeoJSON.Feature {
+  const dy = r / 111320, dx = r / (111320 * Math.cos(lat * Math.PI / 180))
+  const ring = Array.from({ length: 65 }, (_, i) => { const a = i / 64 * 2 * Math.PI; return [lon + dx * Math.cos(a), lat + dy * Math.sin(a)] })
+  return { type: 'Feature', properties: { r }, geometry: { type: 'LineString', coordinates: ring } }
+}
+let ringMarkers: maplibregl.Marker[] = []
+let nearCtrl: AbortController | null = null
+/** 地块及以下：设施页签打开或勾选设施时画范围圈与圈内设施；fly = 把镜头拉到 1 km 圈 */
+async function showNear(fly = false) {
+  if (!map || !ready) return
+  const m = map, n = props.node
+  ringMarkers.forEach(x => x.remove())
+  ringMarkers = []
+  const clear = () => { (m.getSource('ring') as GeoJSONSource).setData(EMPTY); (m.getSource('near') as GeoJSONSource).setData(EMPTY) }
+  if (!n || !nearOn.value) { clear(); return }
+  let v = near.value
+  const want = n.level + '/' + n.key
+  if (!v || (v as NearbyView & { _k?: string })._k !== want) {
+    nearCtrl?.abort()
+    nearCtrl = new AbortController()
+    try {
+      v = await api.nearby(n.level, n.key, nearCtrl.signal)
+      ;(v as NearbyView & { _k?: string })._k = want
+      near.value = v
+    } catch { return }
+    if (props.node !== n || !nearOn.value) return
+  }
+  if (!v?.center) { clear(); return }
+  const [lon, lat] = v.center
+  const radii = v.radii ?? [500, 1000]
+  ;(m.getSource('ring') as GeoJSONSource).setData({ type: 'FeatureCollection', features: radii.map(r => circle(lon, lat, r)) })
+  const cats = props.themeTab === 'ast' ? null : poi.value
+  ;(m.getSource('near') as GeoJSONSource).setData({ type: 'FeatureCollection', features: (v.items ?? [])
+    .filter(it => !cats || cats.includes(it.category))
+    .map(it => ({ type: 'Feature', properties: { c: it.category, name: `${it.name ?? POI_BY[it.category]?.n ?? ''} · ${it.dist} m`, level: 'facility' },
+      geometry: { type: 'Point', coordinates: [it.cx, it.cy] } })) })
+  for (const r of radii) {
+    const div = document.createElement('div')
+    div.className = 'rl'
+    div.textContent = r >= 1000 ? r / 1000 + ' km' : r + ' m'
+    ringMarkers.push(new maplibregl.Marker({ element: div, anchor: 'bottom' }).setLngLat([lon, lat + r / 111320]).addTo(m))
+  }
+  if (fly) {
+    const d = 1100 / 111320, dx = d / Math.cos(lat * Math.PI / 180)
+    m.fitBounds([[lon - dx, lat - d], [lon + dx, lat + d]], { padding: { top: 60, bottom: 60, left: 60, right: panelPx() + 60 }, pitch: 40, duration: 900 })
+  }
+}
+
+/** 需关注区域：卡片列里显示的区画脉冲标记，并从卡片连线到标记 */
+let watchMarkers: maplibregl.Marker[] = []
+const wlines = ref<{ d: string; c: string }[]>([])
+function paintWatchMarkers() {
+  watchMarkers.forEach(x => x.remove())
+  watchMarkers = []
+  if (!map || !ready) return
+  const n = props.node, w = props.watch
+  if (!w || !n || (n.level !== 'emirate' && n.level !== 'municipality')) { wlines.value = []; return }
+  const by = new Map(w.districts.map(d => [d.key, d]))
+  for (const k of props.watchShown ?? []) {
+    const d = by.get(k)
+    if (!d || d.cx == null || d.cy == null) continue
+    const div = document.createElement('div')
+    div.className = 'wb'
+    div.style.setProperty('--c', WATCH_STYLE[d.items[0].key]?.c ?? '#FF5A5A')
+    div.innerHTML = '<u></u><u></u><b></b>'
+    div.title = d.name
+    div.onclick = e => { e.stopPropagation(); emit('pick', 'district', d.key) }
+    watchMarkers.push(new maplibregl.Marker({ element: div, anchor: 'center' }).setLngLat([d.cx, d.cy]).addTo(map))
+  }
+  drawWatchLines()
+}
+let lineRaf = 0
+function drawWatchLines() {
+  cancelAnimationFrame(lineRaf)
+  lineRaf = requestAnimationFrame(() => {
+    const n = props.node, w = props.watch
+    if (!map || !el.value || !w || !n || (n.level !== 'emirate' && n.level !== 'municipality')) { wlines.value = []; return }
+    const box = el.value.getBoundingClientRect()
+    const list = document.querySelector('.watch .list')?.getBoundingClientRect()
+    const by = new Map(w.districts.map(d => [d.key, d]))
+    const out: { d: string; c: string }[] = []
+    for (const k of props.watchShown ?? []) {
+      const d = by.get(k), card = document.querySelector(`.watch .wc[data-key="${CSS.escape(k)}"]`)
+      if (!d || d.cx == null || d.cy == null || !card) continue
+      const r = card.getBoundingClientRect()
+      const y0 = r.top + Math.min(r.height / 2, 18)
+      if (list && (y0 < list.top || y0 > list.bottom)) continue
+      const x0 = r.right - box.left, y = y0 - box.top
+      const p = map.project([d.cx, d.cy])
+      if (p.x < x0) continue
+      const mx = (x0 + p.x) / 2
+      out.push({ d: `M${x0},${y} C${mx},${y} ${mx},${p.y} ${p.x},${p.y}`, c: WATCH_STYLE[d.items[0].key]?.c ?? '#FF5A5A' })
+    }
+    wlines.value = out
+  })
 }
 function pickKpi(k: Kpi) {
   kpi.value = kpi.value === k ? null : k
@@ -365,8 +485,8 @@ function fit(n: NodeDetail) {
   })
 }
 
-const PICKABLE = ['fac-pt', 'bus-pt', 'light-pt', 'unit-ext', 'flr-ext', 'bld-ext', 'site-fill', 'plot-fill', 'mp-fill', 'area-fill']
-const SRC_OF: Record<string, Src> = { 'unit-ext': 'unit', 'flr-ext': 'flr', 'bld-ext': 'bld', 'site-fill': 'site', 'plot-fill': 'plot', 'mp-fill': 'mp', 'area-fill': 'area', 'bus-pt': 'bus', 'light-pt': 'light', 'fac-pt': 'fac' }
+const PICKABLE = ['near-pt', 'fac-pt', 'bus-pt', 'light-pt', 'unit-ext', 'flr-ext', 'bld-ext', 'site-fill', 'plot-fill', 'mp-fill', 'area-fill']
+const SRC_OF: Record<string, Src> = { 'unit-ext': 'unit', 'flr-ext': 'flr', 'bld-ext': 'bld', 'site-fill': 'site', 'plot-fill': 'plot', 'mp-fill': 'mp', 'area-fill': 'area', 'bus-pt': 'bus', 'light-pt': 'light', 'fac-pt': 'fac', 'near-pt': 'near' }
 /** 悬停提示里非下钻对象的类型名 */
 const EXTRA_NAME: Record<string, string> = { masterplan: '总体规划', site: '在建工地', busstop: '公交站台', streetlight: '路灯', facility: '设施' }
 
@@ -399,6 +519,9 @@ onMounted(() => {
     paintWatch()
     if (props.node) show(props.node)
   })
+  map.on('move', drawWatchLines)
+  document.addEventListener('scroll', drawWatchLines, true)
+  window.addEventListener('resize', drawWatchLines)
   map.on('mousemove', e => {
     const f = topFeature(e)
     setHover(f)
@@ -415,11 +538,18 @@ onMounted(() => {
   })
 })
 
-onBeforeUnmount(() => { ctrl?.abort(); resizeObs?.disconnect(); map?.remove(); map = null })
+onBeforeUnmount(() => {
+  ctrl?.abort(); resizeObs?.disconnect()
+  document.removeEventListener('scroll', drawWatchLines, true)
+  window.removeEventListener('resize', drawWatchLines)
+  map?.remove(); map = null
+})
 
 watch(() => props.node, n => { if (n) show(n) })
 watch(() => [props.watch, props.hot, props.node], () => paintWatch())
-watch(() => props.themeTab, () => { if (props.node) { showTheme(props.node); paintArea(props.node) } })
+watch(() => [props.watch, props.watchShown, props.node], () => paintWatchMarkers())
+// 地块及以下打开设施页签时把镜头拉到 1 km 范围圈（原型勾选设施后的做法）
+watch(() => props.themeTab, (t, old) => { if (props.node) { showTheme(props.node); paintArea(props.node); showNear(t === 'ast' && old !== 'ast' && nearLevel.value) } })
 watch(plotMode, () => paintPlots())
 watch(() => props.focus, f => { if (f && map) map.flyTo({ center: [f.lon, f.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 }) })
 watch(base, b => {
@@ -436,9 +566,18 @@ const hasLegend = computed(() => legend.value && legend.value.items.length)
 <template>
   <div ref="el" class="map" />
   <div v-if="tip" class="tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.name }}<small>{{ tip.sub }}</small></div>
-  <div v-if="hasLegend" class="legend">
-    <b>{{ legend!.title }}</b>
-    <span v-for="it in legend!.items" :key="it.n"><i class="sw" :style="{ background: it.c }" />{{ it.n }}</span>
+  <svg v-if="wlines.length" class="wlines" aria-hidden="true">
+    <path v-for="(l, i) in wlines" :key="i" :d="l.d" :style="{ stroke: l.c }" />
+  </svg>
+  <div v-if="hasLegend || poiLegend" class="legend">
+    <template v-if="hasLegend">
+      <b>{{ legend!.title }}</b>
+      <span v-for="it in legend!.items" :key="it.n"><i class="sw" :style="{ background: it.c }" />{{ it.n }}</span>
+    </template>
+    <template v-if="poiLegend">
+      <b>{{ poiLegend.title }}</b>
+      <span v-for="it in poiLegend.items" :key="it.n"><i class="sw rd" :style="{ background: it.c }" />{{ it.n }}</span>
+    </template>
   </div>
   <nav class="tools" aria-label="地图工具">
     <div class="grp">
@@ -505,4 +644,7 @@ const hasLegend = computed(() => legend.value && legend.value.items.length)
 .opts button:disabled { opacity: .4; cursor: not-allowed }
 .sw.rd { border-radius: 50% }
 .hint { margin-top: .45rem; font-size: .7rem; color: var(--tx3) }
+.legend .sw.rd { border-radius: 50% }
+.wlines { position: absolute; inset: 0; z-index: 4; width: 100%; height: 100%; pointer-events: none }
+.wlines path { fill: none; stroke-width: 1.4; stroke-opacity: .75; stroke-dasharray: 4 3 }
 </style>

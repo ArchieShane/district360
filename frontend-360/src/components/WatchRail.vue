@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { WatchDistrict, WatchItem, WatchView } from '../api'
 import { num } from '../format'
 import { WATCH_STYLE } from '../labels'
@@ -10,13 +10,15 @@ import { WATCH_STYLE } from '../labels'
  * 顶部列出 6 项指标与越过的区数，源数据未到位的指标灰显。默认显示前 maxCards 个，其余点「显示全部」。
  */
 const props = defineProps<{ view: WatchView }>()
-const emit = defineEmits<{ go: [key: string, tab: string]; hot: [key: string | null] }>()
+const emit = defineEmits<{ go: [key: string, tab: string]; hot: [key: string | null]; shown: [keys: string[]] }>()
 
 const all = ref(false)
 const open = ref(window.innerWidth >= 1200)
 const ind = computed(() => Object.fromEntries(props.view.indicators.map(i => [i.key, i])))
 const list = computed<WatchDistrict[]>(() => all.value ? props.view.districts : props.view.districts.slice(0, props.view.maxCards))
 const rest = computed(() => props.view.districts.length - props.view.maxCards)
+/** 卡片列里显示的区（地图画标记和连线用）；收起时为空 */
+watch(() => [open.value, list.value], () => emit('shown', open.value ? list.value.map(w => w.key) : []), { immediate: true })
 
 /** 指标值的显示：差距（分）、投资（AED）、供给率（%） */
 function value(it: WatchItem): [string, string] {
@@ -49,7 +51,7 @@ const tabOf = (w: WatchDistrict) => ind.value[w.items[0]?.key]?.tab ?? 'liv'
       </div>
     </header>
     <div v-if="open" class="list">
-      <button v-for="w in list" :key="w.key" class="wc" :style="{ '--c': WATCH_STYLE[w.items[0].key].c }"
+      <button v-for="w in list" :key="w.key" class="wc" :data-key="w.key" :style="{ '--c': WATCH_STYLE[w.items[0].key].c }"
               @click="emit('go', w.key, tabOf(w))" @mouseenter="emit('hot', w.key)" @mouseleave="emit('hot', null)">
         <div class="wh"><b :title="w.name">{{ w.name }}</b><small>{{ w.municipalityCode }}</small></div>
         <div v-for="it in w.items" :key="it.key" class="wi" :style="{ '--c': WATCH_STYLE[it.key].c }">

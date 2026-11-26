@@ -159,3 +159,20 @@ button.row.on { background: rgba(76, 141, 246, .2); color: #fff }
 
 .loading { position: absolute; left: 50%; top: 1.4rem; transform: translateX(-50%); z-index: 8; padding: .4rem .9rem; border-radius: 1rem; background: rgba(20, 21, 24, .9); border: 1px solid var(--line2); font-size: .76rem; color: var(--tx2) }
 .err { color: #FFB3B3 }
+
+/* 范围圈标注（500 m / 1 km） */
+.rl { padding: .05rem .35rem; border-radius: .2rem; background: rgba(14, 17, 22, .8); color: #fff; font-size: .66rem; font-weight: 700; white-space: nowrap; pointer-events: none }
+/* 需关注区域的脉冲标记 */
+.wb { position: relative; width: 1.1rem; height: 1.1rem; cursor: pointer }
+.wb b { position: absolute; inset: .3rem; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 .12rem rgba(10, 14, 20, .85) }
+.wb u { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--c); opacity: 0; animation: wpulse 2.4s ease-out infinite }
+.wb u + u { animation-delay: 1.2s }
+@keyframes wpulse { 0% { transform: scale(.4); opacity: .9 } 100% { transform: scale(2.4); opacity: 0 } }
+@media (prefers-reduced-motion: reduce) { .wb u { animation: none; opacity: .5; transform: scale(1.6) } }
+
+/* 楼层上下翻层（建筑 ▸ 楼层） */
+.fnav { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .7rem; font-size: .76rem; color: var(--tx2) }
+.fnav button { display: inline-flex; align-items: center; gap: .3rem; max-width: 40%; padding: .3rem .55rem; border-radius: .3rem; background: rgba(255, 255, 255, .08); color: var(--tx); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.fnav button:hover:not(:disabled) { background: rgba(255, 255, 255, .16) }
+.fnav button:disabled { opacity: .35; cursor: default }
+.fnav svg { flex: none; width: .9rem; height: .9rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }

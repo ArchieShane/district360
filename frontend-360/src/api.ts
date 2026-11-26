@@ -317,6 +317,26 @@ export interface LivSummary {
   asOf?: string
 }
 
+/** 地块周边设施（/nodes/{level}/{key}/nearby，地块及以下）：500 / 1000 m 范围圈 */
+export interface NearbyItem {
+  /** school / medical / pharmacy / mosque / park / bus */
+  category: string
+  id: string
+  name?: string
+  subtype?: string
+  cx: number
+  cy: number
+  /** 与地块面内一点的距离（米） */
+  dist: number
+}
+export interface NearbyView {
+  scope: { level: Level; key: string } | null
+  center?: [number, number] | null
+  radii?: number[]
+  counts?: Record<string, { r500: number; r1000: number; nearest: number | null }>
+  items?: NearbyItem[]
+}
+
 /** 需关注区域的一项指标（原型 Districts to watch 的 6 项） */
 export interface WatchIndicator {
   key: 'gap' | 'capex' | 'prj' | 'occ' | 'park' | 'vio'
@@ -403,6 +423,7 @@ export const api = {
   },
   /** 首页五主题总览（酋长国 / 市政 / 区域 / 社区） */
   overview: (level: Level, key: string, signal?: AbortSignal) => get<Record<string, unknown>>(`/nodes/${level}/${enc(key)}/overview`, signal),
+  nearby: (level: Level, key: string, signal?: AbortSignal) => get<NearbyView>(`/nodes/${level}/${enc(key)}/nearby`, signal),
   watch: (level: Level, key: string, signal?: AbortSignal) => get<WatchView>(`/nodes/${level}/${enc(key)}/watch`, signal),
   liv: (level: Level, key: string, signal?: AbortSignal) => get<LivView>(`/nodes/${level}/${enc(key)}/liv`, signal),
   ast: (level: Level, key: string, signal?: AbortSignal) => get<AstView>(`/nodes/${level}/${enc(key)}/ast`, signal),

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import { api, type DevView, type Level, type Meta, type NodeDetail } from '../api'
+import { api, type ChildItem, type DevView, type Level, type Meta, type NodeDetail } from '../api'
 import { area, num } from '../format'
-import { GFA_USE, LEVEL_NAME, MP_STAGE } from '../labels'
+import { colorOf, GFA_USE, LEVEL_NAME, MP_STAGE, PLOT_STATUS } from '../labels'
 
 /**
  * 开发建设页签（ods-dev）：总体规划（阶段、实现率、项目列表）、规划建筑面积（按用途）、在建工地、地块规划管控。
@@ -28,6 +28,33 @@ watch(() => [props.node.level, props.node.key], async () => {
 }, { immediate: true })
 
 const s = computed(() => dev.value?.summary)
+
+/** 土地与建设（原型 Development 页签第一张卡）：酋长国 ~ 社区，地块建设状态与土地用途，取自节点视图 */
+const areaLevel = computed(() => ['emirate', 'municipality', 'district', 'community'].includes(props.node.level))
+const land = computed(() => {
+  const st = props.node.stat, bd = props.node.breakdowns
+  const status = [['Constructed', st.plotsConstructed], ['Under Construction', st.plotsUnderConstruction], ['Not Constructed', st.plotsNotConstructed]]
+    .map(([k, n]) => ({ k: k as string, n: Number(n ?? 0), n2: PLOT_STATUS[k as string]?.n ?? k, c: PLOT_STATUS[k as string]?.c ?? '#6B7280' }))
+  const lu = bd.landUse ?? []
+  const tot = lu.reduce((a, x) => a + Number(x.area), 0)
+  const uses = lu.map(x => ({ k: x.k, p: tot ? Number(x.area) / tot * 100 : 0, c: colorOf(x.k) })).filter(x => x.p >= 0.5).slice(0, 8)
+  return { plots: st.plots ?? 0, buildings: st.buildings ?? 0, uc: st.buildingsUnderConstruction ?? 0, status, uses }
+})
+
+/** 社区按建成率排名（原型区域层级的 Communities by built rate） */
+const coms = shallowRef<(ChildItem & { built: number })[]>([])
+watch(() => [props.node.level, props.node.key], async () => {
+  coms.value = []
+  if (props.node.level !== 'district') return
+  const key = props.node.key
+  try {
+    const r = await api.children('district', key, 0, 500)
+    if (props.node.key !== key) return
+    coms.value = r.items.filter(x => Number(x.plots) > 0)
+      .map(x => ({ ...x, built: Number(x.plotsConstructed ?? 0) / Number(x.plots) * 100 }))
+      .sort((a, b) => b.built - a.built)
+  } catch { /* 列表取不到时不显示该卡 */ }
+}, { immediate: true })
 /** 总规实现率：所在地块已建 / 能对上地块的总规地块 */
 const delivery = computed(() => s.value && s.value.mpPlotsLinked ? (s.value.mpPlotsBuilt / s.value.mpPlotsLinked * 100).toFixed(1) : null)
 const stages = computed(() => (dev.value?.stages ?? []).map(x => ({ ...x, n2: MP_STAGE[x.k]?.n ?? x.k, c: MP_STAGE[x.k]?.c ?? '#6B7280' })))
@@ -49,6 +76,33 @@ const big = (v: number | undefined) => !v ? '0' : v >= 1e6 ? num(v / 1e6, 2) + '
   <section v-else-if="!dev" class="card muted"><p>加载中…</p></section>
   <section v-else-if="!dev.scope" class="card muted"><p>该建筑没有对应的地块，没有总规与工地数据。</p></section>
   <template v-else-if="s">
+    <section v-if="areaLevel && land.plots" class="card">
+      <h2>土地与建设<span class="src">theme.sp_plot · sp_building</span></h2>
+      <div class="nums">
+        <div><b>{{ num(land.plots) }}</b><span>地块</span></div>
+        <div><b>{{ num(land.buildings) }}</b><span>建筑</span></div>
+        <div><b>{{ num(land.uc) }}</b><span>在建建筑</span></div>
+      </div>
+      <div class="stack"><i v-for="x in land.status" :key="x.k" :style="{ flex: x.n, background: x.c }" /></div>
+      <div class="keys"><span v-for="x in land.status" :key="x.k"><i class="sw" :style="{ background: x.c }" />{{ x.n2 }}<b>{{ num(x.n) }}</b></span></div>
+      <template v-if="land.uses.length">
+        <div class="sub">土地用途（按面积）</div>
+        <div class="keys"><span v-for="x in land.uses" :key="x.k"><i class="sw" :style="{ background: x.c }" />{{ x.k }}<b>{{ num(x.p, 1) }}%</b></span></div>
+      </template>
+    </section>
+
+    <section v-if="coms.length > 1" class="card">
+      <h2>社区按建成率<span class="chip">{{ coms.length }}</span></h2>
+      <div class="rows" style="--cols: minmax(0,1fr) 3.6rem 5.4rem; max-height: 16rem; overflow: auto">
+        <div class="row hd"><span>社区</span><span>地块</span><span>建成率</span></div>
+        <button v-for="c in coms" :key="c.key" class="row" @click="emit('go', 'community', c.key)">
+          <span><b :title="c.name">{{ c.name }}</b></span>
+          <span>{{ num(Number(c.plots)) }}</span>
+          <span class="bar"><i><u :style="{ width: c.built + '%' }" /></i>{{ num(c.built, 1) }}%</span>
+        </button>
+      </div>
+    </section>
+
     <section class="card">
       <h2>总体规划<span class="src">theme.dev_masterplan · dev_masterplan_plot</span></h2>
       <p v-if="scopeNote" style="margin:-.2rem 0 .5rem">{{ scopeNote }}</p>
@@ -144,3 +198,9 @@ const big = (v: number | undefined) => !v ? '0' : v >= 1e6 ? num(v / 1e6, 2) + '
     </section>
   </template>
 </template>
+
+<style scoped>
+.bar { display: flex; align-items: center; gap: .35rem; justify-content: flex-end }
+.bar i { flex: 1; height: .3rem; border-radius: 1rem; background: rgba(255, 255, 255, .1); overflow: hidden; display: block }
+.bar u { display: block; height: 100%; background: #3D6DF2 }
+</style>

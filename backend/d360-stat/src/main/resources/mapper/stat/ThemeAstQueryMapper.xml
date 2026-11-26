@@ -47,4 +47,34 @@
         ORDER BY coalesce(x.capacity, x.area_sqm, 0) DESC, 3
         LIMIT #{limit}
     </select>
+
+    <!--
+      地块周边设施（原型选中地块后的 500 / 1000 m 范围圈）：以地块面内一点为圆心，设施（ast_facility 位置点）与公交站
+      （ops_bus_stop，同一站多个站台按 gtfs_id 合并取最近的站台）在 #{radius} 米内的，按距离升序。
+      先用经纬度外包框粗筛（0.012° ≈ 1.2 km），再按 geography 精确算距离。
+    -->
+    <select id="nearby" resultType="java.util.LinkedHashMap">
+        WITH p AS (SELECT theme.inner_point(geom) AS g FROM theme.sp_plot WHERE plot_key = #{plot}),
+             f AS (SELECT x.category AS cat, x.source_id AS id, coalesce(x.name_en, x.name_ar) AS name, x.subtype AS sub,
+                          x.centroid AS g2
+                   FROM theme.ast_facility x, p
+                   WHERE x.centroid &amp;&amp; ST_Expand(p.g, 0.012) AND x.plot_key IS DISTINCT FROM #{plot}
+                   UNION ALL
+                   (SELECT DISTINCT ON (coalesce(b.gtfs_id, b.id::text)) 'bus', coalesce(b.gtfs_id, b.id::text), b.name, b.code, b.geom
+                   FROM theme.ops_bus_stop b, p
+                   WHERE b.geom &amp;&amp; ST_Expand(p.g, 0.012)
+                   ORDER BY coalesce(b.gtfs_id, b.id::text), ST_Distance(b.geom::geography, p.g::geography)))
+        SELECT f.cat AS "category", f.id AS "id", f.name AS "name", f.sub AS "subtype",
+               round(ST_X(f.g2)::numeric, 6) AS "cx", round(ST_Y(f.g2)::numeric, 6) AS "cy",
+               round(ST_Distance(f.g2::geography, p.g::geography)::numeric) AS "dist"
+        FROM f, p
+        WHERE ST_DWithin(f.g2::geography, p.g::geography, #{radius})
+        ORDER BY 7
+    </select>
+
+    <!-- 地块面内一点（范围圈圆心） -->
+    <select id="plotPoint" resultType="java.util.LinkedHashMap">
+        SELECT round(ST_X(theme.inner_point(geom))::numeric, 6) AS "cx", round(ST_Y(theme.inner_point(geom))::numeric, 6) AS "cy"
+        FROM theme.sp_plot WHERE plot_key = #{plot}
+    </select>
 </mapper>

@@ -83,6 +83,12 @@ public class SpaceController {
         return ApiResponse.ok(service.liv(SpaceLevel.of(level), key));
     }
 
+    /** 地块周边设施（地块及以下）：500 / 1000 m 范围内的设施与公交站，各类个数与最近距离。 */
+    @GetMapping("/nodes/{level}/{key}/nearby")
+    public ApiResponse<Map<String, Object>> nearby(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.nearby(SpaceLevel.of(level), key));
+    }
+
     /** 首页五主题总览（酋长国 / 市政 / 区域 / 社区）：开发、设施、市场、宜居、城市运行各自的汇总。 */
     @GetMapping("/nodes/{level}/{key}/overview")
     public ApiResponse<Map<String, Object>> overview(@PathVariable String level, @PathVariable String key) {

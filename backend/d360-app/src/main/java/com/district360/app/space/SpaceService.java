@@ -80,6 +80,12 @@ public class SpaceService {
                 info.put(camel(k), v);
             }
         });
+        if (level == SpaceLevel.COMMUNITY || level == SpaceLevel.PLOT) {
+            String mp = devMapper.masterPlanOf(level.id(), key);
+            if (mp != null) {
+                info.put("masterPlan", mp);
+            }
+        }
         String col = level.col();
         String filterKey = level == SpaceLevel.EMIRATE ? null : key;
         Map<String, Object> stat = new LinkedHashMap<>();
@@ -331,6 +337,47 @@ public class SpaceService {
         liv.remove("facilityGaps");
         liv.remove("needs");
         out.put("liv", liv);
+        return out;
+    }
+
+    /** 范围圈半径（米），与原型一致 */
+    private static final int[] RINGS = {500, 1000};
+
+    /**
+     * 地块周边设施（原型选中地块后的 500 / 1000 m 范围圈）：圆心为地块面内一点；建筑 / 楼层 / 单元按所在地块。
+     * 返回圆心、半径、1000 m 内的设施与公交站（含距离），以及各类在 500 / 1000 m 内的个数与最近距离。
+     */
+    public Map<String, Object> nearby(SpaceLevel level, String key) {
+        if (level != SpaceLevel.PLOT && level != SpaceLevel.BUILDING && level != SpaceLevel.FLOOR && level != SpaceLevel.UNIT) {
+            throw new IllegalArgumentException("周边设施只在地块及以下层级提供");
+        }
+        Scope sc = scope(level, key);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("scope", sc.ref());
+        if (sc.key() == null) {
+            return out;
+        }
+        Map<String, Object> c = astMapper.plotPoint(sc.key());
+        out.put("center", c == null ? null : List.of(c.get("cx"), c.get("cy")));
+        out.put("radii", RINGS);
+        List<Map<String, Object>> items = astMapper.nearby(sc.key(), RINGS[RINGS.length - 1]);
+        Map<String, Map<String, Object>> counts = new LinkedHashMap<>();
+        for (Map<String, Object> it : items) {
+            String cat = String.valueOf(it.get("category"));
+            double d = it.get("dist") instanceof Number n ? n.doubleValue() : Double.MAX_VALUE;
+            Map<String, Object> m = counts.computeIfAbsent(cat, k -> {
+                Map<String, Object> x = new LinkedHashMap<>();
+                x.put("r500", 0);
+                x.put("r1000", 0);
+                x.put("nearest", null);
+                return x;
+            });
+            if (d <= RINGS[0]) m.put("r500", (int) m.get("r500") + 1);
+            m.put("r1000", (int) m.get("r1000") + 1);
+            if (m.get("nearest") == null) m.put("nearest", it.get("dist"));
+        }
+        out.put("counts", counts);
+        out.put("items", items);
         return out;
     }
 
