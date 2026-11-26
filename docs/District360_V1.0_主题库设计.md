@@ -83,7 +83,23 @@ Flyway：`V10__theme_spatial.sql`（空间）、`V11__theme_business.sql`（业�
 | `ops_bus_stop` | 3,338 站台 / 1,949 站 | makani_bus_stop | 一行一个站台（主键源 objectid），`gtfs_id` 相同为同一站（如 76000A / B / C 相距约 100 m）；EPSG:32640 转 4326；全部落到社区 |
 | `ops_case`、`ops_accident`、`ops_distortion`、`ops_violation`、`ops_occupancy_case` | 0 | view_adda_cases 等 | pop 为 0 行、makani_1119 无表。抽取器每次检查源表并在 `meta_table.note` 写「ODS 无源表 / 源表无数据 / 已有数据但抽取未实现」，有数据后再实现抽取 |
 
-### 2.5 其他业务主题（已建表，待接入）
+### 2.5 设施（已接入，`ods-ast`，2026-11-26）
+
+迁移 V18。抽取器 `ods-ast` 在每日定时里排在城市运行之后，约 9 秒，写 `ast_facility` 8,148 行。
+**用的是 v1 区情概览统计的同一批 makani 表**（数据清单里的 view_lnd_adek_school / view_lnd_doh_facilities 在 pop 为 0 行），过滤规则也一致：
+
+| 类别 | 行数 | ODS 源表 | 说明 |
+|---|---|---|---|
+| school 学校 | 817（786 个 ESIS） | makani_poi_adek_schools_locations | 学位、在校生、教职工；课程、性别、年级、评级、学费等放 `attrs`；地块按 `udm_gisid`（816 条） |
+| medical 医疗 | 3,114 | makani_poi_doh_facilities | facility_category = Medical（含阿拉伯文 طبي 4 条）；床位；名称含 test 的排除 |
+| pharmacy 药房 | 1,478 | 同上 | facility_category = Pharma；Non-Health Care 不要 |
+| mosque 清真寺 | 2,473 | makani_mosque_awqaf | 阿拉伯文字段；可容纳礼拜人数、层数、建筑状况；无位置的 3 条不要 |
+| park 公园 | 266 个面 / 228 个公园 | makani_udm_park + makani_parks_details | 同一 parkid 可有多个面，个数按 park_id 去重；DMT 明细 60 条中 41 条并入所在公园（设施、开放时间、门票），其余 18 条作为独立公园 |
+
+- **社区 / 区域按设施自身位置点落区**（与 v1「中心点落在区面内」一致），不随地块；地块另按 gisid / 位置关联（医疗、药房多在商场楼宇里，落到地块的约 70%）。
+- 与 v1 逐区核对（216 个区）：学校、清真寺完全一致；医疗只差 4 个区各 1 条，即 v1 不计的阿拉伯文 طبي 类别。
+
+### 2.6 其他业务主题（已建表，待接入）
 
 | 主题 | 表 | ODS 源表 | 空间归属 |
 |---|---|---|---|
