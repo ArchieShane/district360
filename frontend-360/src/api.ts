@@ -2,7 +2,11 @@
  * District 360 V1.0 空间下钻接口（后端 /api/v2/space，只读主题库 theme.sp_*）。
  * 接口地址用相对路径：页面挂在什么二级路由下，接口就跟着走。
  */
-const BASE = 'api/v2/space'
+/**
+ * 接口前缀（相对页面地址）。开发时页面在根路径，走 vite 代理；
+ * 部署在后端二级目录下（如 /district360/v2/）时打包设 VITE_API_BASE=../api/v2/space。
+ */
+const BASE = import.meta.env.VITE_API_BASE || 'api/v2/space'
 
 export type Level = 'emirate' | 'municipality' | 'district' | 'community' | 'plot' | 'building' | 'floor' | 'unit'
 export type Layer = 'municipalities' | 'districts' | 'communities' | 'plots' | 'buildings' | 'floors' | 'units' | 'masterplans' | 'sites' | 'busstops' | 'streetlights' | 'facilities'
