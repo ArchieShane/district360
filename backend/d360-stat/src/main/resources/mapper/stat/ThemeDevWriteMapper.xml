@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 开发建设（ods-dev）：写入 + 空间归属。
+
+  关联口径：
+    总规项目 → 社区 / 区域 ：项目面内点落在社区面内（源 districtid 是区名文本且常为空，不用）
+    总规地块 → 地块        ：先 udm_gisid = sp_plot.gisid，对不上的按总规地块面内点落在未注销地块面内
+    在建工地 → 地块        ：工地面内点落在未注销地块面内
+    社区 / 区域 / 市政     ：随地块；没有地块的按面内点落社区，再落区域
+  依赖 theme.sp_*（先跑 ods-spatial）。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeDevWriteMapper">
+
+    <sql id="g">ST_GeomFromEWKB(decode(#{r.geomHex}, 'hex'))</sql>
+    <sql id="pt">theme.inner_point(ST_GeomFromEWKB(decode(#{r.geomHex}, 'hex')))</sql>
+
+    <insert id="insertMasterPlans">
+        INSERT INTO theme.dev_masterplan (project_id, project_no, project_name, stage, stage_raw, approval_year, developer_name,
+                                          src_municipality, municipality_code, src_district_id, src_community_id, masterplan_level,
+                                          project_type, project_lead, owner_name, parent_project_no, area_sqm, centroid, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.projectId}, #{r.projectNo}, #{r.projectName}, #{r.stage}, #{r.stageRaw}, #{r.approvalYear}, #{r.developerName},
+             #{r.srcMunicipality}, #{r.municipalityCode}, #{r.srcDistrictId}, #{r.srcCommunityId}, #{r.masterplanLevel},
+             #{r.projectType}, #{r.projectLead}, #{r.ownerName}, #{r.parentProjectNo},
+             round(ST_Area(<include refid="g"/>::geography)::numeric, 2), <include refid="pt"/>, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertMasterPlanPlots">
+        INSERT INTO theme.dev_masterplan_plot (src_objectid, project_id, masterplan_type, approval_status, udm_gisid, udm_plot_number,
+                                               registered_land_use, land_use_l1, land_use_l2, plot_area_sqm, far, building_storeys,
+                                               buildings, residential_population, total_residential_units, hotel_rooms, total_gfa,
+                                               residential_gfa, office_gfa, retail_gfa, hotel_gfa, industrial_gfa,
+                                               commercial_recreation_gfa, religious_gfa, education_gfa, healthcare_gfa,
+                                               community_facilities_gfa, centroid, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.srcObjectid}, #{r.projectId}, #{r.masterplanType}, #{r.approvalStatus}, #{r.udmGisid}, #{r.udmPlotNumber},
+             #{r.registeredLandUse}, #{r.landUseL1}, #{r.landUseL2}, #{r.plotAreaSqm}, #{r.far}, #{r.buildingStoreys},
+             #{r.buildings}, #{r.residentialPopulation}, #{r.totalResidentialUnits}, #{r.hotelRooms}, #{r.totalGfa},
+             #{r.residentialGfa}, #{r.officeGfa}, #{r.retailGfa}, #{r.hotelGfa}, #{r.industrialGfa},
+             #{r.commercialRecreationGfa}, #{r.religiousGfa}, #{r.educationGfa}, #{r.healthcareGfa},
+             #{r.communityFacilitiesGfa}, <include refid="pt"/>, <include refid="g"/>)
+        </foreach>
+    </insert>
+
+    <insert id="insertConstructionSites">
+        INSERT INTO theme.dev_construction_site (site_id, description, municipality_code, area_sqm, centroid, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.siteId}, #{r.description}, #{r.municipalityCode},
+             round(ST_Area(<include refid="g"/>::geography)::numeric, 2), <include refid="pt"/>, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <!-- ============================== 关联 ============================== -->
+
+    <update id="linkMasterPlans">
+        UPDATE theme.dev_masterplan m
+           SET community_key = c.community_key, district_key = c.district_key,
+               municipality_code = coalesce(c.municipality_code, m.municipality_code)
+          FROM theme.sp_community c
+         WHERE c.geom &amp;&amp; m.centroid AND ST_Intersects(c.geom, m.centroid);
+        UPDATE theme.dev_masterplan m
+           SET district_key = d.district_key, municipality_code = coalesce(d.municipality_code, m.municipality_code)
+          FROM theme.sp_district d
+         WHERE m.district_key IS NULL
+           AND d.geom &amp;&amp; m.centroid AND ST_Intersects(d.geom, m.centroid)
+    </update>
+
+    <update id="linkMasterPlanPlotsByGisid">
+        UPDATE theme.dev_masterplan_plot m
+           SET plot_key = p.plot_key
+          FROM theme.sp_plot p
+         WHERE m.udm_gisid IS NOT NULL AND p.gisid = m.udm_gisid
+    </update>
+
+    <update id="linkMasterPlanPlotsByLocation">
+        UPDATE theme.dev_masterplan_plot m
+           SET plot_key = p.plot_key
+          FROM theme.sp_plot p
+         WHERE m.plot_key IS NULL AND p.cancel_date IS NULL
+           AND p.geom &amp;&amp; m.centroid AND ST_Intersects(p.geom, m.centroid)
+    </update>
+
+    <update id="propagateMasterPlanPlots">
+        UPDATE theme.dev_masterplan_plot m
+           SET community_key = p.community_key, district_key = p.district_key, municipality_code = p.municipality_code
+          FROM theme.sp_plot p
+         WHERE p.plot_key = m.plot_key;
+        UPDATE theme.dev_masterplan_plot m
+           SET community_key = c.community_key, district_key = c.district_key, municipality_code = c.municipality_code
+          FROM theme.sp_community c
+         WHERE m.community_key IS NULL
+           AND c.geom &amp;&amp; m.centroid AND ST_Intersects(c.geom, m.centroid)
+    </update>
+
+    <update id="linkConstructionSites">
+        UPDATE theme.dev_construction_site s
+           SET plot_key = p.plot_key, community_key = p.community_key, district_key = p.district_key,
+               municipality_code = coalesce(p.municipality_code, s.municipality_code)
+          FROM theme.sp_plot p
+         WHERE p.cancel_date IS NULL
+           AND p.geom &amp;&amp; s.centroid AND ST_Intersects(p.geom, s.centroid);
+        UPDATE theme.dev_construction_site s
+           SET community_key = c.community_key, district_key = c.district_key,
+               municipality_code = coalesce(c.municipality_code, s.municipality_code)
+          FROM theme.sp_community c
+         WHERE s.community_key IS NULL
+           AND c.geom &amp;&amp; s.centroid AND ST_Intersects(c.geom, s.centroid)
+    </update>
+
+    <update id="countSiteBuildings">
+        UPDATE theme.dev_construction_site s
+           SET buildings = b.n
+          FROM (SELECT construction_site_id::text AS site_id, count(*) AS n
+                FROM theme.sp_building
+                WHERE construction_site_id IS NOT NULL
+                GROUP BY 1) b
+         WHERE b.site_id = s.site_id
+    </update>
+</mapper>

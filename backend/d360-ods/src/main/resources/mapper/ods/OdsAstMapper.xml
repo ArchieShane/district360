@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  ODS → 主题库 · 设施（theme.ast_facility）。与 v1 区情概览统计用同一批 makani 表，口径保持一致：
+    - 医疗 / 药房：facility_category = Medical（含阿拉伯文 طبي）/ Pharma；名称含 test 的测试数据排除；Non-Health Care 不要；
+    - 清真寺：无位置的 3 条不要；名称为空时用「مسجد + 编号」（同 v1）；
+    - 公园：udm_park 每个面一行（同一 parkid 可有多个面）；parks_details 先写成 park_detail，写入后并入所在公园。
+  详情字段拼成 JSON（attrs），页面原样展示。改口径时同步更新 docs 与 deploy/docker/check-ods-columns.sql。
+-->
+<mapper namespace="com.district360.ods.mapper.OdsAstMapper">
+
+    <sql id="g">
+        encode(ST_AsEWKB(ST_Force2D(
+            CASE WHEN ST_SRID(${col}) = 0 THEN ST_SetSRID(${col}, 4326) ELSE ST_Transform(${col}, 4326) END)), 'hex')
+    </sql>
+    <sql id="mpoly">
+        encode(ST_AsEWKB(ST_Multi(ST_CollectionExtract(ST_Force2D(
+            CASE WHEN ST_SRID(${col}) = 0 THEN ST_SetSRID(${col}, 4326) ELSE ST_Transform(${col}, 4326) END), 3))), 'hex')
+    </sql>
+
+    <select id="schools" resultType="com.district360.common.theme.ast.AstRows$Facility">
+        SELECT 'school'                                   AS category,
+               objectid::text                             AS source_id,
+               nullif(trim(adek_sch_name_en), '')         AS name_en,
+               nullif(trim(adek_sch_name_ar), '')         AS name_ar,
+               nullif(trim(adek_sch_education_type_en), '') AS subtype,
+               nullif(trim(adek_sch_curriculum_en), '')   AS sub_category,
+               adek_sch_capacity::int                     AS capacity,
+               adek_n_students::int                       AS students,
+               adek_n_total_staff::int                    AS staff,
+               CASE WHEN adek_sch_education_type_en ILIKE 'Public%' THEN true
+                    WHEN adek_sch_education_type_en ILIKE 'Private%' THEN false END AS is_public,
+               nullif(trim(udm_gisid), '')                AS gisid,
+               json_strip_nulls(json_build_object(
+                   'esisId', adek_sch_esis_id, 'gender', adek_sch_gender_en, 'grades', adek_sch_grades_en,
+                   'cycle', adek_sch_cycle_en, 'curriculum', adek_sch_curriculum_en, 'rating', adek_sch_latest_irtqaa_result,
+                   'tuitionCategory', adek_sch_tuition_fee_category, 'averageTuition', adek_sch_average_tuition_fee,
+                   'teachingStaff', adek_n_teaching_staff, 'boys', adek_n_students_boys, 'girls', adek_n_students_girls,
+                   'academicYear', adek_sch_academic_year, 'snapshot', adek_report_snapshot::date))::text AS attrs_json,
+               <include refid="g"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.schools}
+        WHERE shape IS NOT NULL
+    </select>
+
+    <select id="health" resultType="com.district360.common.theme.ast.AstRows$Facility">
+        SELECT CASE WHEN facility_category = 'Pharma' THEN 'pharmacy' ELSE 'medical' END AS category,
+               objectid::text                             AS source_id,
+               nullif(trim(facility_name_in_english), '') AS name_en,
+               nullif(trim(facility_name_in_arabic), '')  AS name_ar,
+               nullif(trim(facility_type), '')            AS subtype,
+               nullif(trim(facility_sub_type), '')        AS sub_category,
+               CASE WHEN bed_capacity::text ~ '^[0-9]+$' THEN bed_capacity::text::int END AS capacity,
+               CASE WHEN is_public::text ILIKE ANY (ARRAY['y%', 't%', '1']) THEN true
+                    WHEN is_public::text ILIKE ANY (ARRAY['n%', 'f%', '0']) THEN false END AS is_public,
+               nullif(trim(coalesce(permanent_status::text, preliminary_status::text)), '') AS status,
+               json_strip_nulls(json_build_object(
+                   'license', facility_license_number, 'specialities', specialities_subspecialities,
+                   'emergencyLevel', emergency_level, 'region', region, 'city', city, 'plotNumber', plot_number,
+                   'address', address_name_in_english, 'issueDate', issue_date, 'expiryDate', date_expiration))::text AS attrs_json,
+               <include refid="g"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.doh}
+        WHERE shape IS NOT NULL
+          AND facility_category IN ('Medical', 'طبي', 'Pharma')
+          AND coalesce(facility_name_in_english, '') NOT ILIKE '%test%'
+    </select>
+
+    <select id="mosques" resultType="com.district360.common.theme.ast.AstRows$Facility">
+        SELECT 'mosque'                                   AS category,
+               objectid::text                             AS source_id,
+               NULL                                       AS name_en,
+               coalesce(nullif(trim("اسم_المسجد"), ''), 'مسجد ' || coalesce("رقم_المسجد"::text, objectid::text)) AS name_ar,
+               nullif(trim("صفة_المسجد_1"), '')           AS subtype,
+               CASE WHEN "إجمالي_عدد_المصلين"::text ~ '^[0-9]+(\.0+)?$' THEN trunc("إجمالي_عدد_المصلين"::text::numeric)::int END AS capacity,
+               CASE WHEN "عدد_الطوابق"::text ~ '^[0-9]+(\.0+)?$' THEN trunc("عدد_الطوابق"::text::numeric)::int END AS floors,
+               nullif(trim("حالة_المبنى"::text), '')      AS status,
+               json_strip_nulls(json_build_object(
+                   'mosqueNo', "رقم_المسجد", 'branch', "فرع", 'area', "المنطقة", 'plotNo', "رقم_القطعة",
+                   'sermonLanguage', "الخطبة_باللغة", 'stage', liv_stage))::text AS attrs_json,
+               <include refid="g"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.mosques}
+        WHERE shape IS NOT NULL
+    </select>
+
+    <select id="parks" resultType="com.district360.common.theme.ast.AstRows$Facility">
+        SELECT 'park'                                     AS category,
+               'udm-' || objectid                         AS source_id,
+               coalesce(nullif(trim(nameenglish), ''), nullif(trim(namepopularenglish), '')) AS name_en,
+               coalesce(nullif(trim(namearabic), ''), nullif(trim(namepopulararabic), ''))   AS name_ar,
+               'udm'                                      AS subtype,
+               coalesce(parkid::text, 'o' || objectid)    AS park_id,
+               <include refid="mpoly"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.parks}
+        WHERE shape IS NOT NULL
+    </select>
+
+    <select id="parkDetails" resultType="com.district360.common.theme.ast.AstRows$Facility">
+        SELECT 'park_detail'                              AS category,
+               'dmt-' || objectid                         AS source_id,
+               nullif(trim(name), '')                     AS name_en,
+               nullif(trim(alt_nm_1), '')                 AS name_ar,
+               'dmt'                                      AS subtype,
+               json_strip_nulls(json_build_object(
+                   'neighbourhood', neighbh, 'city', city, 'street', st_name, 'hours', x_working_hours_eng,
+                   'entryFee', x_entry_fee, 'playArea', x_multipurposeplayarea, 'mosque', x_mosque, 'kiosk', x_kiosk,
+                   'restroom', x_restroom, 'bbq', x_barbaquearea, 'theatre', x_theatre, 'restaurants', x_restaurants,
+                   'library', x_library, 'games', x_playgames, 'fountains', x_fountains, 'fenced', x_fenced))::text AS attrs_json,
+               <include refid="mpoly"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.parkDetails}
+        WHERE shape IS NOT NULL
+    </select>
+</mapper>

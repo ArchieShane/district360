@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.district360</groupId>
         <artifactId>district360-backend</artifactId>
-        <version>0.2.0</version>
+        <version>0.3.0</version>
     </parent>
 
     <artifactId>d360-adrec</artifactId>

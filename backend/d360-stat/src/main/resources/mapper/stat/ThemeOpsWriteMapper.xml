@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 城市运行（ods-ops）：路灯、公交站台写入 + 空间归属（点落社区，社区没有的落区域）。依赖 theme.sp_*。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeOpsWriteMapper">
+
+    <sql id="g">ST_GeomFromEWKB(decode(#{r.geomHex}, 'hex'))</sql>
+
+    <insert id="insertStreetlights">
+        INSERT INTO theme.ops_streetlight (id, lamp_count, status, lamp_type, road_type, fixture_height_m, installation_date,
+                                           entity, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.id}, #{r.lampCount}, #{r.status}, #{r.lampType}, #{r.roadType}, #{r.fixtureHeightM}, #{r.installationDate},
+             #{r.entity}, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertBusStops">
+        INSERT INTO theme.ops_bus_stop (id, gtfs_id, code, name, name_ar, stop_number, point_type, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.id}, #{r.gtfsId}, #{r.code}, #{r.name}, #{r.nameAr}, #{r.stopNumber}, #{r.pointType}, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <update id="linkPoints">
+        UPDATE theme.${table} x
+           SET community_key = c.community_key, district_key = c.district_key, municipality_code = c.municipality_code
+          FROM theme.sp_community c
+         WHERE x.geom IS NOT NULL
+           AND c.geom &amp;&amp; x.geom AND ST_Intersects(c.geom, x.geom);
+        UPDATE theme.${table} x
+           SET district_key = d.district_key, municipality_code = d.municipality_code
+          FROM theme.sp_district d
+         WHERE x.district_key IS NULL AND x.geom IS NOT NULL
+           AND d.geom &amp;&amp; x.geom AND ST_Intersects(d.geom, x.geom)
+    </update>
+</mapper>

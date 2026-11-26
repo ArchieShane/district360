@@ -37,7 +37,23 @@ public interface StatWriteMapper {
 
     void deleteAllLiveability();
 
-    void insertLiveability(@Param("list") List<LiveabilitySnapshot.District> list, @Param("asOf") LocalDate asOf);
+    void insertLiveability(@Param("list") List<LiveabilitySnapshot.District> list, @Param("s") LiveabilitySnapshot snapshot);
+
+    void deleteAllLivFacilityGaps();
+
+    void insertLivFacilityGaps(@Param("list") List<LivGapRow> list);
+
+    void deleteAllLivNeeds();
+
+    void insertLivNeeds(@Param("list") List<LivNeedRow> list);
+
+    /** 区域最缺设施的一行：区编码、名次（1 起）、设施项目。 */
+    record LivGapRow(String code, int rk, LiveabilitySnapshot.FacilityGap g) {
+    }
+
+    /** 居民需求的一行：区编码、名次（1 起）、调查选项。 */
+    record LivNeedRow(String code, int rk, LiveabilitySnapshot.Need n) {
+    }
 
     void deleteAllAdrec();
 

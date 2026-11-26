@@ -83,6 +83,14 @@ d360:
     # 手动触发抽取的口令（请求头 X-Admin-Token）；为空则禁用该接口
     token: ${D360_ADMIN_TOKEN:}
 
+  # 需关注区域（GET /api/v2/space/nodes/{emirate|municipality}/{key}/watch）的阈值：原型标注为工作值，待业主确认后改这里
+  watch:
+    gap-min: 8                 # 距目标差距（目标 − 在途）≥ 8 分
+    capex-min-aed: 400000000   # 达标所需投资 ≥ AED 4 亿
+    park-provision-max: 0.5    # 公园供给率 < 50%
+    park-need-min-ha: 5        # 只看公园需求 ≥ 5 公顷的区（≈ 原型「人口 ≥ 1 万」× 5 m²/人）
+    max-cards: 6               # 首屏显示的区数
+
   # 土地利用归类：makani udm_plot.primaryuseengdesc → 页面类别
   # - 顺序即页面顺序；没被任何一组列出的用途（如 Investment、Utility、Industrial、Undefined）归入最后一组
   # - highlight: true 的类别显示在面板「土地利用」一行（目前只显示居住、商业；「混合」已按业务要求删除）

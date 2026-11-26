@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  ODS → 主题库 · 城市运行（路灯、公交站台）。源表是 EPSG:32640（UTM 40N）点，转成 4326；SRID 为 0 时按 4326。
+  改口径时同步更新 docs/District360_V1.0_主题库设计.md 与 deploy/docker/check-ods-columns.sql。
+-->
+<mapper namespace="com.district360.ods.mapper.OdsOpsMapper">
+
+    <sql id="pt">
+        encode(ST_AsEWKB(ST_Force2D(
+            CASE WHEN ST_SRID(${col}) = 0 THEN ST_SetSRID(${col}, 4326) ELSE ST_Transform(${col}, 4326) END)), 'hex')
+    </sql>
+
+    <select id="streetlights" resultType="com.district360.common.theme.ops.OpsRows$Streetlight">
+        SELECT objectid                          AS id,
+               lampcount                         AS lamp_count,
+               nullif(trim(statusindicator), '') AS status,
+               nullif(trim(lamptype), '')        AS lamp_type,
+               nullif(trim(roadtype), '')        AS road_type,
+               fixtureheight                     AS fixture_height_m,
+               installationdate::date            AS installation_date,
+               nullif(trim(entity_name), '')     AS entity,
+               <include refid="pt"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.streetlight}
+        WHERE shape IS NOT NULL
+    </select>
+
+    <select id="busStops" resultType="com.district360.common.theme.ops.OpsRows$BusStop">
+        SELECT objectid                          AS id,
+               gtfs_id::text                     AS gtfs_id,
+               nullif(trim(code), '')            AS code,
+               nullif(trim(name), '')            AS name,
+               nullif(trim(name_ar), '')         AS name_ar,
+               stop_number,
+               point_type,
+               <include refid="pt"><property name="col" value="shape"/></include> AS geom_hex
+        FROM ${t.busStop}
+        WHERE shape IS NOT NULL
+    </select>
+</mapper>

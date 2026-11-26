@@ -156,7 +156,10 @@
                        sum(plots_under_construction) AS plots_under_construction, sum(plots_not_constructed) AS plots_not_constructed,
                        sum(plots_area_sqm) AS plots_area_sqm, sum(buildings) AS buildings,
                        sum(buildings_under_construction) AS buildings_under_construction, sum(floors) AS floors,
-                       sum(units) AS units, sum(units_area_sqm) AS units_area_sqm
+                       sum(units) AS units, sum(units_area_sqm) AS units_area_sqm, sum(units_area_outliers) AS units_area_outliers,
+                       sum(floors_area_sqm) AS floors_area_sqm, sum(plots_max_gfa_sqm) AS plots_max_gfa_sqm,
+                       sum(buildings_completed) AS buildings_completed, sum(buildings_demolished) AS buildings_demolished,
+                       max(last_completion_date) AS last_completion_date, max(last_demolition_date) AS last_demolition_date
                 FROM theme.sp_node_stat WHERE level = 'municipality'
             </when>
             <when test="level == 'floor'">
@@ -171,7 +174,9 @@
                 SELECT
                     <if test="level == 'municipality'">(SELECT count(*) FROM theme.sp_district WHERE municipality_code = #{key}) AS districts,</if>
                     s.communities, s.plots, s.plots_constructed, s.plots_under_construction, s.plots_not_constructed,
-                    s.plots_area_sqm, s.buildings, s.buildings_under_construction, s.floors, s.units, s.units_area_sqm
+                    s.plots_area_sqm, s.buildings, s.buildings_under_construction, s.floors, s.units, s.units_area_sqm,
+                    s.units_area_outliers, s.floors_area_sqm, s.plots_max_gfa_sqm, s.buildings_completed, s.buildings_demolished,
+                    s.last_completion_date, s.last_demolition_date
                 FROM (SELECT 1) one
                 LEFT JOIN theme.sp_node_stat s ON s.level = #{level} AND s.node_key = #{key}
             </otherwise>
@@ -373,6 +378,54 @@
                 WHERE x.${col} = #{key}
                 LIMIT #{limit}
             </when>
+            <when test="layer == 'masterplans'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(ST_SimplifyPreserveTopology(x.geom, #{tol}), 6)::json,
+                       'properties', json_build_object('key', x.project_id, 'name', coalesce(x.project_name, x.project_id),
+                                     'level', 'masterplan', 'stage', x.stage, 'year', x.approval_year,
+                                     'dev', x.developer_name)) AS f
+                FROM theme.dev_masterplan x
+                WHERE x.${col} = #{key}
+                ORDER BY x.area_sqm DESC
+                LIMIT #{limit}
+            </when>
+            <when test="layer == 'sites'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.geom, 7)::json,
+                       'properties', json_build_object('key', x.site_id, 'name', 'Site ' || x.site_id, 'level', 'site',
+                                     'b', coalesce(x.buildings, 0), 'area', round(x.area_sqm, 0))) AS f
+                FROM theme.dev_construction_site x
+                WHERE x.${col} = #{key}
+                LIMIT #{limit}
+            </when>
+            <when test="layer == 'busstops'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.geom, 6)::json,
+                       'properties', json_build_object('key', x.id, 'name', coalesce(x.name, x.code), 'level', 'busstop',
+                                     'code', x.code, 'stop', x.gtfs_id)) AS f
+                FROM theme.ops_bus_stop x
+                WHERE x.${col} = #{key}
+                LIMIT #{limit}
+            </when>
+            <when test="layer == 'streetlights'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.geom, 6)::json,
+                       'properties', json_build_object('key', x.id, 'name', 'Streetlight ' || x.id, 'level', 'streetlight',
+                                     'st', x.status, 'n', x.lamp_count)) AS f
+                FROM theme.ops_streetlight x
+                WHERE x.${col} = #{key}
+                LIMIT #{limit}
+            </when>
+            <when test="layer == 'facilities'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.centroid, 6)::json,
+                       'properties', json_build_object('key', x.category || ':' || x.source_id,
+                                     'name', coalesce(x.name_en, x.name_ar), 'level', 'facility', 'c', x.category,
+                                     'sub', x.subtype)) AS f
+                FROM theme.ast_facility x
+                WHERE x.${col} = #{key} AND x.centroid IS NOT NULL
+                LIMIT #{limit}
+            </when>
         </choose>
         ) q
     </select>
@@ -403,7 +456,7 @@
 
     <select id="metaTables" resultType="java.util.LinkedHashMap">
         SELECT table_name AS "table", theme AS "theme", title_zh AS "title", source_tables AS "sources",
-               extractor AS "extractor", row_count AS "rows", source_as_of AS "asOf", loaded_at AS "loadedAt"
+               extractor AS "extractor", note AS "note", row_count AS "rows", source_as_of AS "asOf", loaded_at AS "loadedAt"
         FROM theme.meta_table
         ORDER BY sort_no
     </select>

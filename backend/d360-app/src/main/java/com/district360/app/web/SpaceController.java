@@ -4,6 +4,7 @@ import com.district360.app.space.NodeDetail;
 import com.district360.app.space.SpaceLayer;
 import com.district360.app.space.SpaceLevel;
 import com.district360.app.space.SpaceService;
+import com.district360.app.space.WatchService;
 import com.district360.app.web.dto.PageResult;
 import com.district360.common.api.ApiResponse;
 import org.springframework.http.CacheControl;
@@ -30,9 +31,11 @@ public class SpaceController {
     private static final MediaType GEO_JSON = MediaType.parseMediaType("application/geo+json");
 
     private final SpaceService service;
+    private final WatchService watchService;
 
-    public SpaceController(SpaceService service) {
+    public SpaceController(SpaceService service, WatchService watchService) {
         this.service = service;
+        this.watchService = watchService;
     }
 
     /** 节点视图：名称、上级链、属性、计数、分组、可用图层。 */
@@ -48,6 +51,54 @@ public class SpaceController {
                                                                  @RequestParam(defaultValue = "0") int page,
                                                                  @RequestParam(defaultValue = "50") int size) {
         return ApiResponse.ok(service.children(SpaceLevel.of(level), key, q, page, size));
+    }
+
+    /** 开发建设页签：总体规划、规划建筑面积、总规实现率、在建工地、地块管控（建筑及以下按所在地块）。 */
+    @GetMapping("/nodes/{level}/{key}/dev")
+    public ApiResponse<Map<String, Object>> dev(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.dev(SpaceLevel.of(level), key));
+    }
+
+    /** 市场页签：Tawtheeq 租约与 ADREC 交易（建筑及以下按所在地块），不含个人信息。 */
+    @GetMapping("/nodes/{level}/{key}/mkt")
+    public ApiResponse<Map<String, Object>> mkt(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.mkt(SpaceLevel.of(level), key));
+    }
+
+    /** 城市运行页签：路灯与公交站（地块及以下按所在社区）。 */
+    @GetMapping("/nodes/{level}/{key}/ops")
+    public ApiResponse<Map<String, Object>> ops(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.ops(SpaceLevel.of(level), key));
+    }
+
+    /** 设施页签：学校、医疗、药房、清真寺、公园（建筑及以下按所在地块）。 */
+    @GetMapping("/nodes/{level}/{key}/ast")
+    public ApiResponse<Map<String, Object>> ast(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.ast(SpaceLevel.of(level), key));
+    }
+
+    /** 宜居页签：区域评分、排名、公园（酋长国 / 市政给各区排名，社区及以下按所在区域）。 */
+    @GetMapping("/nodes/{level}/{key}/liv")
+    public ApiResponse<Map<String, Object>> liv(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.liv(SpaceLevel.of(level), key));
+    }
+
+    /** 地块周边设施（地块及以下）：500 / 1000 m 范围内的设施与公交站，各类个数与最近距离。 */
+    @GetMapping("/nodes/{level}/{key}/nearby")
+    public ApiResponse<Map<String, Object>> nearby(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.nearby(SpaceLevel.of(level), key));
+    }
+
+    /** 首页五主题总览（酋长国 / 市政 / 区域 / 社区）：开发、设施、市场、宜居、城市运行各自的汇总。 */
+    @GetMapping("/nodes/{level}/{key}/overview")
+    public ApiResponse<Map<String, Object>> overview(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.overview(SpaceLevel.of(level), key));
+    }
+
+    /** 需关注区域（酋长国 / 市政）：越过任一阈值的区域及越过的指标，按各指标最差者轮流排序。阈值见配置 d360.watch。 */
+    @GetMapping("/nodes/{level}/{key}/watch")
+    public ApiResponse<Map<String, Object>> watch(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(watchService.watch(SpaceLevel.of(level), key));
     }
 
     /** 地图图层（GeoJSON FeatureCollection，EPSG:4326）。 */

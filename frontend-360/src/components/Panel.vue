@@ -4,16 +4,25 @@ import { api, type BreakdownItem, type ChildItem, type Level, type Meta, type No
 import { area, display, num, pct } from '../format'
 import { colorOf, DIM_TITLE, INFO_LABEL, LEVEL_KICK, LEVEL_NAME, PENDING_TABS, PLOT_STATUS, SOURCE_NOTE } from '../labels'
 import ChildList from './ChildList.vue'
+import DevTab from './DevTab.vue'
+import MktTab from './MktTab.vue'
+import OpsTab from './OpsTab.vue'
+import AstTab from './AstTab.vue'
+import LivTab from './LivTab.vue'
+import OverviewDash from './OverviewDash.vue'
 
 /**
  * 右侧 360 面板（原型的 #panel）：标题、层级条、标签、页签。
  * 已接入：空间下钻（概况、下级列表、属性）；开发建设 / 市场 / 城市运行 / 设施页签显示对应主题表的接入状态。
  */
-const props = defineProps<{ node: NodeDetail | null; meta: Meta | null; error: string | null }>()
-const emit = defineEmits<{ go: [level: Level, key: string]; up: [] }>()
+const props = defineProps<{ node: NodeDetail | null; meta: Meta | null; error: string | null; wantTab?: { tab: string; t: number } | null }>()
+const emit = defineEmits<{ go: [level: Level, key: string]; up: []; tab: [id: string]; focus: [lon: number, lat: number] }>()
 
 const tab = ref('ov')
+/** 外部（如需关注区域卡片）要求打开某个页签 */
+watch(() => props.wantTab, w => { if (w) tab.value = w.tab })
 watch(() => props.node?.level, () => { if (tab.value === 'list' && !props.node?.childLevel) tab.value = 'ov' })
+watch(tab, t => emit('tab', t), { immediate: true })
 
 const BAR: Level[] = ['district', 'community', 'plot', 'building', 'floor', 'unit']
 const bar = computed(() => {
@@ -44,7 +53,7 @@ const chips = computed<string[]>(() => {
     case 'district':
       add(i.areaKm2, `${num(i.areaKm2, 2)} km²`); add(st.communities, `${num(st.communities)} 个社区`); add(st.plots, `${num(st.plots)} 个地块`); add(i.population, `人口 ${num(i.population)}`); break
     case 'community':
-      add(st.plots, `${num(st.plots)} 个地块`); add(i.areaKm2, `${num(i.areaKm2, 2)} km²`); add(st.buildings, `${num(st.buildings)} 栋建筑`); break
+      add(st.plots, `${num(st.plots)} 个地块`); add(i.areaKm2, `${num(i.areaKm2, 2)} km²`); add(st.buildings, `${num(st.buildings)} 栋建筑`); add(i.masterPlan, `总规 ${i.masterPlan}`); break
     case 'plot':
       add(i.areaSqm, area(Number(i.areaSqm))); add(i.primaryUse, String(i.primaryUse)); add(i.constructionStatus, PLOT_STATUS[String(i.constructionStatus)]?.n ?? String(i.constructionStatus)); add(true, `${num(st.buildings)} 栋建筑`); break
     case 'building':
@@ -63,6 +72,9 @@ const derived = computed(() => {
   return src === 'bdms' || src === 'bdms_units' ? SOURCE_NOTE[src] : null
 })
 
+/** 酋长国 / 市政 / 区域 / 社区的概况用五主题总览（原型 home view），地块及以下仍用数字卡 */
+const dashLevel = computed(() => ['emirate', 'municipality', 'district', 'community'].includes(props.node?.level ?? ''))
+
 interface Kpi { v: string; u?: string; l: string }
 const kpis = computed<Kpi[]>(() => {
   const n = props.node
@@ -75,17 +87,18 @@ const kpis = computed<Kpi[]>(() => {
     case 'community':
       return [
         { v: num(st.plots), l: '地块' }, { v: pct(st.plotsConstructed, st.plots), u: '%', l: '建成率' }, { v: num(st.buildings), l: '建筑' },
-        { v: num(st.floors), l: '楼层（BDMS）' }, { v: num(st.units), l: '单元（BDMS）' }, { v: num((st.unitsAreaSqm ?? 0) / 1e4, 1), u: 'ha', l: '单元面积' },
+        { v: num(st.floors), l: '楼层（BDMS）' }, { v: num(st.units), l: '单元（BDMS）' }, { v: num((st.floorsAreaSqm ?? 0) / 1e4, 1), u: 'ha', l: '建筑面积' },
       ]
     case 'plot':
       return [
         { v: area(Number(i.areaSqm)), l: '地块面积' }, { v: i.devcodeFar != null ? String(i.devcodeFar) : '—', l: '允许容积率' }, { v: num(i.devcodeMaxGfa), u: 'm²', l: '可建面积' },
-        { v: num(st.buildings), l: '建筑' }, { v: num(st.floors), l: '楼层' }, { v: num(st.units), l: '单元' },
+        { v: num(st.buildings), l: '建筑' }, { v: num(st.floorsAreaSqm), u: 'm²', l: '已建建筑面积' },
+        { v: i.devcodeMaxGfa ? pct(st.floorsAreaSqm, Number(i.devcodeMaxGfa)) : '—', u: i.devcodeMaxGfa ? '%' : '', l: '可建面积使用率' },
       ]
     case 'building':
       return [
-        { v: num(st.floors), l: '楼层' }, { v: num(st.units), l: '单元' }, { v: num(st.unitsAreaSqm), u: 'm²', l: '单元面积' },
-        { v: num(i.heightM, 1), u: 'm', l: '高度' }, { v: num(i.footprintSqm), u: 'm²', l: '基底面积' }, { v: num(i.floorsCount), l: '登记层数' },
+        { v: num(st.floors), l: '楼层' }, { v: num(i.heightM, 1), u: 'm', l: '高度' }, { v: num(st.units), l: '单元' },
+        { v: num(st.floorsAreaSqm), u: 'm²', l: '建筑面积' }, { v: num(st.unitsAreaSqm), u: 'm²', l: '使用面积' }, { v: num(i.floorsCount), l: '登记层数' },
       ]
     case 'floor':
       return [{ v: num(st.units), l: '单元' }, { v: num(st.unitsAreaSqm, 1), u: 'm²', l: '单元面积' }, { v: num(st.bedrooms), l: '卧室' }]
@@ -94,6 +107,25 @@ const kpis = computed<Kpi[]>(() => {
   }
   return []
 })
+
+/** 楼层层级：同楼的上一层 / 下一层（原型楼层卡的上下翻层）；同楼楼层列表按楼层序号，按楼缓存 */
+const floorNav = shallowRef<{ prev: ChildItem | null; next: ChildItem | null; idx: number; total: number } | null>(null)
+const floorCache = new Map<string, ChildItem[]>()
+watch(() => props.node, async n => {
+  floorNav.value = null
+  if (!n || n.level !== 'floor') return
+  const b = n.path.find(p => p.level === 'building')
+  if (!b) return
+  let list = floorCache.get(b.key)
+  if (!list) {
+    try { list = (await api.children('building', b.key, 0, 500)).items } catch { return }
+    floorCache.set(b.key, list)
+  }
+  if (props.node !== n) return
+  const idx = list.findIndex(x => x.key === n.key)
+  if (idx < 0) return
+  floorNav.value = { prev: list[idx - 1] ?? null, next: list[idx + 1] ?? null, idx, total: list.length }
+}, { immediate: true })
 
 const plotStatus = computed(() => (bd.value.plotStatus ?? []).map(x => ({ ...x, n2: PLOT_STATUS[x.k]?.n ?? x.k, c: colorOf(x.k) })))
 const landUse = computed(() => {
@@ -155,6 +187,15 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
           <span>{{ LEVEL_NAME[b.lv] }}</span><b>{{ b.r?.name ?? '—' }}</b>
         </button>
       </div>
+      <div v-if="floorNav" class="fnav">
+        <button :disabled="!floorNav.prev" :title="floorNav.prev ? '下一层：' + floorNav.prev.name : '已是最低层'" @click="floorNav.prev && emit('go', 'floor', floorNav.prev.key)">
+          <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>{{ floorNav.prev?.name ?? '—' }}
+        </button>
+        <span>第 {{ floorNav.idx + 1 }} / {{ floorNav.total }} 层</span>
+        <button :disabled="!floorNav.next" :title="floorNav.next ? '上一层：' + floorNav.next.name : '已是最高层'" @click="floorNav.next && emit('go', 'floor', floorNav.next.key)">
+          {{ floorNav.next?.name ?? '—' }}<svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6" /></svg>
+        </button>
+      </div>
       <div class="chips">
         <span v-for="c in chips" :key="c" class="chip">{{ c }}</span>
         <span v-if="derived" class="chip warn" :title="derived">推导数据</span>
@@ -162,6 +203,11 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
       <div class="tabs" role="tablist">
         <button :class="{ on: tab === 'ov' }" @click="tab = 'ov'">概况</button>
         <button v-if="node.childLevel" :class="{ on: tab === 'list' }" @click="tab = 'list'">{{ LEVEL_NAME[node.childLevel] }}<i>{{ num(node.childCount) }}</i></button>
+        <button :class="{ on: tab === 'dev' }" @click="tab = 'dev'">开发建设</button>
+        <button :class="{ on: tab === 'mkt' }" @click="tab = 'mkt'">市场</button>
+        <button :class="{ on: tab === 'liv' }" @click="tab = 'liv'">宜居</button>
+        <button :class="{ on: tab === 'ops' }" @click="tab = 'ops'">城市运行</button>
+        <button :class="{ on: tab === 'ast' }" @click="tab = 'ast'">设施</button>
         <button v-for="t in PENDING_TABS" :key="t.id" :class="{ on: tab === t.id }" @click="tab = t.id">{{ t.name }}<i>待接入</i></button>
         <button :class="{ on: tab === 'data' }" @click="tab = 'data'">数据</button>
       </div>
@@ -173,7 +219,8 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
     <div v-else-if="node" class="pbody">
       <template v-if="tab === 'ov'">
         <section v-if="derived" class="card muted"><p>{{ derived }}。</p></section>
-        <section v-if="kpis.length" class="card">
+        <OverviewDash v-if="dashLevel" :node="node" @tab="t => (tab = t)" @go="(l, k) => emit('go', l, k)" />
+        <section v-else-if="kpis.length" class="card">
           <h2>{{ LEVEL_NAME[node.level] }}概况</h2>
           <div v-for="r in Math.ceil(kpis.length / 3)" :key="r" class="nums">
             <div v-for="k in kpis.slice((r - 1) * 3, r * 3)" :key="k.l"><b>{{ k.v }}<small v-if="k.u">{{ k.u }}</small></b><span>{{ k.l }}</span></div>
@@ -181,11 +228,13 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
         </section>
 
         <section v-if="plotStatus.length" class="card">
-          <h2>土地与建设<span class="src">theme.sp_plot</span></h2>
-          <div class="stack"><i v-for="x in plotStatus" :key="x.k" :style="{ flex: x.n, background: x.c }" /></div>
-          <div class="keys"><span v-for="x in plotStatus" :key="x.k"><i class="sw" :style="{ background: x.c }" />{{ x.n2 }}<b>{{ num(x.n) }}</b></span></div>
+          <h2>{{ dashLevel ? '土地用途' : '土地与建设' }}<span class="src">theme.sp_plot</span></h2>
+          <template v-if="!dashLevel">
+            <div class="stack"><i v-for="x in plotStatus" :key="x.k" :style="{ flex: x.n, background: x.c }" /></div>
+            <div class="keys"><span v-for="x in plotStatus" :key="x.k"><i class="sw" :style="{ background: x.c }" />{{ x.n2 }}<b>{{ num(x.n) }}</b></span></div>
+          </template>
           <template v-if="landUse.length">
-            <div class="sub">土地用途（按面积）</div>
+            <div v-if="!dashLevel" class="sub">土地用途（按面积）</div>
             <div class="keys"><span v-for="x in landUse" :key="x.k"><i class="sw" :style="{ background: x.c }" />{{ x.k }}<b>{{ x.p }}%</b></span></div>
           </template>
         </section>
@@ -223,6 +272,16 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
 
       <ChildList v-else-if="tab === 'list'" :node="node" @go="(l, k) => emit('go', l, k)" />
 
+      <AstTab v-else-if="tab === 'ast'" :node="node" @focus="(x, y) => emit('focus', x, y)" />
+
+      <LivTab v-else-if="tab === 'liv'" :node="node" @go="(l, k) => emit('go', l, k)" />
+
+      <OpsTab v-else-if="tab === 'ops'" :node="node" :meta="meta" @focus="(x, y) => emit('focus', x, y)" />
+
+      <MktTab v-else-if="tab === 'mkt'" :node="node" :meta="meta" />
+
+      <DevTab v-else-if="tab === 'dev'" :node="node" :meta="meta" @focus="(x, y) => emit('focus', x, y)" @go="(l, k) => emit('go', l, k)" />
+
       <template v-else-if="tab === 'data'">
         <section class="card">
           <h2>空间下钻主题表<span class="src">theme.sp_*</span></h2>
@@ -246,7 +305,7 @@ const pendingOf = (theme: string) => props.meta?.tables.filter(t => t.theme === 
         <section class="card muted">
           <h2>数据说明</h2>
           <p>全部数据来自 ODS 库（ods 架构），由 d360-ods 抽取工程写入主题库 theme，接口只读主题库。</p>
-          <p>当前 ODS：区域 216、社区 1,864 齐全；地块、BDMS 单元各只有 1 万行样例；udm 建筑台账、BDMS 楼层表为空，建筑与楼层由 BDMS 单元推导（标「推导数据」）。ODS 全量入库后重新抽取即可，无需改代码。</p>
+          <p>当前 ODS（makani_1119）：区域 216、社区 1,864、地块 41 万、udm 建筑 38 万、BDMS 楼层 52 万、单元 73 万均为全量；没有 udm 台账的建筑由 BDMS 楼层 / 单元推导（标「推导数据」）。各主题缺失的源表见对应页签的「待接入」。</p>
         </section>
       </template>
 

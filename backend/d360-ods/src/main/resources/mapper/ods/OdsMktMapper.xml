@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  ODS → 主题库 · 市场。只做字段映射与清洗，空间归属在主题库里关联。
+
+  个人信息不抽：Tawtheeq 的 tenant_name_*、lessor_*_name_*、lessor_contact_per_name 一律不读。
+  时间字段是本地时间的 timestamp，直接 ::date 取日期；ELMS 的 *_date_wid 是 YYYYMMDD 整数。
+  改口径时同步更新 docs/District360_V1.0_主题库设计.md 与 deploy/docker/check-ods-columns.sql。
+-->
+<mapper namespace="com.district360.ods.mapper.OdsMktMapper">
+
+    <sql id="txt">nullif(trim(${col}), '')</sql>
+    <sql id="id">CASE WHEN ${col} IS NOT NULL THEN trunc(${col})::bigint::text END</sql>
+    <sql id="lonlat">
+        CASE WHEN longitude BETWEEN 50 AND 57 THEN longitude::float8 END AS lon,
+        CASE WHEN latitude BETWEEN 22 AND 27 THEN latitude::float8 END AS lat
+    </sql>
+
+    <select id="tenancies" resultType="com.district360.common.theme.mkt.MktRows$Tenancy">
+        SELECT <include refid="id"><property name="col" value="tenancy_id"/></include>   AS tenancy_id,
+               <include refid="txt"><property name="col" value="tenancy_contract_num"/></include> AS contract_num,
+               <include refid="id"><property name="col" value="unit_id"/></include>      AS tawtheeq_unit_id,
+               <include refid="id"><property name="col" value="property_id"/></include>  AS tawtheeq_property_id,
+               <include refid="txt"><property name="col" value="gisid"/></include>       AS gisid,
+               tenancy_status_descr_e                     AS tenancy_status,
+               rent_unit_status_descr_e                   AS unit_status,
+               tenancy_start_date::date                   AS start_date,
+               tenancy_end_date::date                     AS tenancy_end_date,
+               coalesce(tenancy_termination_date, tenancy_cancelled_date, tenancy_closed_date)::date AS termination_date,
+               rental_value                               AS rental_value_aed,
+               <include refid="txt"><property name="col" value="unit_name"/></include>   AS unit_name,
+               unit_type_descr_e                          AS unit_type,
+               unit_usage_type_descr_e                    AS unit_usage,
+               total_area                                 AS unit_area_sqm,
+               num_bed_rooms                              AS bedrooms,
+               <include refid="txt"><property name="col" value="property_name"/></include> AS property_name,
+               property_type_descr_e                      AS property_type,
+               property_usage_type_descr_e                AS property_usage,
+               actual_usage_name_e                        AS actual_usage,
+               year_of_construction                       AS year_built,
+               <include refid="txt"><property name="col" value="plotnumber"/></include>  AS plot_number,
+               districtname_e                             AS src_district,
+               communityname_e                            AS src_community
+        FROM ${t.tawtheeq}
+        WHERE tenancy_id IS NOT NULL
+    </select>
+
+    <select id="sales" resultType="com.district360.common.theme.mkt.MktRows$Sale">
+        SELECT sale_application_id::text                 AS sale_application_id,
+               sale_contract_date::date                   AS contract_date,
+               sale_application_type                      AS sale_type,
+               sale_property_price_aed                    AS price_aed,
+               sale_property_normalized_price_aed         AS normalized_price_aed,
+               property_sold_area_sqm                     AS sold_area_sqm,
+               property_sale_rate_aed_sqm                 AS rate_aed_sqm,
+               municipality AS src_municipality, district AS src_district, community AS src_community,
+               land_plot::text AS land_plot, building_id::text AS building_id, unit_floor::text AS unit_floor,
+               property_category, property_type, property_layout, project_name, developer_name,
+               <include refid="lonlat"/>
+        FROM ${t.reSale}
+        WHERE sale_application_id IS NOT NULL
+    </select>
+
+    <select id="mortgages" resultType="com.district360.common.theme.mkt.MktRows$Mortgage">
+        SELECT orientational_mortgage_contract_id::text   AS contract_id,
+               mortgage_start_date::date                  AS start_date,
+               mortgage_end_date::date                    AS end_date,
+               mortgage_change_amount_aed                 AS amount_aed,
+               mortgage_general_category                  AS general_category,
+               mortgage_contract_type                     AS contract_type,
+               mortgage_contract_status                   AS contract_status,
+               property_type,
+               municipality AS src_municipality, district AS src_district, community AS src_community,
+               land_plot::text AS land_plot, building_id::text AS building_id,
+               <include refid="lonlat"/>
+        FROM ${t.reMortgage}
+        WHERE orientational_mortgage_contract_id IS NOT NULL
+    </select>
+
+    <select id="rents" resultType="com.district360.common.theme.mkt.MktRows$Rent">
+        SELECT rent_contract_number::text                 AS contract_number,
+               rent_start_date::date                      AS start_date,
+               rent_end_date::date                        AS end_date,
+               rent_annual_value_aed                      AS annual_value_aed,
+               rent_total_value_aed                       AS total_value_aed,
+               property_rented_area_sqm                   AS rented_area_sqm,
+               rent_application_type                      AS application_type,
+               rent_contract_current_status               AS contract_status,
+               rent_asset_class                           AS asset_class,
+               property_type, project_name, developer_name,
+               municipality AS src_municipality, district AS src_district, community AS src_community,
+               land_plot::text AS land_plot, building_id::text AS building_id,
+               <include refid="lonlat"/>
+        FROM ${t.reRent}
+        WHERE rent_contract_number IS NOT NULL
+    </select>
+
+    <select id="plotSales" resultType="com.district360.common.theme.mkt.MktRows$PlotTransaction">
+        SELECT 'sale' AS kind, application_id::text AS txn_id, plot_id::text AS elms_plot_id, sell_price AS amount_aed,
+               CASE WHEN buysell_date_wid::text ~ '^[0-9]{8}$' THEN to_date(buysell_date_wid::text, 'YYYYMMDD') END AS txn_date,
+               project_name_a AS project_name
+        FROM ${t.elmsBuySell}
+    </select>
+
+    <select id="plotMortgages" resultType="com.district360.common.theme.mkt.MktRows$PlotTransaction">
+        SELECT 'mortgage' AS kind, mortgage_id::text AS txn_id, plotid::text AS elms_plot_id, mortgage_amount AS amount_aed,
+               CASE WHEN mortgage_date_wid::text ~ '^[0-9]{8}$' THEN to_date(mortgage_date_wid::text, 'YYYYMMDD') END AS txn_date,
+               NULL AS project_name
+        FROM ${t.elmsMortgage}
+    </select>
+</mapper>

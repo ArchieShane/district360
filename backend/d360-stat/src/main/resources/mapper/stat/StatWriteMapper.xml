@@ -74,10 +74,35 @@
 
     <insert id="insertLiveability">
         INSERT INTO stat.stat_district_liveability (district_code, in_scope, score_existing, score_current, score_target, parks, park_area_ha, park_gap_ha,
+            liv_district_id, calc_version_id, prioritization_run_id, capex_aed, opex_aed, capex_tier_target_aed, tier, tier_rule, tier_triggers,
             is_sample, source_as_of, extracted_at)
         VALUES
         <foreach collection="list" item="d" separator=",">
-            (#{d.code}, #{d.inScope}, #{d.scoreExisting}, #{d.scoreCurrent}, #{d.scoreTarget}, #{d.parks}, #{d.parkAreaHa}, #{d.parkGapHa}, false, #{asOf}, now())
+            (#{d.code}, #{d.inScope}, #{d.scoreExisting}, #{d.scoreCurrent}, #{d.scoreTarget}, #{d.parks}, #{d.parkAreaHa}, #{d.parkGapHa},
+             #{d.livDistrictId}, #{s.calcVersionId}, #{s.runId}, #{d.capexAed}, #{d.opexAed}, #{d.capexTierTargetAed}, #{d.tier}, #{d.tierRule},
+             #{d.tierTriggers}, false, #{s.sourceAsOf}, now())
+        </foreach>
+    </insert>
+
+    <delete id="deleteAllLivFacilityGaps">DELETE FROM stat.stat_district_liv_facility_gap</delete>
+
+    <insert id="insertLivFacilityGaps">
+        INSERT INTO stat.stat_district_liv_facility_gap (district_code, rk, facility, category, score_existing, score_pipeline, score_ap50,
+            target_pct, gap)
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (#{r.code}, #{r.rk}, #{r.g.facility}, #{r.g.category}, #{r.g.scoreExisting}, #{r.g.scorePipeline}, #{r.g.scoreAp50},
+             #{r.g.targetPct}, #{r.g.gap})
+        </foreach>
+    </insert>
+
+    <delete id="deleteAllLivNeeds">DELETE FROM stat.stat_district_liv_need</delete>
+
+    <insert id="insertLivNeeds">
+        INSERT INTO stat.stat_district_liv_need (district_code, rk, item, pct, votes, respondents)
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (#{r.code}, #{r.rk}, #{r.n.item}, #{r.n.pct}, #{r.n.votes}, #{r.n.respondents})
         </foreach>
     </insert>
 
