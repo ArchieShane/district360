@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type Map as MlMap, type StyleSpecification } from 'maplibre-gl'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { api, LEVELS, type Layer, type Level, type NodeDetail, type NodeRef, type WatchView } from '../api'
-import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS, WATCH_STYLE } from '../labels'
+import { api, LEVELS, type Layer, type Level, type LivDistrict, type NodeDetail, type NodeRef, type WatchView } from '../api'
+import { num } from '../format'
+import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS, TIER, WATCH_STYLE } from '../labels'
 
 /**
  * 地图：按当前层级加载对应图层，点击要素下钻。
@@ -11,6 +12,9 @@ import { AST_CATEGORY, colorOf, LEVEL_NAME, livColor, PLOT_STATUS, WATCH_STYLE }
  *   社区：地块 + 建筑 3D；地块：所在社区的地块（背景）+ 本地块建筑
  *   建筑：楼层半透明分层堆叠 + 单元按户型着色（3D，底标高 / 层高）
  *   楼层 / 单元：本层单元 + 整栋楼层轮廓；选中对象用白色描边
+ * 图层菜单（原型 Layers）：底图；地块按建设状态 / 土地用途着色；设施点位开关（学校、医疗、药房、清真寺、公园、公交站）；
+ *   指标图层 —— 酋长国 / 市政的区域面按建成率 / 宜居分 / 达标投资 / 优先级着色，区域内的社区面按建成率着色
+ *   （入住率、违规、销售额、事故缺数据，菜单里灰显）。
  */
 const props = defineProps<{ node: NodeDetail | null; themeTab?: string; focus?: { lon: number; lat: number; t: number } | null;
   watch?: WatchView | null; hot?: string | null }>()
@@ -20,7 +24,32 @@ const el = ref<HTMLDivElement>()
 const tip = ref<{ x: number; y: number; name: string; sub: string } | null>(null)
 const base = ref<'sat' | 'dark'>('sat')
 const three = ref(true)
-const legend = shallowRef<{ title: string; items: { n: string; c: string }[] } | null>(null)
+type Legend = { title: string; items: { n: string; c: string }[] } | null
+/** 图例分三层：单元 > 地块 > 区域面，取最具体的一层显示 */
+const areaLegend = shallowRef<Legend>(null)
+const plotLegend = shallowRef<Legend>(null)
+const unitLegend = shallowRef<Legend>(null)
+const legend = computed<Legend>(() => unitLegend.value ?? plotLegend.value ?? areaLegend.value)
+
+/** 图层菜单 */
+type Kpi = 'built' | 'liv' | 'capex' | 'tier'
+const menu = ref(false)
+const plotMode = ref<'status' | 'use'>('status')
+/** 区域 / 社区面的指标图层；null = 不着色 */
+const kpi = ref<Kpi | null>('built')
+/** 手动打开的设施点位（设施页签、城市运行页签打开时另外全显示） */
+const poi = ref<string[]>([])
+const POI: { k: string; n: string; c: string }[] = [
+  ...Object.entries(AST_CATEGORY).map(([k, v]) => ({ k, n: v.n, c: v.c })),
+  { k: 'bus', n: '公交站', c: '#4C8DF6' },
+]
+const KPI_AREA: { k: Kpi; n: string }[] = [{ k: 'built', n: '建成率' }, { k: 'liv', n: '宜居分' }, { k: 'capex', n: '达标投资' }, { k: 'tier', n: '优先级' }]
+const KPI_PENDING = ['入住率', '违规', '销售额', '道路事故']
+const lv = computed(() => props.node?.level)
+const areaLevel = computed(() => lv.value === 'emirate' || lv.value === 'municipality' || lv.value === 'district')
+const kpiOptions = computed(() => lv.value === 'district' ? KPI_AREA.slice(0, 1) : areaLevel.value ? KPI_AREA : [])
+const hasPlots = computed(() => !!props.node?.layers.includes('plots') || lv.value === 'community' || lv.value === 'plot')
+const hasPoi = computed(() => !!props.node?.layers.includes('facilities'))
 let map: MlMap | null = null
 let ready = false
 let ctrl: AbortController | null = null
@@ -54,10 +83,11 @@ const STYLE: StyleSpecification = {
 
 const AREA_COLOR = ['interpolate', ['linear'], ['coalesce', ['get', 'built'], 0], 0, '#2B4C7E', 50, '#3D6DF2', 100, '#8FE3FF'] as unknown as ExpressionSpecification
 const AREA_OPACITY = (base: number) => ['case', ['boolean', ['feature-state', 'hover'], false], base + 0.22, base] as unknown as ExpressionSpecification
-const LIV_LEGEND = { title: '宜居在途评分', items: [{ n: '90 及以上', c: livColor(90) }, { n: '67.5', c: livColor(67.5) }, { n: '45 及以下', c: livColor(45) }, { n: '不在评估范围', c: livColor(null) }] }
 
 const PLOT_COLOR: ExpressionSpecification = ['match', ['get', 's'],
   ...Object.entries(PLOT_STATUS).flatMap(([k, v]) => [k, v.c]), '#6B7280'] as unknown as ExpressionSpecification
+/** 当前地块数据（换着色方式时重算图例） */
+let plotFc: GeoJSON.FeatureCollection = EMPTY
 
 function addLayers(m: MlMap) {
   SOURCES.forEach(s => m.addSource(s, { type: 'geojson', data: EMPTY, generateId: true }))
@@ -146,8 +176,10 @@ async function show(n: NodeDetail) {
   fit(n)
   markers.forEach(mk => mk.remove())
   markers = []
-  legend.value = null
-  paintLiv(n)
+  plotLegend.value = null
+  unitLegend.value = null
+  plotFc = EMPTY
+  paintArea(n)
   const results = await Promise.all(layers.map(l => api.layer(l.at.level, l.at.key, l.layer, signal).then(fc => ({ l, fc })).catch(() => null)))
   if (signal.aborted) return
   for (const r of results) {
@@ -163,8 +195,8 @@ async function show(n: NodeDetail) {
     ;(m.getSource(r.l.src) as GeoJSONSource).setData(fc)
     if (r.l.src === 'area') labels(fc)
     if (r.l.src === 'plot') {
-      const seen = new Set(fc.features.map(f => String(f.properties?.s)))
-      legend.value = { title: '地块', items: Object.entries(PLOT_STATUS).filter(([k]) => seen.has(k)).map(([, v]) => v) }
+      plotFc = fc
+      paintPlots()
     }
   }
 }
@@ -177,6 +209,10 @@ async function showTheme(n: NodeDetail) {
   devCtrl = new AbortController()
   const m = map, sig = devCtrl.signal
   const active = new Set((THEME_LAYERS[props.themeTab ?? ''] ?? []).map(x => x[1]))
+  // 图层菜单里勾选的设施 / 公交站：不在对应页签时也加载
+  if (poi.value.some(k => k !== 'bus')) active.add('facilities')
+  if (poi.value.includes('bus')) active.add('busstops')
+  paintPoi()
   for (const [src, layer] of Object.values(THEME_LAYERS).flat()) {
     const on = active.has(layer) && n.layers.includes(layer)
     if (!on) { (m.getSource(src) as GeoJSONSource).setData(EMPTY); continue }
@@ -184,28 +220,92 @@ async function showTheme(n: NodeDetail) {
   }
 }
 
-/** 宜居页签在酋长国 / 市政层级：区域面按在途评分着色（原型的 Liveability 指标图层）；其他情况恢复按建成率 */
-let livCtrl: AbortController | null = null
-async function paintLiv(n: NodeDetail) {
+/** 区域 / 社区面的指标着色。宜居页签打开且仍是默认的建成率时，酋长国 / 市政自动换成宜居分（原型 Liveability 指标图层） */
+let areaCtrl: AbortController | null = null
+const livCache = new Map<string, LivDistrict[]>()
+const mix = (a: string, b: string, t: number) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('')
+const effKpi = (n: NodeDetail): Kpi | null => {
+  const top = n.level === 'emirate' || n.level === 'municipality'
+  if (!top && n.level !== 'district') return null
+  if (!top && kpi.value !== 'built') return null
+  return top && kpi.value === 'built' && props.themeTab === 'liv' ? 'liv' : kpi.value
+}
+async function paintArea(n: NodeDetail) {
   if (!map) return
-  livCtrl?.abort()
+  areaCtrl?.abort()
   const m = map
-  const restore = () => {
-    m.setPaintProperty('area-fill', 'fill-color', AREA_COLOR)
-    m.setPaintProperty('area-fill', 'fill-opacity', AREA_OPACITY(0.2))
-    if (legend.value === LIV_LEGEND) legend.value = null
+  const k = effKpi(n)
+  const set = (color: ExpressionSpecification | string, op: number, lg: Legend) => {
+    m.setPaintProperty('area-fill', 'fill-color', color as ExpressionSpecification)
+    m.setPaintProperty('area-fill', 'fill-opacity', AREA_OPACITY(op))
+    areaLegend.value = lg
   }
-  if (props.themeTab !== 'liv' || (n.level !== 'emirate' && n.level !== 'municipality')) { restore(); return }
-  livCtrl = new AbortController()
-  const sig = livCtrl.signal
+  if (k === null) { set('#3D6DF2', 0.1, null); return }
+  if (k === 'built') {
+    set(AREA_COLOR, 0.2, { title: n.level === 'district' ? '社区建成率' : '区域建成率', items: [{ n: '0%', c: '#2B4C7E' }, { n: '50%', c: '#3D6DF2' }, { n: '100%', c: '#8FE3FF' }] })
+    return
+  }
+  areaCtrl = new AbortController()
+  const sig = areaCtrl.signal
   try {
-    const v = await api.liv(n.level, n.key, sig)
+    const ck = n.level + '/' + n.key
+    let list = livCache.get(ck)
+    if (!list) {
+      list = (await api.liv(n.level, n.key, sig)).districts ?? []
+      livCache.set(ck, list)
+    }
     if (sig.aborted || !map) return
-    const pairs = (v.districts ?? []).flatMap(d => [d.key, livColor(d.inScope ? d.pipeline : null)])
-    m.setPaintProperty('area-fill', 'fill-color', (pairs.length ? ['match', ['get', 'key'], ...pairs, livColor(null)] : livColor(null)) as unknown as ExpressionSpecification)
-    m.setPaintProperty('area-fill', 'fill-opacity', AREA_OPACITY(0.55))
-    legend.value = LIV_LEGEND
-  } catch { if (!sig.aborted) restore() }
+    let pairs: (string)[] = []
+    let lg: Legend = null
+    const grey = livColor(null)
+    if (k === 'liv') {
+      pairs = list.flatMap(d => [d.key, livColor(d.inScope ? d.pipeline : null)])
+      lg = { title: '宜居在途评分', items: [{ n: '90 及以上', c: livColor(90) }, { n: '67.5', c: livColor(67.5) }, { n: '45 及以下', c: livColor(45) }, { n: '不在评估范围', c: grey }] }
+    } else if (k === 'capex') {
+      const mx = Math.max(1, ...list.map(d => d.capexAed ?? 0))
+      pairs = list.flatMap(d => [d.key, d.capexAed ? mix('#22304A', '#FFB23E', Math.sqrt(d.capexAed / mx)) : '#22304A'])
+      const m1 = mx / 1e6
+      lg = { title: '达标所需投资（AED）', items: [{ n: '0', c: '#22304A' }, { n: num(m1 / 4, 0) + 'M', c: mix('#22304A', '#FFB23E', 0.5) }, { n: num(m1, 0) + 'M', c: '#FFB23E' }] }
+    } else {
+      pairs = list.flatMap(d => [d.key, d.tier ? TIER[d.tier]?.c ?? grey : grey])
+      lg = { title: '优先级分档', items: [...Object.values(TIER).map(t => ({ n: t.n, c: t.c })), { n: '不在评估范围', c: grey }] }
+    }
+    set((pairs.length ? ['match', ['get', 'key'], ...pairs, grey] : grey) as unknown as ExpressionSpecification, 0.55, lg)
+  } catch { if (!sig.aborted) set(AREA_COLOR, 0.2, null) }
+}
+
+/** 地块按建设状态 / 土地用途着色，图例只列当前数据里出现的类别 */
+function paintPlots() {
+  if (!map) return
+  const fs = plotFc.features
+  if (plotMode.value === 'status') {
+    map.setPaintProperty('plot-fill', 'fill-color', PLOT_COLOR)
+    const seen = new Set(fs.map(f => String(f.properties?.s)))
+    plotLegend.value = fs.length ? { title: '地块建设状态', items: Object.entries(PLOT_STATUS).filter(([k]) => seen.has(k)).map(([, v]) => v) } : null
+  } else {
+    const cnt = new Map<string, number>()
+    fs.forEach(f => { const u = String(f.properties?.u ?? 'Undefined'); cnt.set(u, (cnt.get(u) ?? 0) + 1) })
+    const uses = [...cnt.entries()].sort((a, b) => b[1] - a[1]).map(x => x[0])
+    map.setPaintProperty('plot-fill', 'fill-color', (uses.length
+      ? ['match', ['get', 'u'], ...uses.flatMap(u => [u, colorOf(u)]), '#6B7280'] : '#6B7280') as unknown as ExpressionSpecification)
+    plotLegend.value = fs.length ? { title: '地块土地用途', items: uses.slice(0, 8).map(u => ({ n: u, c: colorOf(u) })) } : null
+  }
+}
+
+/** 设施 / 公交站点位：所在页签打开时全显示，否则只显示菜单里勾选的类别 */
+function paintPoi() {
+  if (!map) return
+  const fac = props.themeTab === 'ast' ? null : poi.value.filter(k => k !== 'bus')
+  map.setFilter('fac-pt', fac === null ? null : ['in', ['get', 'c'], ['literal', fac]])
+}
+
+function togglePoi(k: string) {
+  poi.value = poi.value.includes(k) ? poi.value.filter(x => x !== k) : [...poi.value, k]
+  if (props.node) showTheme(props.node)
+}
+function pickKpi(k: Kpi) {
+  kpi.value = kpi.value === k ? null : k
+  if (props.node) paintArea(props.node)
 }
 
 /** 需关注区域在地图上的标注：只在酋长国 / 市政层级、且区面图层是这些区时画 */
@@ -236,7 +336,7 @@ function paintUnits(fc: GeoJSON.FeatureCollection, n: NodeDetail) {
   map.setPaintProperty('unit-ext', 'fill-extrusion-color', ['case',
     ['boolean', ['feature-state', 'hover'], false], '#FFFFFF',
     ['==', ['get', 'key'], sel ?? '__none__'], '#FFFFFF', color])
-  legend.value = { title: '单元', items: cls.map(c => ({ n: c, c: colorOf(c) })) }
+  unitLegend.value = { title: '单元', items: cls.map(c => ({ n: c, c: colorOf(c) })) }
 }
 
 /** 区域 / 社区名称标签（HTML，点击下钻）；过多时不画 */
@@ -319,7 +419,8 @@ onBeforeUnmount(() => { ctrl?.abort(); resizeObs?.disconnect(); map?.remove(); m
 
 watch(() => props.node, n => { if (n) show(n) })
 watch(() => [props.watch, props.hot, props.node], () => paintWatch())
-watch(() => props.themeTab, () => { if (props.node) { showTheme(props.node); paintLiv(props.node) } })
+watch(() => props.themeTab, () => { if (props.node) { showTheme(props.node); paintArea(props.node) } })
+watch(plotMode, () => paintPlots())
 watch(() => props.focus, f => { if (f && map) map.flyTo({ center: [f.lon, f.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 }) })
 watch(base, b => {
   map?.setLayoutProperty('sat', 'visibility', b === 'sat' ? 'visible' : 'none')
@@ -341,6 +442,9 @@ const hasLegend = computed(() => legend.value && legend.value.items.length)
   </div>
   <nav class="tools" aria-label="地图工具">
     <div class="grp">
+      <button :class="{ on: menu }" data-tip="图层" aria-label="图层" @click="menu = !menu">
+        <svg viewBox="0 0 24 24"><path d="M12 3.5 21 8l-9 4.5L3 8z" /><path d="M3.6 12 12 16.2 20.4 12M3.6 16 12 20.2 20.4 16" /></svg>
+      </button>
       <button data-tip="定位到当前" aria-label="定位到当前" @click="recentre">
         <svg viewBox="0 0 24 24"><path d="M12 21s6.5-5.6 6.5-10.6a6.5 6.5 0 0 0-13 0C5.5 15.4 12 21 12 21z" /><circle cx="12" cy="10.3" r="2.3" /></svg>
       </button>
@@ -352,4 +456,53 @@ const hasLegend = computed(() => legend.value && legend.value.items.length)
       <button aria-label="缩小" @click="zoom(-1)"><svg viewBox="0 0 24 24"><path d="M5.5 12h13" /></svg></button>
     </div>
   </nav>
+  <div v-if="menu" class="lmenu" role="dialog" aria-label="图层">
+    <header><b>图层</b><button aria-label="关闭" @click="menu = false"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button></header>
+    <div class="sec">底图</div>
+    <div class="opts">
+      <button :class="{ on: base === 'sat' }" @click="base = 'sat'">卫星影像</button>
+      <button :class="{ on: base === 'dark' }" @click="base = 'dark'">深色</button>
+    </div>
+    <template v-if="hasPlots">
+      <div class="sec">地块着色</div>
+      <div class="opts">
+        <button :class="{ on: plotMode === 'status' }" @click="plotMode = 'status'">建设状态</button>
+        <button :class="{ on: plotMode === 'use' }" @click="plotMode = 'use'">土地用途</button>
+      </div>
+    </template>
+    <template v-if="hasPoi">
+      <div class="sec">设施点位<small v-if="themeTab === 'ast'">设施页签打开时全部显示</small></div>
+      <div class="opts wrap">
+        <button v-for="x in POI" :key="x.k" :class="{ on: poi.includes(x.k) }" @click="togglePoi(x.k)"><i class="sw rd" :style="{ background: x.c }" />{{ x.n }}</button>
+      </div>
+    </template>
+    <template v-if="kpiOptions.length">
+      <div class="sec">指标图层<small>{{ lv === 'district' ? '社区面' : '区域面' }}</small></div>
+      <div class="opts wrap">
+        <button v-for="x in kpiOptions" :key="x.k" :class="{ on: kpi === x.k }" @click="pickKpi(x.k)">{{ x.n }}</button>
+        <button v-for="x in KPI_PENDING" :key="x" disabled :title="x + '：源数据待接入'">{{ x }}</button>
+      </div>
+      <p v-if="kpi === 'built' && themeTab === 'liv' && lv !== 'district'" class="hint">宜居页签打开时自动按宜居分着色</p>
+    </template>
+  </div>
 </template>
+
+<style scoped>
+.lmenu { position: absolute; right: calc(var(--pw) + 4.4rem); bottom: 1.2rem; z-index: 7; width: 17.5rem; padding: .2rem .9rem .9rem; border-radius: var(--r);
+  background: rgba(30, 31, 35, .97); border: 1px solid var(--line2); box-shadow: 0 .6rem 2rem rgba(0, 0, 0, .45); font-size: .8rem }
+.lmenu header { display: flex; align-items: center; justify-content: space-between; padding: .5rem 0 .2rem }
+.lmenu header b { font-size: .9rem }
+.lmenu header button { width: 1.8rem; height: 1.8rem; display: grid; place-items: center; border-radius: .3rem; color: var(--tx2) }
+.lmenu header button:hover { background: rgba(255, 255, 255, .1); color: #fff }
+.lmenu header svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round }
+.sec { margin: .7rem 0 .35rem; font-size: .7rem; font-weight: 700; color: var(--tx3); letter-spacing: .04em; display: flex; justify-content: space-between; gap: .5rem }
+.sec small { font-weight: 500; letter-spacing: 0 }
+.opts { display: flex; gap: .3rem }
+.opts.wrap { flex-wrap: wrap }
+.opts button { display: inline-flex; align-items: center; gap: .35rem; padding: .32rem .6rem; border-radius: .3rem; border: 1px solid var(--line2); font-size: .76rem; font-weight: 600; color: var(--tx); white-space: nowrap }
+.opts button:hover:not(:disabled) { background: rgba(255, 255, 255, .08) }
+.opts button.on { background: #4C8DF6; border-color: #4C8DF6; color: #fff }
+.opts button:disabled { opacity: .4; cursor: not-allowed }
+.sw.rd { border-radius: 50% }
+.hint { margin-top: .45rem; font-size: .7rem; color: var(--tx3) }
+</style>
