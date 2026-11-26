@@ -1,4 +1,4 @@
--- 升级前检查：ODS 源库里有没有 ODS 抽取（d360-ods：ods-spatial、ods-dev、ods-mkt、ods-ops）要用的字段，类型是否兼容（只读，不改任何数据）。
+-- 升级前检查：ODS 源库里有没有 ODS 抽取（d360-ods：ods-spatial、ods-dev、ods-mkt、ods-ops、ods-ast）要用的字段，类型是否兼容（只读，不改任何数据）。
 -- 在 ODS 库里执行。使用前按 config/application-prod.yml 的 d360.ods.schema / table-prefix 改 params（默认 ods / ods_）。
 --
 -- 结果为空 = 全部通过。有结果 = 列出的字段缺失或类型不兼容，ods-spatial 抽取会失败（主题库保持旧数据），发给开发处理。
@@ -7,6 +7,41 @@ WITH params AS (
     SELECT 'ods'::text AS schema, 'ods_'::text AS table_prefix
 ),
 expected(tbl, col, kind) AS (VALUES
+    -- makani_poi_adek_schools_locations（ods-ast）
+    ('makani_poi_adek_schools_locations', 'shape', 'geom'),
+    ('makani_poi_adek_schools_locations', 'objectid', 'num'),
+    ('makani_poi_adek_schools_locations', 'adek_sch_name_en', 'text'),
+    ('makani_poi_adek_schools_locations', 'adek_sch_name_ar', 'text'),
+    ('makani_poi_adek_schools_locations', 'adek_sch_education_type_en', 'text'),
+    ('makani_poi_adek_schools_locations', 'adek_sch_curriculum_en', 'text'),
+    ('makani_poi_adek_schools_locations', 'adek_sch_capacity', 'num'),
+    ('makani_poi_adek_schools_locations', 'adek_n_students', 'num'),
+    ('makani_poi_adek_schools_locations', 'adek_n_total_staff', 'num'),
+    ('makani_poi_adek_schools_locations', 'udm_gisid', 'text'),
+    ('makani_poi_adek_schools_locations', 'trs_moye_input_time', 'date'),
+    -- makani_poi_doh_facilities（ods-ast）
+    ('makani_poi_doh_facilities', 'shape', 'geom'),
+    ('makani_poi_doh_facilities', 'objectid', 'num'),
+    ('makani_poi_doh_facilities', 'facility_name_in_english', 'text'),
+    ('makani_poi_doh_facilities', 'facility_name_in_arabic', 'text'),
+    ('makani_poi_doh_facilities', 'facility_category', 'text'),
+    ('makani_poi_doh_facilities', 'facility_type', 'text'),
+    ('makani_poi_doh_facilities', 'facility_sub_type', 'text'),
+    -- makani_mosque_awqaf（ods-ast）
+    ('makani_mosque_awqaf', 'shape', 'geom'),
+    ('makani_mosque_awqaf', 'objectid', 'num'),
+    ('makani_mosque_awqaf', 'اسم_المسجد', 'text'),
+    ('makani_mosque_awqaf', 'صفة_المسجد_1', 'text'),
+    -- makani_udm_park（ods-ast）
+    ('makani_udm_park', 'shape', 'geom'),
+    ('makani_udm_park', 'objectid', 'num'),
+    ('makani_udm_park', 'nameenglish', 'text'),
+    ('makani_udm_park', 'namearabic', 'text'),
+    ('makani_udm_park', 'parkid', 'any'),
+    -- makani_parks_details（ods-ast）
+    ('makani_parks_details', 'shape', 'geom'),
+    ('makani_parks_details', 'objectid', 'num'),
+    ('makani_parks_details', 'name', 'text'),
     -- makani_adwea_e_streetlight（ods-ops）
     ('makani_adwea_e_streetlight', 'shape', 'geom'),
     ('makani_adwea_e_streetlight', 'objectid', 'num'),

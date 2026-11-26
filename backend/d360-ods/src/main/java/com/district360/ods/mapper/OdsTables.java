@@ -31,8 +31,18 @@ public class OdsTables {
     private final String distortions;
     private final String violations;
     private final String occupancySurvey;
+    private final String schools;
+    private final String doh;
+    private final String mosques;
+    private final String parks;
+    private final String parkDetails;
 
     public OdsTables(OdsProperties p) {
+        this.schools = p.table("makani_poi_adek_schools_locations");
+        this.doh = p.table("makani_poi_doh_facilities");
+        this.mosques = p.table("makani_mosque_awqaf");
+        this.parks = p.table("makani_udm_park");
+        this.parkDetails = p.table("makani_parks_details");
         this.streetlight = p.table("makani_adwea_e_streetlight");
         this.busStop = p.table("makani_bus_stop");
         this.addaCases = p.table("view_adda_cases");
@@ -81,4 +91,9 @@ public class OdsTables {
     public String getDistortions() { return distortions; }
     public String getViolations() { return violations; }
     public String getOccupancySurvey() { return occupancySurvey; }
+    public String getSchools() { return schools; }
+    public String getDoh() { return doh; }
+    public String getMosques() { return mosques; }
+    public String getParks() { return parks; }
+    public String getParkDetails() { return parkDetails; }
 }

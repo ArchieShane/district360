@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 设施（ods-ast）：写入 + 公园明细合并 + 空间归属。依赖 theme.sp_*。
+  关联口径：地块 —— 学校先 udm_gisid，其余按位置点（面取面内点）落未注销地块；
+            社区 / 区域 —— 按设施自身位置点落区（与 v1 区情概览口径一致），不随地块。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeAstWriteMapper">
+
+    <sql id="g">ST_GeomFromEWKB(decode(#{r.geomHex}, 'hex'))</sql>
+
+    <insert id="insertFacilities">
+        INSERT INTO theme.ast_facility (category, source_id, name_en, name_ar, subtype, sub_category, capacity, students, staff,
+                                        floors, is_public, status, park_id, gisid, attrs, centroid, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.category}, #{r.sourceId}, #{r.nameEn}, #{r.nameAr}, #{r.subtype}, #{r.subCategory}, #{r.capacity}, #{r.students},
+             #{r.staff}, #{r.floors}, #{r.isPublic}, #{r.status}, #{r.parkId}, #{r.gisid}, #{r.attrsJson}::jsonb,
+             theme.inner_point(<include refid="g"/>), <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <update id="mergeParkDetails">
+        UPDATE theme.ast_facility p
+           SET name_en = coalesce(p.name_en, d.name_en), name_ar = coalesce(p.name_ar, d.name_ar),
+               attrs = coalesce(p.attrs, '{}'::jsonb) || coalesce(d.attrs, '{}'::jsonb) || jsonb_build_object('dmtDetail', d.source_id)
+          FROM theme.ast_facility d
+         WHERE p.category = 'park' AND d.category = 'park_detail'
+           AND p.geom &amp;&amp; d.centroid AND ST_Intersects(p.geom, d.centroid);
+        DELETE FROM theme.ast_facility d
+         WHERE d.category = 'park_detail'
+           AND EXISTS (SELECT 1 FROM theme.ast_facility p
+                       WHERE p.category = 'park' AND p.geom &amp;&amp; d.centroid AND ST_Intersects(p.geom, d.centroid));
+        UPDATE theme.ast_facility SET category = 'park', park_id = source_id WHERE category = 'park_detail'
+    </update>
+
+    <update id="parkAreas">
+        UPDATE theme.ast_facility SET area_sqm = round(ST_Area(geom::geography)::numeric, 1) WHERE category = 'park'
+    </update>
+
+    <update id="linkPlots">
+        UPDATE theme.ast_facility f
+           SET plot_key = p.plot_key
+          FROM theme.sp_plot p
+         WHERE f.gisid IS NOT NULL AND p.gisid = f.gisid;
+        UPDATE theme.ast_facility f
+           SET plot_key = p.plot_key
+          FROM theme.sp_plot p
+         WHERE f.plot_key IS NULL AND p.cancel_date IS NULL
+           AND p.geom &amp;&amp; f.centroid AND ST_Intersects(p.geom, f.centroid)
+    </update>
+
+    <!-- 社区 / 区域按设施自身位置（面取面内点）落区，与 v1 区情概览「中心点落在区面内」一致；不随地块，避免边界附近归到相邻区 -->
+    <update id="linkAreas">
+        UPDATE theme.ast_facility f
+           SET community_key = c.community_key, district_key = c.district_key, municipality_code = c.municipality_code
+          FROM theme.sp_community c
+         WHERE c.geom &amp;&amp; f.centroid AND ST_Intersects(c.geom, f.centroid);
+        UPDATE theme.ast_facility f
+           SET district_key = d.district_key, municipality_code = d.municipality_code
+          FROM theme.sp_district d
+         WHERE f.district_key IS NULL
+           AND d.geom &amp;&amp; f.centroid AND ST_Intersects(d.geom, f.centroid)
+    </update>
+</mapper>
