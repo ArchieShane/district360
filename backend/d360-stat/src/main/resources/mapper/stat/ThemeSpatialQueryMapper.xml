@@ -393,6 +393,24 @@
                 WHERE x.${col} = #{key}
                 LIMIT #{limit}
             </when>
+            <when test="layer == 'busstops'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.geom, 6)::json,
+                       'properties', json_build_object('key', x.id, 'name', coalesce(x.name, x.code), 'level', 'busstop',
+                                     'code', x.code, 'stop', x.gtfs_id)) AS f
+                FROM theme.ops_bus_stop x
+                WHERE x.${col} = #{key}
+                LIMIT #{limit}
+            </when>
+            <when test="layer == 'streetlights'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.geom, 6)::json,
+                       'properties', json_build_object('key', x.id, 'name', 'Streetlight ' || x.id, 'level', 'streetlight',
+                                     'st', x.status, 'n', x.lamp_count)) AS f
+                FROM theme.ops_streetlight x
+                WHERE x.${col} = #{key}
+                LIMIT #{limit}
+            </when>
         </choose>
         ) q
     </select>

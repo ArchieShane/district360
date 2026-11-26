@@ -12,7 +12,7 @@ import { colorOf, LEVEL_NAME, PLOT_STATUS } from '../labels'
  *   建筑：楼层半透明分层堆叠 + 单元按户型着色（3D，底标高 / 层高）
  *   楼层 / 单元：本层单元 + 整栋楼层轮廓；选中对象用白色描边
  */
-const props = defineProps<{ node: NodeDetail | null; devLayers?: boolean; focus?: { lon: number; lat: number; t: number } | null }>()
+const props = defineProps<{ node: NodeDetail | null; themeTab?: string; focus?: { lon: number; lat: number; t: number } | null }>()
 const emit = defineEmits<{ pick: [level: Level, key: string] }>()
 
 const el = ref<HTMLDivElement>()
@@ -28,7 +28,13 @@ let hovered: { src: string; id: number } | null = null
 let resizeObs: ResizeObserver | null = null
 
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
-const SOURCES = ['area', 'plot', 'bld', 'flr', 'unit', 'sel', 'mp', 'site'] as const
+const SOURCES = ['area', 'plot', 'bld', 'flr', 'unit', 'sel', 'mp', 'site', 'bus', 'light'] as const
+/** 主题页签叠加的数据源：页签 → [数据源, 图层] */
+const THEME_LAYERS: Record<string, [Src, Layer][]> = {
+  dev: [['mp', 'masterplans'], ['site', 'sites']],
+  ops: [['bus', 'busstops'], ['light', 'streetlights']],
+}
+const THEME_SRC = new Set<string>(Object.values(THEME_LAYERS).flat().map(x => x[0]))
 type Src = typeof SOURCES[number]
 
 const STYLE: StyleSpecification = {
@@ -75,6 +81,13 @@ function addLayers(m: MlMap) {
   m.addLayer({ id: 'mp-line', type: 'line', source: 'mp', paint: { 'line-color': '#F0A64A', 'line-width': 1.6, 'line-dasharray': [3, 2] } })
   m.addLayer({ id: 'site-fill', type: 'fill', source: 'site', paint: { 'fill-color': '#E86A6A', 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.55, 0.32] } })
   m.addLayer({ id: 'site-line', type: 'line', source: 'site', paint: { 'line-color': '#FF8A8A', 'line-width': 1.2 } })
+  // 城市运行页签：路灯（黄色小点）、公交站台（蓝色圆点）
+  m.addLayer({ id: 'light-pt', type: 'circle', source: 'light', paint: {
+    'circle-color': ['match', ['get', 'st'], 'In Service', '#F2D45C', 'Out Of Service', '#E86A6A', '#8C929B'],
+    'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 1.2, 17, 3.5], 'circle-opacity': 0.9 } })
+  m.addLayer({ id: 'bus-pt', type: 'circle', source: 'bus', paint: {
+    'circle-color': '#4C8DF6', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 1.2,
+    'circle-radius': ['case', ['boolean', ['feature-state', 'hover'], false], 7, 4.5] } })
   m.addLayer({ id: 'sel-line', type: 'line', source: 'sel', paint: { 'line-color': '#FFFFFF', 'line-width': 2.4 } })
 }
 
@@ -107,8 +120,8 @@ async function show(n: NodeDetail) {
   const m = map
   const layers = plan(n)
   const want = new Set(layers.map(l => l.src))
-  showDev(n)
-  SOURCES.filter(s => s !== 'sel' && s !== 'mp' && s !== 'site' && !want.has(s)).forEach(s => (m.getSource(s) as GeoJSONSource).setData(EMPTY))
+  showTheme(n)
+  SOURCES.filter(s => s !== 'sel' && !THEME_SRC.has(s) && !want.has(s)).forEach(s => (m.getSource(s) as GeoJSONSource).setData(EMPTY))
   ;(m.getSource('sel') as GeoJSONSource).setData(n.geometry ? { type: 'Feature', geometry: n.geometry, properties: {} } : EMPTY)
   // 建筑层级：本楼不画体块（看楼层和单元），周边建筑压暗
   m.setPaintProperty('bld-ext', 'fill-extrusion-opacity', n.level === 'building' || n.level === 'floor' || n.level === 'unit' ? 0.55 : 0.95)
@@ -140,13 +153,14 @@ async function show(n: NodeDetail) {
 
 /** 开发建设图层：页签打开且本层级支持时加载总规面、在建工地，否则清空 */
 let devCtrl: AbortController | null = null
-async function showDev(n: NodeDetail) {
+async function showTheme(n: NodeDetail) {
   if (!map || !ready) return
   devCtrl?.abort()
   devCtrl = new AbortController()
   const m = map, sig = devCtrl.signal
-  for (const [src, layer] of [['mp', 'masterplans'], ['site', 'sites']] as [Src, Layer][]) {
-    const on = props.devLayers && n.layers.includes(layer)
+  const active = new Set((THEME_LAYERS[props.themeTab ?? ''] ?? []).map(x => x[1]))
+  for (const [src, layer] of Object.values(THEME_LAYERS).flat()) {
+    const on = active.has(layer) && n.layers.includes(layer)
     if (!on) { (m.getSource(src) as GeoJSONSource).setData(EMPTY); continue }
     api.layer(n.level, n.key, layer, sig).then(fc => { if (!sig.aborted) (m.getSource(src) as GeoJSONSource).setData(fc) }).catch(() => undefined)
   }
@@ -192,10 +206,10 @@ function fit(n: NodeDetail) {
   })
 }
 
-const PICKABLE = ['unit-ext', 'flr-ext', 'bld-ext', 'site-fill', 'plot-fill', 'mp-fill', 'area-fill']
-const SRC_OF: Record<string, Src> = { 'unit-ext': 'unit', 'flr-ext': 'flr', 'bld-ext': 'bld', 'site-fill': 'site', 'plot-fill': 'plot', 'mp-fill': 'mp', 'area-fill': 'area' }
+const PICKABLE = ['bus-pt', 'light-pt', 'unit-ext', 'flr-ext', 'bld-ext', 'site-fill', 'plot-fill', 'mp-fill', 'area-fill']
+const SRC_OF: Record<string, Src> = { 'unit-ext': 'unit', 'flr-ext': 'flr', 'bld-ext': 'bld', 'site-fill': 'site', 'plot-fill': 'plot', 'mp-fill': 'mp', 'area-fill': 'area', 'bus-pt': 'bus', 'light-pt': 'light' }
 /** 悬停提示里非下钻对象的类型名 */
-const EXTRA_NAME: Record<string, string> = { masterplan: '总体规划', site: '在建工地' }
+const EXTRA_NAME: Record<string, string> = { masterplan: '总体规划', site: '在建工地', busstop: '公交站台', streetlight: '路灯' }
 
 function topFeature(e: maplibregl.MapMouseEvent) {
   if (!map) return null
@@ -244,7 +258,7 @@ onMounted(() => {
 onBeforeUnmount(() => { ctrl?.abort(); resizeObs?.disconnect(); map?.remove(); map = null })
 
 watch(() => props.node, n => { if (n) show(n) })
-watch(() => props.devLayers, () => { if (props.node) showDev(props.node) })
+watch(() => props.themeTab, () => { if (props.node) showTheme(props.node) })
 watch(() => props.focus, f => { if (f && map) map.flyTo({ center: [f.lon, f.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 }) })
 watch(base, b => {
   map?.setLayoutProperty('sat', 'visibility', b === 'sat' ? 'visible' : 'none')

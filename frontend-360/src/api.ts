@@ -5,7 +5,7 @@
 const BASE = 'api/v2/space'
 
 export type Level = 'emirate' | 'municipality' | 'district' | 'community' | 'plot' | 'building' | 'floor' | 'unit'
-export type Layer = 'municipalities' | 'districts' | 'communities' | 'plots' | 'buildings' | 'floors' | 'units' | 'masterplans' | 'sites'
+export type Layer = 'municipalities' | 'districts' | 'communities' | 'plots' | 'buildings' | 'floors' | 'units' | 'masterplans' | 'sites' | 'busstops' | 'streetlights'
 
 /** 开发建设页签（GET /nodes/{level}/{key}/dev）。scope 为实际统计范围：建筑及以下按所在地块；没有地块时为 null */
 export interface DevSummary {
@@ -151,6 +151,15 @@ export interface MktView {
   adrecByMonth?: { m: string; sales: number; mortgages: number; rents: number }[]
 }
 
+/** 城市运行页签（GET /nodes/{level}/{key}/ops）。地块及以下按所在社区统计 */
+export interface OpsView {
+  scope: { level: Level; key: string } | null
+  summary?: { lights: number; lamps: number; lightsInService: number; lightsOutOfService: number; busStops: number; busPlatforms: number }
+  lightsByStatus?: { k: string; n: number; lamps: number }[]
+  lightsByLampType?: { k: string; n: number; lamps: number }[]
+  busStops?: { stopId: string; name?: string; nameAr?: string; platforms: number; codes?: string; cx?: number; cy?: number }[]
+}
+
 export interface ChildItem {
   key: string
   name: string
@@ -230,6 +239,7 @@ export const api = {
     if (!res.ok) throw new Error(`请求失败：${res.status}`)
     return res.json()
   },
+  ops: (level: Level, key: string, signal?: AbortSignal) => get<OpsView>(`/nodes/${level}/${enc(key)}/ops`, signal),
   mkt: (level: Level, key: string, signal?: AbortSignal) => get<MktView>(`/nodes/${level}/${enc(key)}/mkt`, signal),
   dev: (level: Level, key: string, signal?: AbortSignal) => get<DevView>(`/nodes/${level}/${enc(key)}/dev`, signal),
   search: (q: string) => get<SearchHit[]>(`/search?q=${enc(q)}&limit=6`),

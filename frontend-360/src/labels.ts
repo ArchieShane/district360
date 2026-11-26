@@ -174,8 +174,22 @@ export const TENANCY_STATUS: Record<string, { n: string; c: string }> = {
   Unknown: { n: '未标注', c: '#6B7280' },
 }
 
+/** 路灯状态（源 statusindicator） */
+export const LIGHT_STATUS: Record<string, { n: string; c: string }> = {
+  'In Service': { n: '在用', c: '#F2D45C' },
+  'Out Of Service': { n: '停用', c: '#E86A6A' },
+  UnderConst: { n: '在建', c: '#F0A64A' },
+  Proposed: { n: '规划', c: '#4C8DF6' },
+  Abandon: { n: '废弃', c: '#8C929B' },
+  Unknown: { n: '未标注', c: '#6B7280' },
+}
+
+/** 灯型（源 lamptype） */
+export const LAMP_TYPE: Record<string, string> = {
+  HPS: '高压钠灯', MH: '金属卤化物灯', MV: '汞灯', LPS: '低压钠灯', FLUO: '荧光灯', Unknown: '未标注',
+}
+
 /** 尚未接入的主题页签：对应主题库 theme.meta_table.theme */
 export const PENDING_TABS: { id: string; name: string; theme: string; note: string }[] = [
-  { id: 'ops', name: '城市运行', theme: '城市运行', note: '居民诉求、道路事故、视觉违规、违规处罚、住宅占用、路灯、公交站' },
   { id: 'ast', name: '设施', theme: '资产与设施', note: '学校、医疗、清真寺、公园' },
 ]

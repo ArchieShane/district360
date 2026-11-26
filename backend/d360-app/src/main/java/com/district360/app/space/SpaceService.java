@@ -3,6 +3,7 @@ package com.district360.app.space;
 import com.district360.app.web.dto.PageResult;
 import com.district360.stat.mapper.ThemeDevQueryMapper;
 import com.district360.stat.mapper.ThemeMktQueryMapper;
+import com.district360.stat.mapper.ThemeOpsQueryMapper;
 import com.district360.stat.mapper.ThemeSpatialQueryMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -37,11 +38,14 @@ public class SpaceService {
     private final ThemeSpatialQueryMapper mapper;
     private final ThemeDevQueryMapper devMapper;
     private final ThemeMktQueryMapper mktMapper;
+    private final ThemeOpsQueryMapper opsMapper;
 
-    public SpaceService(ThemeSpatialQueryMapper mapper, ThemeDevQueryMapper devMapper, ThemeMktQueryMapper mktMapper) {
+    public SpaceService(ThemeSpatialQueryMapper mapper, ThemeDevQueryMapper devMapper, ThemeMktQueryMapper mktMapper,
+                        ThemeOpsQueryMapper opsMapper) {
         this.mapper = mapper;
         this.devMapper = devMapper;
         this.mktMapper = mktMapper;
+        this.opsMapper = opsMapper;
     }
 
     public NodeDetail node(SpaceLevel level, String key) {
@@ -157,6 +161,37 @@ public class SpaceService {
         out.put("tenancies", sc.level() == SpaceLevel.PLOT ? mktMapper.tenancies(col, k, 50) : List.of());
         out.put("adrec", mktMapper.adrecSummary(col, k));
         out.put("adrecByMonth", mktMapper.adrecByMonth(col, k));
+        return out;
+    }
+
+    /**
+     * 城市运行页签：路灯（点数、灯盏、状态、灯型；源 roadtype 全为空，不统计）与公交站（站、站台、列表）。
+     * 都是区域设施、没有地块属性：地块 / 建筑 / 楼层 / 单元按所在社区统计。
+     */
+    public Map<String, Object> ops(SpaceLevel level, String key) {
+        SpaceLevel scopeLevel = level;
+        String scopeKey = key;
+        if (level == SpaceLevel.PLOT || level == SpaceLevel.BUILDING || level == SpaceLevel.FLOOR || level == SpaceLevel.UNIT) {
+            Map<String, Object> row = mapper.node(level.id(), key);
+            if (row == null || row.get("key") == null) {
+                throw new NoSuchElementException("没有这个" + level.id() + ": " + key);
+            }
+            Object c = row.get("community_key");
+            scopeLevel = SpaceLevel.COMMUNITY;
+            scopeKey = c == null ? null : c.toString();
+        }
+        Scope sc = new Scope(scopeLevel, scopeKey);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("scope", sc.ref());
+        if (sc.key() == null) {
+            return out;
+        }
+        String col = sc.col();
+        String k = sc.filterKey();
+        out.put("summary", opsMapper.summary(col, k));
+        out.put("lightsByStatus", opsMapper.lightsBy(col, k, "status"));
+        out.put("lightsByLampType", opsMapper.lightsBy(col, k, "lamp_type"));
+        out.put("busStops", opsMapper.busStops(col, k, 100));
         return out;
     }
 

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 城市运行读查询。${col} / ${dim} 只来自代码白名单，请求参数一律 #{}。
+  「在用」路灯 = status = 'In Service'。公交站按 gtfs_id 去重，站台按行计。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeOpsQueryMapper">
+
+    <sql id="f"><if test="col != null">AND x.${col} = #{key}</if></sql>
+
+    <select id="summary" resultType="java.util.LinkedHashMap">
+        SELECT l.*, s.*
+        FROM (SELECT count(*)                                           AS "lights",
+                     coalesce(sum(x.lamp_count), 0)                     AS "lamps",
+                     count(*) FILTER (WHERE x.status = 'In Service')    AS "lightsInService",
+                     count(*) FILTER (WHERE x.status = 'Out Of Service') AS "lightsOutOfService"
+              FROM theme.ops_streetlight x WHERE true <include refid="f"/>) l,
+             (SELECT count(DISTINCT coalesce(x.gtfs_id, x.id::text))   AS "busStops",
+                     count(*)                                           AS "busPlatforms"
+              FROM theme.ops_bus_stop x WHERE true <include refid="f"/>) s
+    </select>
+
+    <select id="lightsBy" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(nullif(x.${dim}, ''), 'Unknown') AS "k", count(*) AS "n", coalesce(sum(x.lamp_count), 0) AS "lamps"
+        FROM theme.ops_streetlight x
+        WHERE true <include refid="f"/>
+        GROUP BY 1
+        ORDER BY 2 DESC
+        LIMIT 12
+    </select>
+
+    <select id="busStops" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(x.gtfs_id, x.id::text) AS "stopId", max(x.name) AS "name", max(x.name_ar) AS "nameAr",
+               count(*) AS "platforms", string_agg(x.code, ', ' ORDER BY x.code) AS "codes",
+               ST_X(ST_Centroid(ST_Collect(x.geom))) AS "cx", ST_Y(ST_Centroid(ST_Collect(x.geom))) AS "cy"
+        FROM theme.ops_bus_stop x
+        WHERE true <include refid="f"/>
+        GROUP BY 1
+        ORDER BY 2
+        LIMIT #{limit}
+    </select>
+</mapper>

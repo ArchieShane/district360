@@ -15,7 +15,11 @@ public enum SpaceLayer {
     /** 开发建设：总体规划项目面（要素 level = masterplan，不是下钻层级）。 */
     MASTERPLANS(2000, 0.00001),
     /** 开发建设：在建工地面（要素 level = site）。 */
-    SITES(5000, 0);
+    SITES(5000, 0),
+    /** 城市运行：公交站台点（要素 level = busstop）。 */
+    BUSSTOPS(5000, 0),
+    /** 城市运行：路灯点（要素 level = streetlight）。 */
+    STREETLIGHTS(30000, 0);
 
     private final int limit;
     private final double tolerance;

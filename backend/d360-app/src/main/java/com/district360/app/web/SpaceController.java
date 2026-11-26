@@ -62,6 +62,12 @@ public class SpaceController {
         return ApiResponse.ok(service.mkt(SpaceLevel.of(level), key));
     }
 
+    /** 城市运行页签：路灯与公交站（地块及以下按所在社区）。 */
+    @GetMapping("/nodes/{level}/{key}/ops")
+    public ApiResponse<Map<String, Object>> ops(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.ops(SpaceLevel.of(level), key));
+    }
+
     /** 地图图层（GeoJSON FeatureCollection，EPSG:4326）。 */
     @GetMapping("/nodes/{level}/{key}/layers/{layer}.geojson")
     public ResponseEntity<String> layer(@PathVariable String level, @PathVariable String key, @PathVariable String layer) {
