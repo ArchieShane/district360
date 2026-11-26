@@ -255,6 +255,8 @@ public class SpaceService {
         if (district != null) {
             List<Map<String, Object>> one = livMapper.districts(null, district);
             out.put("district", one.isEmpty() ? null : one.get(0));
+            out.put("facilityGaps", livMapper.facilityGaps(district, 3));
+            out.put("needs", livMapper.needs(district));
         }
         return out;
     }
@@ -262,13 +264,19 @@ public class SpaceService {
     /** 范围内区数、平均评分（现状 / 在途 / 目标）、公园合计与缺口合计、数据日期。 */
     private static Map<String, Object> livSummary(List<Map<String, Object>> list) {
         int n = 0;
-        double ex = 0, cu = 0, tg = 0, gap = 0, area = 0;
+        double ex = 0, cu = 0, tg = 0, gap = 0, area = 0, capex = 0;
         long parks = 0;
+        Map<String, Integer> tiers = new LinkedHashMap<>();
+        tiers.put("high_priority", 0);
+        tiers.put("priority", 0);
+        tiers.put("remaining", 0);
         String asOf = null;
         for (Map<String, Object> r : list) {
             if (r.get("parks") instanceof Number p) parks += p.longValue();
             if (r.get("parkAreaHa") instanceof Number a) area += a.doubleValue();
             if (r.get("parkGapHa") instanceof Number g) gap += g.doubleValue();
+            if (r.get("capexAed") instanceof Number c) capex += c.doubleValue();
+            if (r.get("tier") instanceof String t && tiers.containsKey(t)) tiers.merge(t, 1, Integer::sum);
             if (r.get("asOf") != null && (asOf == null || asOf.compareTo(r.get("asOf").toString()) < 0)) asOf = r.get("asOf").toString();
             if (Boolean.TRUE.equals(r.get("inScope")) && r.get("pipeline") instanceof Number c) {
                 n++;
@@ -286,6 +294,9 @@ public class SpaceService {
         s.put("parks", parks);
         s.put("parkAreaHa", Math.round(area * 10) / 10.0);
         s.put("parkGapHa", Math.round(gap * 10) / 10.0);
+        // CAPEX 合计不按评估范围过滤（与宜居平台 city_budget 一致）
+        s.put("capexAed", Math.round(capex));
+        s.put("tiers", tiers);
         s.put("asOf", asOf);
         return s;
     }

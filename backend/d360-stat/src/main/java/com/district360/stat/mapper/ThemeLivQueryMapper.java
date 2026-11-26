@@ -16,4 +16,10 @@ public interface ThemeLivQueryMapper {
      * municipality、district 都为 null 时返回全部区；按范围内在前、在途评分降序。
      */
     List<Map<String, Object>> districts(@Param("municipality") String municipality, @Param("district") String district);
+
+    /** 区域最缺设施：FPP 类项目（含公园）在途供给评分低于分档目标的，按差距降序前 limit 个。 */
+    List<Map<String, Object>> facilityGaps(@Param("district") String district, @Param("limit") int limit);
+
+    /** 居民需求：理想社区调查得票占比前 3（受访不足 10 人的区为空）。 */
+    List<Map<String, Object>> needs(@Param("district") String district);
 }

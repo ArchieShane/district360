@@ -2,12 +2,16 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <!--
   Liveability 取数。口径：按统计范围（makani 区面，EPSG:4326）做空间查询，不用区 ID。
+  取数逻辑与宜居平台（geoprocessinghttpserver）的 /liveability/v2/api/dashboard 一致，出处见各段注释。
 
-  - 计算版本 #{version}：每次抽取开始时取一次当前发布版本（dim_calc_versions.current_flag = true，见 publishedVersion），
-    整批 216 个区都用同一个版本，不写死版本号；
+  - 计算版本 #{version}：每次抽取开始时取一次当前发布版本（dim_calc_versions.current_flag = true 且 status = 'approved'，
+    与宜居平台 calc_version_resolver 一致，见 publishedVersion），整批 216 个区都用同一个版本，不写死版本号；
+  - 优先级批次 #{runId} / #{assumptionSetId}：最近一次审批通过的 fact_prioritization_runs（见 approvedRun，
+    与 leadership_service.approved_run 一致），整批只取一次；
   - 评估范围：宜居库配置表 param_district_scope.in_scope（没有配置行按 false，与宜居库视图 vw_district_scope 一致）；
     不在评估范围的区照常写入（公园指标照常展示），页面不展示其得分；
-  - 区级表（fact_district_scores、fact_parks_demand）：用范围在 dim_districts 里找重合面积最大的宜居区，再取该区指标；
+  - 区级表（fact_district_scores、fact_parks_demand、fact_budget、优先级分档）：用范围在 dim_districts 里找重合面积最大的
+    宜居区，再取该区指标；
   - 公园数（fact_facilities）：公园类设施 stage = Existing，几何有点有面，统一用 ST_PointOnSurface(geom)
     （点取自身，面取面内一点）落在范围内即计入，跨区的面只计一次；
     已核对（2026-11-21，当时发布版本为 496）：fact_parks_demand.existing_sqm 正是这些 Existing 公园面的面积合计，
@@ -17,9 +21,22 @@
 <mapper namespace="com.district360.liveability.mapper.LiveabilityMapper">
 
     <select id="publishedVersion" resultType="java.lang.Long">
-        SELECT calc_version_id FROM dim_calc_versions WHERE current_flag
+        SELECT calc_version_id FROM dim_calc_versions WHERE current_flag AND status = 'approved'
     </select>
 
+    <!-- 最近一次审批通过的优先级批次（leadership_service.approved_run）；没有时返回 null -->
+    <select id="approvedRun" resultType="com.district360.liveability.row.LivRunRow">
+        SELECT run_id, assumption_set_id FROM fact_prioritization_runs
+        WHERE status = 'approved' ORDER BY run_at DESC, run_id DESC LIMIT 1
+    </select>
+
+    <!--
+      CAPEX / OPEX：fact_budget（dashboard_service.district_budget，AED，不做脱敏）。total_capex 为宜居平台 Budget 卡片的
+        总额（新建按「Actioned by LIV」取行动计划数，否则取分档目标缺口）；total_capex_tier_target 为全部按分档目标缺口。
+      优先级分档：fact_prioritization_district_classification（leadership_service.district_tiers）：
+        tier = coalesce(approved, suggested)；规则号按 leadership_service.RULES 的级联顺序取该分档第一个触发的规则，
+        都没触发时：remaining → R，其余取该分档第一个规则（宜居平台标为人工调整）。
+    -->
     <select id="districtStats" resultType="com.district360.liveability.row.LivDistrictRow">
         WITH s AS (SELECT ST_GeomFromEWKB(decode(#{scope}, 'hex')) AS g),
              l AS (SELECT d.district_id
@@ -33,7 +50,16 @@
              pd AS (SELECT existing_sqm, area_required_sqm
                     FROM fact_parks_demand
                     WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = #{version}
-                    LIMIT 1)
+                    LIMIT 1),
+             b AS (SELECT total_capex, total_opex, total_capex_tier_target
+                   FROM fact_budget
+                   WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = #{version}
+                   LIMIT 1),
+             c AS (SELECT lower(trim(coalesce(approved_classification, suggested_classification))) AS tier,
+                          coalesce(classification_triggers, '{}'::jsonb) AS tr
+                   FROM fact_prioritization_district_classification
+                   WHERE run_id = #{runId} AND district_id = (SELECT district_id FROM l)::text
+                   LIMIT 1)
         SELECT (SELECT district_id FROM l)                                    AS liv_district_id,
                coalesce((SELECT p.in_scope FROM param_district_scope p
                          WHERE p.district_id = (SELECT district_id FROM l)), false) AS in_scope,
@@ -47,7 +73,96 @@
                   AND f.stage = 'Existing'
                   AND f.facility_type IN ('Park_Local', 'Park_Neighbourhoud', 'Park_District', 'Park_Other')) AS parks,
                (SELECT existing_sqm / 10000.0 FROM pd)                        AS park_area_ha,
-               (SELECT greatest(area_required_sqm - existing_sqm, 0) / 10000.0 FROM pd) AS park_gap_ha
+               (SELECT greatest(area_required_sqm - existing_sqm, 0) / 10000.0 FROM pd) AS park_gap_ha,
+               (SELECT total_capex FROM b)                                    AS capex_aed,
+               (SELECT total_opex FROM b)                                     AS opex_aed,
+               (SELECT total_capex_tier_target FROM b)                        AS capex_tier_target_aed,
+               (SELECT tier FROM c)                                           AS tier,
+               (SELECT CASE tier
+                    WHEN 'high_priority' THEN CASE
+                        WHEN coalesce((tr ->> 'critical_citizen_risk')::boolean, false) THEN 'H1'
+                        WHEN coalesce((tr ->> 'critical_significant_economic')::boolean, false) THEN 'H2'
+                        WHEN coalesce((tr ->> 'critical_total_population_risk')::boolean, false) THEN 'H3'
+                        ELSE 'H1' END
+                    WHEN 'priority' THEN CASE
+                        WHEN coalesce((tr ->> 'high_citizen_tier')::boolean, false) THEN 'P1'
+                        WHEN coalesce((tr ->> 'high_risk_area')::boolean, false) THEN 'P2'
+                        WHEN coalesce((tr ->> 'high_social_impact')::boolean, false) THEN 'P3'
+                        WHEN coalesce((tr ->> 'high_future_economic')::boolean, false) THEN 'P4'
+                        ELSE 'P1' END
+                    WHEN 'remaining' THEN 'R' END
+                FROM c)                                                        AS tier_rule,
+               (SELECT string_agg(t, ',') FROM c, jsonb_array_elements_text(
+                    CASE WHEN jsonb_typeof(tr -> 'triggered') = 'array' THEN tr -> 'triggered' ELSE '[]'::jsonb END) t) AS tier_triggers
+    </select>
+
+    <!--
+      区域最缺设施：宜居平台 Facility Scores 卡片（v2_copilot.facility_scores_card）里的 FPP 类项目（含公园），
+        登记表 param_facility_score_display（active，assessment_type = 'FPP'，source_key = 'Parks' 为公园行），
+        分值：FPP 取 fact_fpp_scores.existing_kpi / pipeline_kpi / displayed_score（AP50）；公园取 fact_parks_demand.kpi_*；
+          is_not_required、空值或 ≥ 9000 的哨兵值不计；封顶 100、保留 2 位（v2_copilot._fpp_value）；
+        目标：分档目标 param_prioritization_target_matrix.target_pct（assessment_group = 'Tier'，本区分档 × 项目的 AD 类别；
+          other 类没有目标），即宜居平台卡片的 tier_target；
+        差距 = 目标 − 在途（Pipeline），只要 > 0 的，按差距降序前 #{limit} 个。
+        IC（道路设施）、FP（可达性）、FC（学校容量）各有专门规则，暂不计入。
+    -->
+    <select id="facilityGaps" resultType="com.district360.liveability.row.LivFacilityGapRow">
+        WITH t AS (SELECT lower(trim(coalesce(approved_classification, suggested_classification))) AS tier
+                   FROM fact_prioritization_district_classification
+                   WHERE run_id = #{runId} AND district_id = #{livDistrictId}::text
+                   LIMIT 1),
+             reg AS (SELECT display_label, source_key, lower(trim(ad_lens_classification)) AS cat, display_order, display_id
+                     FROM param_facility_score_display WHERE active AND assessment_type = 'FPP'),
+             sc AS (SELECT r.display_label, r.cat, r.display_order, r.display_id,
+                           CASE WHEN f.is_not_required OR f.existing_kpi IS NULL OR f.existing_kpi >= 9000 THEN NULL
+                                ELSE round(least(f.existing_kpi, 100)::numeric, 2) END AS s_existing,
+                           CASE WHEN f.is_not_required OR f.pipeline_kpi IS NULL OR f.pipeline_kpi >= 9000 THEN NULL
+                                ELSE round(least(f.pipeline_kpi, 100)::numeric, 2) END AS s_pipeline,
+                           CASE WHEN f.is_not_required OR f.displayed_score IS NULL OR f.displayed_score >= 9000 THEN NULL
+                                ELSE round(least(f.displayed_score, 100)::numeric, 2) END AS s_ap50
+                    FROM reg r
+                             JOIN fact_fpp_scores f ON f.facility_type = r.source_key
+                                 AND f.district_id = #{livDistrictId} AND f.calc_version_id = #{version}
+                    WHERE r.source_key &lt;&gt; 'Parks'
+                    UNION ALL
+                    SELECT r.display_label, r.cat, r.display_order, r.display_id,
+                           CASE WHEN p.area_required_sqm > 0 THEN round(least(p.kpi_existing, 100)::numeric, 2) END,
+                           CASE WHEN p.area_required_sqm > 0 THEN round(least(p.kpi_post_pipeline, 100)::numeric, 2) END,
+                           CASE WHEN p.area_required_sqm > 0 THEN round(least(p.kpi_liv_ap, 100)::numeric, 2) END
+                    FROM reg r
+                             JOIN fact_parks_demand p ON p.district_id = #{livDistrictId} AND p.calc_version_id = #{version}
+                    WHERE r.source_key = 'Parks')
+        SELECT sc.display_label AS facility, sc.cat AS category, sc.s_existing AS score_existing,
+               sc.s_pipeline AS score_pipeline, sc.s_ap50 AS score_ap50, m.target_pct AS target_pct,
+               round(m.target_pct - sc.s_pipeline, 2) AS gap
+        FROM sc
+                 JOIN param_prioritization_target_matrix m
+                      ON m.assumption_set_id = #{assumptionSetId} AND m.assessment_group = 'Tier'
+                          AND lower(trim(m.district_classification)) = (SELECT tier FROM t)
+                          AND lower(trim(m.category_classification)) = sc.cat
+        WHERE sc.s_pipeline IS NOT NULL AND m.target_pct IS NOT NULL AND m.target_pct - sc.s_pipeline > 0
+        ORDER BY gap DESC, sc.display_order, sc.display_id
+        LIMIT #{limit}
+    </select>
+
+    <!--
+      居民需求：理想社区调查（Dream Neighbourhood Survey），宜居平台 Community Voice 卡片（v2_copilot.community_voice）。
+        fact_ce_ranking_scores：当前启用的调查库（param_ce_database_registry，is_active，默认库优先）、
+        theme = 'community_facilities_needs'、主题行 sub_category = ''、当前发布版本；
+        pct = 选该项的受访人数 ÷ 本区全部选择次数（多选）× 100；response_count 为本区受访人数（每行重复，不能求和）；
+        受访人数少于 #{minRespondents}（宜居平台 SMALL_CELL_MIN_RESPONDENTS = 10）的区不展示；
+        受访者经 param_ce_district_crosswalk 对到宜居区，对不上的丢弃。按 pct 降序、名称升序取前 #{limit}。
+    -->
+    <select id="needs" resultType="com.district360.liveability.row.LivNeedRow">
+        SELECT item_name AS item, pct, votes, response_count AS respondents
+        FROM fact_ce_ranking_scores
+        WHERE ce_database_id = (SELECT id FROM param_ce_database_registry WHERE is_active ORDER BY is_default DESC, id LIMIT 1)
+          AND theme = 'community_facilities_needs' AND sub_category = ''
+          AND calc_version_id = #{version}
+          AND district_id = #{livDistrictId}
+          AND response_count >= #{minRespondents}
+        ORDER BY pct DESC, item_name
+        LIMIT #{limit}
     </select>
 
     <select id="dataDate" resultType="java.time.LocalDate">

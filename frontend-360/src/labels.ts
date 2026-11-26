@@ -221,3 +221,26 @@ export function livColor(v: number | null | undefined): string {
   const mix = (a: string, b: string, k: number) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('')
   return t < 0.5 ? mix('#D7303A', '#F2D45C', t * 2) : mix('#F2D45C', '#3FB45F', t * 2 - 1)
 }
+
+/** 宜居优先级分档（宜居平台 District Priority） */
+export const TIER: Record<string, { n: string; c: string }> = {
+  high_priority: { n: '高优先', c: '#FFB23E' },
+  priority: { n: '优先', c: '#4C8DF6' },
+  remaining: { n: '其余', c: '#8C929B' },
+}
+
+/** 分档触发项（classification_triggers）→ 中文 */
+export const TIER_TRIGGER: Record<string, string> = {
+  critical_citizen_risk: '公民人口风险（严重）',
+  critical_significant_economic: '重大经济（严重）',
+  critical_total_population_risk: '总人口风险（严重）',
+  high_citizen_tier: '公民人口分档高',
+  high_risk_area: '高风险区域',
+  high_social_impact: '社会影响高',
+  high_future_economic: '未来经济潜力高',
+}
+
+/** 设施项目的重要性类别（AD lens） */
+export const FACILITY_CATEGORY: Record<string, string> = {
+  critical: '关键', important: '重要', basic: '基础', other: '其他',
+}

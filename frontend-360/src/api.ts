@@ -264,6 +264,41 @@ export interface LivDistrict {
   parkGapHa: number | null
   sample: boolean
   asOf?: string
+  /** 达标所需投资 CAPEX（fact_budget.total_capex，AED） */
+  capexAed?: number | null
+  opexAed?: number | null
+  /** 全部按分档目标缺口计的 CAPEX（AED） */
+  capexTierTargetAed?: number | null
+  /** 优先级分档 high_priority / priority / remaining（只有评估范围内的区有） */
+  tier?: string | null
+  /** 分档规则号 H1–H3 / P1–P4 / R */
+  tierRule?: string | null
+  /** 触发项，逗号分隔 */
+  tierTriggers?: string | null
+  livDistrictId?: number | null
+  calcVersionId?: number | null
+}
+
+/** 最缺设施：在途供给评分低于分档目标的 FPP 类项目（0–100） */
+export interface LivFacilityGap {
+  rank: number
+  facility: string
+  /** critical / important / basic */
+  category?: string | null
+  existing?: number | null
+  pipeline?: number | null
+  ap50?: number | null
+  target?: number | null
+  gap: number
+}
+
+/** 居民需求：理想社区调查一个选项 */
+export interface LivNeed {
+  rank: number
+  item: string
+  pct: number
+  votes?: number
+  respondents?: number
 }
 
 export interface LivSummary {
@@ -275,6 +310,10 @@ export interface LivSummary {
   parks: number
   parkAreaHa: number
   parkGapHa: number
+  /** 全部区域 CAPEX 合计（AED，不按评估范围过滤） */
+  capexAed?: number
+  /** 各分档区域数 */
+  tiers?: Record<string, number>
   asOf?: string
 }
 
@@ -284,6 +323,8 @@ export interface LivView {
   summary?: LivSummary
   districts?: LivDistrict[]
   district?: LivDistrict | null
+  facilityGaps?: LivFacilityGap[]
+  needs?: LivNeed[]
 }
 
 interface ApiResponse<T> {

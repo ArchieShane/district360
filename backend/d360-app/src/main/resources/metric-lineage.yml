@@ -297,15 +297,15 @@ d360:
         source: liveability
         stat-column: stat_district_liveability.score_current
         source-tables: ["dim_calc_versions", "dim_districts", "fact_district_scores"]
-        logic-zh: 按统计范围（makani 区面）在 dim_districts 里找重合面积最大的区，取该区 stage = Pipeline、当前发布版本（dim_calc_versions.current_flag = true）的 overall_score。不在宜居评估范围（param_district_scope.in_scope = false）的区不展示得分。
-        logic-en: Find the Liveability district that overlaps the scope (makani polygon) most, then overall_score with stage = Pipeline, published calc version (dim_calc_versions.current_flag = true).
+        logic-zh: 按统计范围（makani 区面）在 dim_districts 里找重合面积最大的区，取该区 stage = Pipeline、当前发布版本（dim_calc_versions.current_flag = true 且 status = 'approved'）的 overall_score。不在宜居评估范围（param_district_scope.in_scope = false）的区不展示得分。
+        logic-en: Find the Liveability district that overlaps the scope (makani polygon) most, then overall_score with stage = Pipeline, published calc version (dim_calc_versions.current_flag = true and status = 'approved').
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
                      WHERE d.geom && s.g
                      ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT overall_score FROM fact_district_scores
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag) AND stage = 'Pipeline'
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag AND status = 'approved') AND stage = 'Pipeline'
 
       liv_existing:
         name-zh: 宜居得分 · 现状
@@ -313,15 +313,15 @@ d360:
         source: liveability
         stat-column: stat_district_liveability.score_existing
         source-tables: ["dim_calc_versions", "dim_districts", "fact_district_scores"]
-        logic-zh: 按统计范围匹配 Liveability 的区（同上），取 stage = Existing、当前发布版本（dim_calc_versions.current_flag = true）的 overall_score。
-        logic-en: Match the Liveability district by scope (as above), then overall_score with stage = Existing, published calc version (dim_calc_versions.current_flag = true).
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），取 stage = Existing、当前发布版本（dim_calc_versions.current_flag = true 且 status = 'approved'）的 overall_score。
+        logic-en: Match the Liveability district by scope (as above), then overall_score with stage = Existing, published calc version (dim_calc_versions.current_flag = true and status = 'approved').
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
                      WHERE d.geom && s.g
                      ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT overall_score FROM fact_district_scores
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag) AND stage = 'Existing'
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag AND status = 'approved') AND stage = 'Existing'
 
       liv_target:
         name-zh: 宜居得分 · 目标
@@ -329,15 +329,15 @@ d360:
         source: liveability
         stat-column: stat_district_liveability.score_target
         source-tables: ["dim_calc_versions", "dim_districts", "fact_district_scores"]
-        logic-zh: 按统计范围匹配 Liveability 的区（同上），取 stage = AP50、当前发布版本（dim_calc_versions.current_flag = true）的 overall_score。
-        logic-en: Match the Liveability district by scope (as above), then overall_score with stage = AP50, published calc version (dim_calc_versions.current_flag = true).
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），取 stage = AP50、当前发布版本（dim_calc_versions.current_flag = true 且 status = 'approved'）的 overall_score。
+        logic-en: Match the Liveability district by scope (as above), then overall_score with stage = AP50, published calc version (dim_calc_versions.current_flag = true and status = 'approved').
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
                      WHERE d.geom && s.g
                      ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT overall_score FROM fact_district_scores
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag) AND stage = 'AP50'
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag AND status = 'approved') AND stage = 'AP50'
 
       liv_gap:
         name-zh: 宜居得分 · 差距
@@ -345,8 +345,8 @@ d360:
         source: liveability
         stat-column: 接口计算：max(0, score_target − score_current)
         source-tables: ["dim_calc_versions", "dim_districts", "fact_district_scores"]
-        logic-zh: 目标（AP50）− 目前（Pipeline），小于 0 记 0；区按统计范围匹配（同上），取当前发布版本（dim_calc_versions.current_flag = true）。
-        logic-en: Target (AP50) − current (Pipeline), floored at 0; district matched by scope (as above), published calc version (dim_calc_versions.current_flag = true).
+        logic-zh: 目标（AP50）− 目前（Pipeline），小于 0 记 0；区按统计范围匹配（同上），取当前发布版本（dim_calc_versions.current_flag = true 且 status = 'approved'）。
+        logic-en: Target (AP50) − current (Pipeline), floored at 0; district matched by scope (as above), published calc version (dim_calc_versions.current_flag = true and status = 'approved').
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
@@ -355,7 +355,7 @@ d360:
           SELECT greatest(0, max(overall_score) FILTER (WHERE stage = 'AP50')
                             - max(overall_score) FILTER (WHERE stage = 'Pipeline'))
           FROM fact_district_scores
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag)
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag AND status = 'approved')
 
       parks:
         name-zh: 公园数
@@ -379,15 +379,15 @@ d360:
         source: liveability
         stat-column: stat_district_liveability.park_area_ha
         source-tables: ["dim_calc_versions", "dim_districts", "fact_parks_demand"]
-        logic-zh: 按统计范围匹配 Liveability 的区（同上），existing_sqm ÷ 10,000 换算成公顷（当前发布版本，dim_calc_versions.current_flag = true）。
-        logic-en: District matched by scope (as above); existing_sqm ÷ 10,000 → hectares (published calc version, dim_calc_versions.current_flag = true).
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），existing_sqm ÷ 10,000 换算成公顷（当前发布版本，dim_calc_versions.current_flag = true 且 status = 'approved'）。
+        logic-en: District matched by scope (as above); existing_sqm ÷ 10,000 → hectares (published calc version, dim_calc_versions.current_flag = true and status = 'approved').
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
                      WHERE d.geom && s.g
                      ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT existing_sqm / 10000.0 FROM fact_parks_demand
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag)
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag AND status = 'approved')
 
       park_gap_ha:
         name-zh: 公园缺口
@@ -395,15 +395,85 @@ d360:
         source: liveability
         stat-column: stat_district_liveability.park_gap_ha
         source-tables: ["dim_calc_versions", "dim_districts", "fact_parks_demand"]
-        logic-zh: 按统计范围匹配 Liveability 的区（同上），(area_required_sqm − existing_sqm) ÷ 10,000，小于 0 记 0（当前发布版本，dim_calc_versions.current_flag = true）。
-        logic-en: District matched by scope (as above); (area_required_sqm − existing_sqm) ÷ 10,000, floored at 0 (published calc version, dim_calc_versions.current_flag = true).
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），(area_required_sqm − existing_sqm) ÷ 10,000，小于 0 记 0（当前发布版本，dim_calc_versions.current_flag = true 且 status = 'approved'）。
+        logic-en: District matched by scope (as above); (area_required_sqm − existing_sqm) ÷ 10,000, floored at 0 (published calc version, dim_calc_versions.current_flag = true and status = 'approved').
         sql: |
           WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
                l AS (SELECT d.district_id FROM dim_districts d, s
                      WHERE d.geom && s.g
                      ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
           SELECT greatest(area_required_sqm - existing_sqm, 0) / 10000.0 FROM fact_parks_demand
-          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag)
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag AND status = 'approved')
+
+      liv_capex:
+        name-zh: 达标所需投资（CAPEX）
+        name-en: CAPEX to target
+        source: liveability
+        stat-column: stat_district_liveability.capex_aed
+        source-tables: ["dim_calc_versions", "dim_districts", "fact_budget"]
+        logic-zh: 按统计范围匹配 Liveability 的区（同上），取当前发布版本的 fact_budget.total_capex（AED，与宜居平台 Budget 卡片一致：新建设施按「Actioned by LIV」取行动计划数量，否则取分档目标缺口计价）。另存 total_opex 与 total_capex_tier_target（全部按分档目标缺口）。市政 / 全酋长国合计不按评估范围过滤。
+        logic-en: District matched by scope (as above); fact_budget.total_capex (AED) of the published calc version, as on the Liveability Budget card. total_opex and total_capex_tier_target are kept too. City totals are not filtered by assessment scope.
+        sql: |
+          WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
+               l AS (SELECT d.district_id FROM dim_districts d, s
+                     WHERE d.geom && s.g
+                     ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1)
+          SELECT total_capex, total_opex, total_capex_tier_target FROM fact_budget
+          WHERE district_id = (SELECT district_id FROM l) AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag AND status = 'approved')
+
+      liv_tier:
+        name-zh: 优先级分档
+        name-en: Priority tier
+        source: liveability
+        stat-column: stat_district_liveability.tier / tier_rule / tier_triggers
+        source-tables: ["dim_districts", "fact_prioritization_runs", "fact_prioritization_district_classification"]
+        logic-zh: 最近一次审批通过的优先级批次（fact_prioritization_runs，status = approved，按 run_at、run_id 取最新），本区 coalesce(approved_classification, suggested_classification)：high_priority / priority / remaining。规则号按宜居平台级联取该分档第一个触发项：H1 公民风险、H2 重大经济、H3 总人口风险；P1 公民人口分档、P2 高风险区域、P3 社会影响、P4 未来经济；remaining 为 R。
+        logic-en: Latest approved prioritization run; coalesce(approved, suggested) classification of the district. Rule id = first fired trigger of that tier in the Liveability cascade (H1–H3, P1–P4, R).
+        sql: |
+          WITH s AS (SELECT ST_GeomFromEWKB(:district_scope) AS g),  -- 统计范围 = makani 区面
+               l AS (SELECT d.district_id FROM dim_districts d, s
+                     WHERE d.geom && s.g
+                     ORDER BY ST_Area(ST_Intersection(d.geom, s.g)) DESC LIMIT 1),
+               run AS (SELECT run_id FROM fact_prioritization_runs WHERE status = 'approved' ORDER BY run_at DESC, run_id DESC LIMIT 1)
+          SELECT coalesce(approved_classification, suggested_classification) AS tier, classification_triggers
+          FROM fact_prioritization_district_classification
+          WHERE run_id = (SELECT run_id FROM run) AND district_id = (SELECT district_id FROM l)::text
+
+      liv_facility_gaps:
+        name-zh: 区域最缺设施
+        name-en: Most lacking facilities
+        source: liveability
+        stat-column: stat_district_liv_facility_gap
+        source-tables: ["param_facility_score_display", "fact_fpp_scores", "fact_parks_demand", "param_prioritization_target_matrix", "fact_prioritization_district_classification"]
+        logic-zh: 宜居平台 Facility Scores 卡片的 FPP 类项目（param_facility_score_display，active，assessment_type = FPP；公园取 fact_parks_demand.kpi_*）。在途供给评分 = fact_fpp_scores.pipeline_kpi（不需要、空值或 ≥ 9000 的哨兵值不计，封顶 100）；目标 = 分档目标 param_prioritization_target_matrix.target_pct（assessment_group = Tier，本区分档 × 项目的 AD 类别）；差距 = 目标 − 在途，取 > 0 的按差距降序前 3。IC / FP / FC 类项目暂不计入。
+        logic-en: FPP items of the Liveability Facility Scores card (parks from fact_parks_demand). Pipeline provision score vs the tier target (param_prioritization_target_matrix, assessment_group = Tier, district tier × item category); gap = target − pipeline, top 3 positive gaps.
+        sql: |
+          -- :liv_district_id = 宜居区 id（按统计范围匹配，同上）；run = 最近一次 approved 优先级批次
+          SELECT r.display_label, round(least(f.pipeline_kpi, 100)::numeric, 2) AS pipeline,
+                 m.target_pct, m.target_pct - round(least(f.pipeline_kpi, 100)::numeric, 2) AS gap
+          FROM param_facility_score_display r
+          JOIN fact_fpp_scores f ON f.facility_type = r.source_key AND f.district_id = :liv_district_id
+               AND f.calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag AND status = 'approved')
+          JOIN param_prioritization_target_matrix m ON m.assumption_set_id = :run_assumption_set_id AND m.assessment_group = 'Tier'
+               AND lower(m.district_classification) = :tier AND lower(m.category_classification) = lower(r.ad_lens_classification)
+          WHERE r.active AND r.assessment_type = 'FPP' AND NOT f.is_not_required AND f.pipeline_kpi < 9000
+          ORDER BY gap DESC LIMIT 3
+
+      liv_needs:
+        name-zh: 居民需求（理想社区调查）
+        name-en: Residents' needs (Dream Neighbourhood Survey)
+        source: liveability
+        stat-column: stat_district_liv_need
+        source-tables: ["param_ce_database_registry", "fact_ce_ranking_scores"]
+        logic-zh: 宜居平台 Community Voice 卡片：当前启用的调查库、主题 community_facilities_needs、当前发布版本，本区各选项得票占比 pct（选该项的受访人数 ÷ 本区全部选择次数 × 100，多选），按 pct 降序取前 3。受访人数少于 10 的区不展示。受访者按 param_ce_district_crosswalk 对到宜居区。
+        logic-en: Community Voice card of the Liveability platform, theme community_facilities_needs, published calc version; vote share pct per option, top 3; districts with fewer than 10 respondents are not shown.
+        sql: |
+          SELECT item_name, pct, votes, response_count FROM fact_ce_ranking_scores
+          WHERE ce_database_id = (SELECT id FROM param_ce_database_registry WHERE is_active ORDER BY is_default DESC, id LIMIT 1)
+            AND theme = 'community_facilities_needs' AND sub_category = ''
+            AND calc_version_id = (SELECT calc_version_id FROM dim_calc_versions WHERE current_flag AND status = 'approved')
+            AND district_id = :liv_district_id AND response_count >= 10
+          ORDER BY pct DESC, item_name LIMIT 3
 
       re_sales:
         name-zh: 成交额（近 12 个月）
