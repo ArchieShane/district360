@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 设施读查询。${col} 只来自代码白名单，请求参数一律 #{}。
+  学位使用率 = 在校生 ÷ 学位（只计两者都有值的学校）。公园个数按 park_id 去重（同一公园可有多个面）。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeAstQueryMapper">
+
+    <sql id="f"><if test="col != null">AND x.${col} = #{key}</if></sql>
+
+    <select id="summary" resultType="java.util.LinkedHashMap">
+        SELECT count(*) FILTER (WHERE category = 'school')                                AS "schools",
+               coalesce(sum(capacity) FILTER (WHERE category = 'school'), 0)             AS "schoolCapacity",
+               coalesce(sum(students) FILTER (WHERE category = 'school'), 0)             AS "students",
+               coalesce(sum(staff) FILTER (WHERE category = 'school'), 0)                AS "schoolStaff",
+               round(sum(students) FILTER (WHERE category = 'school' AND capacity > 0 AND students IS NOT NULL) * 100.0
+                     / nullif(sum(capacity) FILTER (WHERE category = 'school' AND capacity > 0 AND students IS NOT NULL), 0), 1)
+                                                                                         AS "seatUtilization",
+               count(*) FILTER (WHERE category = 'medical')                               AS "medical",
+               coalesce(sum(capacity) FILTER (WHERE category = 'medical'), 0)            AS "beds",
+               count(*) FILTER (WHERE category = 'medical' AND subtype ILIKE '%hospital%') AS "hospitals",
+               count(*) FILTER (WHERE category = 'pharmacy')                              AS "pharmacies",
+               count(*) FILTER (WHERE category = 'mosque')                                AS "mosques",
+               coalesce(sum(capacity) FILTER (WHERE category = 'mosque'), 0)             AS "worshippers",
+               count(DISTINCT park_id) FILTER (WHERE category = 'park')                   AS "parks",
+               round(coalesce(sum(area_sqm) FILTER (WHERE category = 'park'), 0) / 10000.0, 1) AS "parkAreaHa"
+        FROM theme.ast_facility x
+        WHERE true <include refid="f"/>
+    </select>
+
+    <select id="bySubtype" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(nullif(x.subtype, ''), 'Unknown') AS "k", count(*) AS "n", coalesce(sum(x.capacity), 0) AS "capacity"
+        FROM theme.ast_facility x
+        WHERE x.category = #{category} <include refid="f"/>
+        GROUP BY 1
+        ORDER BY 2 DESC
+        LIMIT 12
+    </select>
+
+    <select id="items" resultType="java.util.LinkedHashMap">
+        SELECT x.category AS "category", x.source_id AS "id", coalesce(x.name_en, x.name_ar) AS "name", x.name_ar AS "nameAr",
+               x.subtype AS "subtype", x.sub_category AS "subCategory", x.capacity AS "capacity", x.students AS "students",
+               x.staff AS "staff", x.is_public AS "isPublic", round(x.area_sqm, 0) AS "areaSqm", x.plot_key AS "plotKey",
+               ST_X(x.centroid) AS "cx", ST_Y(x.centroid) AS "cy", x.attrs::text AS "attrs"
+        FROM theme.ast_facility x
+        WHERE x.category = #{category} <include refid="f"/>
+        ORDER BY coalesce(x.capacity, x.area_sqm, 0) DESC, 3
+        LIMIT #{limit}
+    </select>
+</mapper>

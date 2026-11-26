@@ -189,7 +189,27 @@ export const LAMP_TYPE: Record<string, string> = {
   HPS: '高压钠灯', MH: '金属卤化物灯', MV: '汞灯', LPS: '低压钠灯', FLUO: '荧光灯', Unknown: '未标注',
 }
 
+/** 设施类别 */
+export const AST_CATEGORY: Record<string, { n: string; c: string }> = {
+  school: { n: '学校', c: '#F0A64A' },
+  medical: { n: '医疗', c: '#E86A6A' },
+  pharmacy: { n: '药房', c: '#FF8FB1' },
+  mosque: { n: '清真寺', c: '#62D36A' },
+  park: { n: '公园', c: '#3DD6D0' },
+}
+
+/** 设施详情字段（attrs）中文名；没列出的原样显示键名 */
+export const AST_ATTR: Record<string, string> = {
+  esisId: 'ESIS 编号', gender: '性别', grades: '年级', cycle: '学段', curriculum: '课程', rating: '评级（Irtiqaa）',
+  tuitionCategory: '学费档', averageTuition: '平均学费 AED', teachingStaff: '教师', boys: '男生', girls: '女生',
+  academicYear: '学年', snapshot: '数据快照', license: '执照号', specialities: '专科', emergencyLevel: '急诊级别',
+  region: '地区', city: '城市', plotNumber: '地块号', address: '地址', issueDate: '发证日期', expiryDate: '到期日期',
+  mosqueNo: '清真寺编号', branch: '分支', area: '区域', plotNo: '地块号', sermonLanguage: '布道语言', stage: '阶段',
+  neighbourhood: '街区', street: '街道', hours: '开放时间', entryFee: '门票', playArea: '多功能游乐区', mosque: '礼拜室',
+  kiosk: '售货亭', restroom: '卫生间', bbq: '烧烤区', theatre: '剧场', restaurants: '餐厅', library: '图书馆',
+  games: '游戏区', fountains: '喷泉', fenced: '围栏', dmtDetail: 'DMT 明细编号',
+}
+
 /** 尚未接入的主题页签：对应主题库 theme.meta_table.theme */
 export const PENDING_TABS: { id: string; name: string; theme: string; note: string }[] = [
-  { id: 'ast', name: '设施', theme: '资产与设施', note: '学校、医疗、清真寺、公园' },
 ]

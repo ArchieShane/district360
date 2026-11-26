@@ -5,7 +5,7 @@
 const BASE = 'api/v2/space'
 
 export type Level = 'emirate' | 'municipality' | 'district' | 'community' | 'plot' | 'building' | 'floor' | 'unit'
-export type Layer = 'municipalities' | 'districts' | 'communities' | 'plots' | 'buildings' | 'floors' | 'units' | 'masterplans' | 'sites' | 'busstops' | 'streetlights'
+export type Layer = 'municipalities' | 'districts' | 'communities' | 'plots' | 'buildings' | 'floors' | 'units' | 'masterplans' | 'sites' | 'busstops' | 'streetlights' | 'facilities'
 
 /** 开发建设页签（GET /nodes/{level}/{key}/dev）。scope 为实际统计范围：建筑及以下按所在地块；没有地块时为 null */
 export interface DevSummary {
@@ -160,6 +160,26 @@ export interface OpsView {
   busStops?: { stopId: string; name?: string; nameAr?: string; platforms: number; codes?: string; cx?: number; cy?: number }[]
 }
 
+export type AstCategory = 'school' | 'medical' | 'pharmacy' | 'mosque' | 'park'
+
+export interface AstItem {
+  category: AstCategory; id: string; name?: string; nameAr?: string; subtype?: string; subCategory?: string
+  capacity?: number; students?: number; staff?: number; isPublic?: boolean; areaSqm?: number; plotKey?: string
+  cx?: number; cy?: number
+  /** 详情字段的 JSON 文本 */
+  attrs?: string
+}
+
+/** 设施页签（GET /nodes/{level}/{key}/ast）。建筑及以下按所在地块统计 */
+export interface AstView {
+  scope: { level: Level; key: string } | null
+  summary?: { schools: number; schoolCapacity: number; students: number; schoolStaff: number; seatUtilization?: number
+    medical: number; beds: number; hospitals: number; pharmacies: number; mosques: number; worshippers: number
+    parks: number; parkAreaHa: number }
+  bySubtype?: Record<AstCategory, { k: string; n: number; capacity: number }[]>
+  items?: Record<AstCategory, AstItem[]>
+}
+
 export interface ChildItem {
   key: string
   name: string
@@ -239,6 +259,7 @@ export const api = {
     if (!res.ok) throw new Error(`请求失败：${res.status}`)
     return res.json()
   },
+  ast: (level: Level, key: string, signal?: AbortSignal) => get<AstView>(`/nodes/${level}/${enc(key)}/ast`, signal),
   ops: (level: Level, key: string, signal?: AbortSignal) => get<OpsView>(`/nodes/${level}/${enc(key)}/ops`, signal),
   mkt: (level: Level, key: string, signal?: AbortSignal) => get<MktView>(`/nodes/${level}/${enc(key)}/mkt`, signal),
   dev: (level: Level, key: string, signal?: AbortSignal) => get<DevView>(`/nodes/${level}/${enc(key)}/dev`, signal),

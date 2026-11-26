@@ -1,6 +1,7 @@
 package com.district360.app.space;
 
 import com.district360.app.web.dto.PageResult;
+import com.district360.stat.mapper.ThemeAstQueryMapper;
 import com.district360.stat.mapper.ThemeDevQueryMapper;
 import com.district360.stat.mapper.ThemeMktQueryMapper;
 import com.district360.stat.mapper.ThemeOpsQueryMapper;
@@ -39,13 +40,15 @@ public class SpaceService {
     private final ThemeDevQueryMapper devMapper;
     private final ThemeMktQueryMapper mktMapper;
     private final ThemeOpsQueryMapper opsMapper;
+    private final ThemeAstQueryMapper astMapper;
 
     public SpaceService(ThemeSpatialQueryMapper mapper, ThemeDevQueryMapper devMapper, ThemeMktQueryMapper mktMapper,
-                        ThemeOpsQueryMapper opsMapper) {
+                        ThemeOpsQueryMapper opsMapper, ThemeAstQueryMapper astMapper) {
         this.mapper = mapper;
         this.devMapper = devMapper;
         this.mktMapper = mktMapper;
         this.opsMapper = opsMapper;
+        this.astMapper = astMapper;
     }
 
     public NodeDetail node(SpaceLevel level, String key) {
@@ -192,6 +195,33 @@ public class SpaceService {
         out.put("lightsByStatus", opsMapper.lightsBy(col, k, "status"));
         out.put("lightsByLampType", opsMapper.lightsBy(col, k, "lamp_type"));
         out.put("busStops", opsMapper.busStops(col, k, 100));
+        return out;
+    }
+
+    /** 设施分类（与 ast_facility.category 一致）。 */
+    private static final List<String> AST_CATEGORIES = List.of("school", "medical", "pharmacy", "mosque", "park");
+
+    /**
+     * 设施页签：学校、医疗、药房、清真寺、公园的数量与容量、分类、列表（带详情）。建筑 / 楼层 / 单元按所在地块统计。
+     */
+    public Map<String, Object> ast(SpaceLevel level, String key) {
+        Scope sc = scope(level, key);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("scope", sc.ref());
+        if (sc.key() == null) {
+            return out;
+        }
+        String col = sc.col();
+        String k = sc.filterKey();
+        out.put("summary", astMapper.summary(col, k));
+        Map<String, Object> subtypes = new LinkedHashMap<>();
+        Map<String, Object> items = new LinkedHashMap<>();
+        for (String c : AST_CATEGORIES) {
+            subtypes.put(c, astMapper.bySubtype(col, k, c));
+            items.put(c, astMapper.items(col, k, c, 30));
+        }
+        out.put("bySubtype", subtypes);
+        out.put("items", items);
         return out;
     }
 

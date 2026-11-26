@@ -19,7 +19,9 @@ public enum SpaceLayer {
     /** 城市运行：公交站台点（要素 level = busstop）。 */
     BUSSTOPS(5000, 0),
     /** 城市运行：路灯点（要素 level = streetlight）。 */
-    STREETLIGHTS(30000, 0);
+    STREETLIGHTS(30000, 0),
+    /** 设施：学校 / 医疗 / 药房 / 清真寺 / 公园的位置点（要素 level = facility，属性 c 为类别）。 */
+    FACILITIES(10000, 0);
 
     private final int limit;
     private final double tolerance;

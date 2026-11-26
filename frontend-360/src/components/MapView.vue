@@ -2,7 +2,7 @@
 import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type Map as MlMap, type StyleSpecification } from 'maplibre-gl'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { api, LEVELS, type Layer, type Level, type NodeDetail, type NodeRef } from '../api'
-import { colorOf, LEVEL_NAME, PLOT_STATUS } from '../labels'
+import { AST_CATEGORY, colorOf, LEVEL_NAME, PLOT_STATUS } from '../labels'
 
 /**
  * 地图：按当前层级加载对应图层，点击要素下钻。
@@ -28,11 +28,12 @@ let hovered: { src: string; id: number } | null = null
 let resizeObs: ResizeObserver | null = null
 
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
-const SOURCES = ['area', 'plot', 'bld', 'flr', 'unit', 'sel', 'mp', 'site', 'bus', 'light'] as const
+const SOURCES = ['area', 'plot', 'bld', 'flr', 'unit', 'sel', 'mp', 'site', 'bus', 'light', 'fac'] as const
 /** 主题页签叠加的数据源：页签 → [数据源, 图层] */
 const THEME_LAYERS: Record<string, [Src, Layer][]> = {
   dev: [['mp', 'masterplans'], ['site', 'sites']],
   ops: [['bus', 'busstops'], ['light', 'streetlights']],
+  ast: [['fac', 'facilities']],
 }
 const THEME_SRC = new Set<string>(Object.values(THEME_LAYERS).flat().map(x => x[0]))
 type Src = typeof SOURCES[number]
@@ -85,6 +86,11 @@ function addLayers(m: MlMap) {
   m.addLayer({ id: 'light-pt', type: 'circle', source: 'light', paint: {
     'circle-color': ['match', ['get', 'st'], 'In Service', '#F2D45C', 'Out Of Service', '#E86A6A', '#8C929B'],
     'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 1.2, 17, 3.5], 'circle-opacity': 0.9 } })
+  // 设施页签：按类别着色的位置点
+  m.addLayer({ id: 'fac-pt', type: 'circle', source: 'fac', paint: {
+    'circle-color': ['match', ['get', 'c'], ...Object.entries(AST_CATEGORY).flatMap(([k, v]) => [k, v.c]), '#8C929B'] as unknown as ExpressionSpecification,
+    'circle-stroke-color': '#0E1116', 'circle-stroke-width': 1,
+    'circle-radius': ['case', ['boolean', ['feature-state', 'hover'], false], 8, 5] } })
   m.addLayer({ id: 'bus-pt', type: 'circle', source: 'bus', paint: {
     'circle-color': '#4C8DF6', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 1.2,
     'circle-radius': ['case', ['boolean', ['feature-state', 'hover'], false], 7, 4.5] } })
@@ -206,10 +212,10 @@ function fit(n: NodeDetail) {
   })
 }
 
-const PICKABLE = ['bus-pt', 'light-pt', 'unit-ext', 'flr-ext', 'bld-ext', 'site-fill', 'plot-fill', 'mp-fill', 'area-fill']
-const SRC_OF: Record<string, Src> = { 'unit-ext': 'unit', 'flr-ext': 'flr', 'bld-ext': 'bld', 'site-fill': 'site', 'plot-fill': 'plot', 'mp-fill': 'mp', 'area-fill': 'area', 'bus-pt': 'bus', 'light-pt': 'light' }
+const PICKABLE = ['fac-pt', 'bus-pt', 'light-pt', 'unit-ext', 'flr-ext', 'bld-ext', 'site-fill', 'plot-fill', 'mp-fill', 'area-fill']
+const SRC_OF: Record<string, Src> = { 'unit-ext': 'unit', 'flr-ext': 'flr', 'bld-ext': 'bld', 'site-fill': 'site', 'plot-fill': 'plot', 'mp-fill': 'mp', 'area-fill': 'area', 'bus-pt': 'bus', 'light-pt': 'light', 'fac-pt': 'fac' }
 /** 悬停提示里非下钻对象的类型名 */
-const EXTRA_NAME: Record<string, string> = { masterplan: '总体规划', site: '在建工地', busstop: '公交站台', streetlight: '路灯' }
+const EXTRA_NAME: Record<string, string> = { masterplan: '总体规划', site: '在建工地', busstop: '公交站台', streetlight: '路灯', facility: '设施' }
 
 function topFeature(e: maplibregl.MapMouseEvent) {
   if (!map) return null

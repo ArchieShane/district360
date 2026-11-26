@@ -68,6 +68,12 @@ public class SpaceController {
         return ApiResponse.ok(service.ops(SpaceLevel.of(level), key));
     }
 
+    /** 设施页签：学校、医疗、药房、清真寺、公园（建筑及以下按所在地块）。 */
+    @GetMapping("/nodes/{level}/{key}/ast")
+    public ApiResponse<Map<String, Object>> ast(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.ast(SpaceLevel.of(level), key));
+    }
+
     /** 地图图层（GeoJSON FeatureCollection，EPSG:4326）。 */
     @GetMapping("/nodes/{level}/{key}/layers/{layer}.geojson")
     public ResponseEntity<String> layer(@PathVariable String level, @PathVariable String key, @PathVariable String layer) {

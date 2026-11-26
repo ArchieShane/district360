@@ -411,6 +411,16 @@
                 WHERE x.${col} = #{key}
                 LIMIT #{limit}
             </when>
+            <when test="layer == 'facilities'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.centroid, 6)::json,
+                       'properties', json_build_object('key', x.category || ':' || x.source_id,
+                                     'name', coalesce(x.name_en, x.name_ar), 'level', 'facility', 'c', x.category,
+                                     'sub', x.subtype)) AS f
+                FROM theme.ast_facility x
+                WHERE x.${col} = #{key} AND x.centroid IS NOT NULL
+                LIMIT #{limit}
+            </when>
         </choose>
         ) q
     </select>
