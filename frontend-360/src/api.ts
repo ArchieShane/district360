@@ -5,7 +5,84 @@
 const BASE = 'api/v2/space'
 
 export type Level = 'emirate' | 'municipality' | 'district' | 'community' | 'plot' | 'building' | 'floor' | 'unit'
-export type Layer = 'municipalities' | 'districts' | 'communities' | 'plots' | 'buildings' | 'floors' | 'units'
+export type Layer = 'municipalities' | 'districts' | 'communities' | 'plots' | 'buildings' | 'floors' | 'units' | 'masterplans' | 'sites'
+
+/** 开发建设页签（GET /nodes/{level}/{key}/dev）。scope 为实际统计范围：建筑及以下按所在地块；没有地块时为 null */
+export interface DevSummary {
+  masterPlans: number
+  mpPlots: number
+  mpPlotsLinked: number
+  mpPlotsBuilt: number
+  plannedGfa: number
+  plannedUnits: number
+  plannedPopulation: number
+  plannedHotelRooms: number
+  mpPlotAreaSqm: number
+  sites: number
+  siteBuildings: number
+  siteAreaSqm: number
+}
+
+export interface DevMasterPlan {
+  projectId: string
+  projectNo?: string
+  name?: string
+  stage?: string
+  stageRaw?: string
+  approvalYear?: number
+  developer?: string
+  level?: string
+  areaSqm?: number
+  cx?: number
+  cy?: number
+  plots?: number
+  plotsBuilt?: number
+  plannedGfa?: number
+  plannedUnits?: number
+}
+
+export interface DevSite {
+  siteId: string
+  description?: string
+  areaSqm?: number
+  buildings?: number
+  plotKey?: string
+  cx?: number
+  cy?: number
+}
+
+export interface DevPlotControl {
+  projectId?: string
+  projectName?: string
+  stage?: string
+  masterplanType?: string
+  approvalStatus?: string
+  registeredLandUse?: string
+  landUseL1?: string
+  landUseL2?: string
+  plotNumber?: string
+  plotAreaSqm?: number
+  far?: number
+  storeys?: number
+  buildings?: number
+  units?: number
+  population?: number
+  totalGfa?: number
+  residentialGfa?: number
+  officeGfa?: number
+  retailGfa?: number
+  hotelGfa?: number
+}
+
+export interface DevView {
+  scope: { level: Level; key: string } | null
+  summary?: DevSummary
+  stages?: { k: string; n: number }[]
+  gfaByUse?: { k: string; gfa: number }[]
+  masterPlans?: DevMasterPlan[]
+  sites?: DevSite[]
+  plotControls?: DevPlotControl[]
+}
 
 export const LEVELS: Level[] = ['emirate', 'municipality', 'district', 'community', 'plot', 'building', 'floor', 'unit']
 
@@ -133,6 +210,7 @@ export const api = {
     if (!res.ok) throw new Error(`请求失败：${res.status}`)
     return res.json()
   },
+  dev: (level: Level, key: string, signal?: AbortSignal) => get<DevView>(`/nodes/${level}/${enc(key)}/dev`, signal),
   search: (q: string) => get<SearchHit[]>(`/search?q=${enc(q)}&limit=6`),
   meta: () => get<Meta>('/meta'),
 }

@@ -14,6 +14,10 @@ const node = shallowRef<NodeDetail | null>(null)
 const meta = shallowRef<Meta | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+/** 当前页签：开发建设页签打开时地图叠加总规与工地 */
+const tab = ref('ov')
+/** 面板里点了某个总规 / 工地：地图飞过去（t 让同一点也能重复触发） */
+const focus = ref<{ lon: number; lat: number; t: number } | null>(null)
 let ctrl: AbortController | null = null
 
 function parseHash(): [Level, string] {
@@ -57,9 +61,10 @@ onBeforeUnmount(() => window.removeEventListener('hashchange', load))
 </script>
 
 <template>
-  <MapView :node="node" @pick="go" />
+  <MapView :node="node" :dev-layers="tab === 'dev'" :focus="focus" @pick="go" />
   <Pickers :node="node" @go="go" />
   <SearchBox @go="go" />
-  <Panel :node="node" :meta="meta" :error="error" @go="go" @up="up" />
+  <Panel :node="node" :meta="meta" :error="error" @go="go" @up="up" @tab="t => (tab = t)"
+         @focus="(lon, lat) => (focus = { lon, lat, t: Date.now() })" />
   <div v-if="loading" class="loading">加载中…</div>
 </template>

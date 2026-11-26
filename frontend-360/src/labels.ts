@@ -148,9 +148,24 @@ export function colorOf(k: string): string {
   return c
 }
 
+/** 总规阶段（ods-dev 归一后的取值） */
+export const MP_STAGE: Record<string, { n: string; c: string }> = {
+  Detailed: { n: '详细规划', c: '#4C8DF6' },
+  Concept: { n: '概念规划', c: '#B58CFF' },
+  'Minor Amendment': { n: '小幅修编', c: '#3DD6D0' },
+  'Time Extension': { n: '延期', c: '#F0A64A' },
+  Enquiry: { n: '咨询', c: '#8D99AE' },
+  Other: { n: '未标注', c: '#6B7280' },
+}
+
+/** 规划建筑面积用途 */
+export const GFA_USE: Record<string, string> = {
+  Residential: '住宅', Office: '办公', Retail: '零售', Hotel: '酒店', Industrial: '工业',
+  'Commercial recreation': '商业娱乐', Religious: '宗教', Education: '教育', Healthcare: '医疗', 'Community facilities': '社区设施',
+}
+
 /** 尚未接入的主题页签：对应主题库 theme.meta_table.theme */
 export const PENDING_TABS: { id: string; name: string; theme: string; note: string }[] = [
-  { id: 'dev', name: '开发建设', theme: '开发建设', note: '总体规划、资本项目、建设许可、竣工 / 维修 / 拆除、在建工地' },
   { id: 'mkt', name: '市场', theme: '市场', note: '买卖、抵押、租赁、地块交易、Tawtheeq 租约与入住率' },
   { id: 'ops', name: '城市运行', theme: '城市运行', note: '居民诉求、道路事故、视觉违规、违规处罚、住宅占用、路灯、公交站' },
   { id: 'ast', name: '设施', theme: '资产与设施', note: '学校、医疗、清真寺、公园' },

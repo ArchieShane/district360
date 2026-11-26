@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 开发建设读查询。${col} 只来自 SpaceLevel 白名单，请求参数一律 #{}。
+  范围口径：dev_masterplan_plot / dev_construction_site 按自身归属列过滤；
+           dev_masterplan 在地块层级没有 plot_key，按「该地块上的总规地块所属项目」过滤。
+  总规实现率 = 范围内总规地块中，所在地块建设状态为 Constructed 的比例（地块对不上的不计入分母）。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeDevQueryMapper">
+
+    <sql id="f"><if test="col != null">AND x.${col} = #{key}</if></sql>
+
+    <sql id="mpFilter">
+        <choose>
+            <when test="col == 'plot_key'">
+                AND m.project_id IN (SELECT project_id FROM theme.dev_masterplan_plot WHERE plot_key = #{key})
+            </when>
+            <when test="col != null">AND m.${col} = #{key}</when>
+        </choose>
+    </sql>
+
+    <select id="summary" resultType="java.util.LinkedHashMap">
+        SELECT (SELECT count(*) FROM theme.dev_masterplan m WHERE true <include refid="mpFilter"/>) AS "masterPlans",
+               p.*,
+               s.*
+        FROM (SELECT count(*)                                                    AS "mpPlots",
+                     count(sp.plot_key)                                          AS "mpPlotsLinked",
+                     count(*) FILTER (WHERE sp.construction_status = 'Constructed') AS "mpPlotsBuilt",
+                     round(coalesce(sum(x.total_gfa), 0), 0)                     AS "plannedGfa",
+                     coalesce(sum(x.total_residential_units), 0)                 AS "plannedUnits",
+                     round(coalesce(sum(x.residential_population), 0), 0)        AS "plannedPopulation",
+                     coalesce(sum(x.hotel_rooms), 0)                             AS "plannedHotelRooms",
+                     round(coalesce(sum(x.plot_area_sqm), 0), 0)                 AS "mpPlotAreaSqm"
+              FROM theme.dev_masterplan_plot x
+              LEFT JOIN theme.sp_plot sp ON sp.plot_key = x.plot_key
+              WHERE true <include refid="f"/>) p,
+             (SELECT count(*) AS "sites", coalesce(sum(x.buildings), 0) AS "siteBuildings",
+                     round(coalesce(sum(x.area_sqm), 0), 0) AS "siteAreaSqm"
+              FROM theme.dev_construction_site x
+              WHERE true <include refid="f"/>) s
+    </select>
+
+    <select id="stages" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(m.stage, 'Other') AS "k", count(*) AS "n"
+        FROM theme.dev_masterplan m
+        WHERE true <include refid="mpFilter"/>
+        GROUP BY 1
+        ORDER BY 2 DESC
+    </select>
+
+    <select id="gfaByUse" resultType="java.util.LinkedHashMap">
+        SELECT v.k AS "k", round(sum(v.g), 0) AS "gfa"
+        FROM theme.dev_masterplan_plot x
+        CROSS JOIN LATERAL (VALUES ('Residential', x.residential_gfa), ('Office', x.office_gfa), ('Retail', x.retail_gfa),
+                                   ('Hotel', x.hotel_gfa), ('Industrial', x.industrial_gfa),
+                                   ('Commercial recreation', x.commercial_recreation_gfa), ('Religious', x.religious_gfa),
+                                   ('Education', x.education_gfa), ('Healthcare', x.healthcare_gfa),
+                                   ('Community facilities', x.community_facilities_gfa)) v(k, g)
+        WHERE v.g > 0 <include refid="f"/>
+        GROUP BY v.k
+        ORDER BY 2 DESC
+    </select>
+
+    <select id="masterPlans" resultType="java.util.LinkedHashMap">
+        SELECT m.project_id AS "projectId", m.project_no AS "projectNo", m.project_name AS "name", m.stage AS "stage",
+               m.stage_raw AS "stageRaw", m.approval_year AS "approvalYear", m.developer_name AS "developer",
+               m.masterplan_level AS "level", round(m.area_sqm, 0) AS "areaSqm", m.district_key AS "districtKey",
+               m.community_key AS "communityKey",
+               ST_X(m.centroid) AS "cx", ST_Y(m.centroid) AS "cy",
+               k.plots AS "plots", k.built AS "plotsBuilt", k.gfa AS "plannedGfa", k.units AS "plannedUnits"
+        FROM theme.dev_masterplan m
+        LEFT JOIN LATERAL (
+            SELECT count(*) AS plots,
+                   count(*) FILTER (WHERE sp.construction_status = 'Constructed') AS built,
+                   round(sum(x.total_gfa), 0) AS gfa,
+                   sum(x.total_residential_units) AS units
+            FROM theme.dev_masterplan_plot x
+            LEFT JOIN theme.sp_plot sp ON sp.plot_key = x.plot_key
+            WHERE x.project_id = m.project_id <include refid="f"/>) k ON true
+        WHERE true <include refid="mpFilter"/>
+        ORDER BY m.area_sqm DESC NULLS LAST
+        LIMIT #{limit}
+    </select>
+
+    <select id="sites" resultType="java.util.LinkedHashMap">
+        SELECT x.site_id AS "siteId", x.description AS "description", round(x.area_sqm, 0) AS "areaSqm",
+               x.buildings AS "buildings", x.plot_key AS "plotKey", x.community_key AS "communityKey",
+               ST_X(x.centroid) AS "cx", ST_Y(x.centroid) AS "cy"
+        FROM theme.dev_construction_site x
+        WHERE true <include refid="f"/>
+        ORDER BY x.area_sqm DESC NULLS LAST
+        LIMIT #{limit}
+    </select>
+
+    <select id="plotControls" resultType="java.util.LinkedHashMap">
+        SELECT x.project_id AS "projectId", m.project_name AS "projectName", m.stage AS "stage",
+               x.masterplan_type AS "masterplanType", x.approval_status AS "approvalStatus",
+               x.registered_land_use AS "registeredLandUse", x.land_use_l1 AS "landUseL1", x.land_use_l2 AS "landUseL2",
+               x.udm_plot_number AS "plotNumber", round(x.plot_area_sqm, 1) AS "plotAreaSqm", x.far AS "far",
+               x.building_storeys AS "storeys", x.buildings AS "buildings", x.total_residential_units AS "units",
+               round(x.residential_population, 0) AS "population", round(x.total_gfa, 0) AS "totalGfa",
+               round(x.residential_gfa, 0) AS "residentialGfa", round(x.office_gfa, 0) AS "officeGfa",
+               round(x.retail_gfa, 0) AS "retailGfa", round(x.hotel_gfa, 0) AS "hotelGfa"
+        FROM theme.dev_masterplan_plot x
+        LEFT JOIN theme.dev_masterplan m ON m.project_id = x.project_id
+        WHERE x.plot_key = #{plotKey}
+        ORDER BY x.total_gfa DESC NULLS LAST
+        LIMIT 10
+    </select>
+</mapper>

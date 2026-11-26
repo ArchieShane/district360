@@ -1,6 +1,7 @@
 package com.district360.app.space;
 
 import com.district360.app.web.dto.PageResult;
+import com.district360.stat.mapper.ThemeDevQueryMapper;
 import com.district360.stat.mapper.ThemeSpatialQueryMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -33,9 +34,11 @@ public class SpaceService {
     };
 
     private final ThemeSpatialQueryMapper mapper;
+    private final ThemeDevQueryMapper devMapper;
 
-    public SpaceService(ThemeSpatialQueryMapper mapper) {
+    public SpaceService(ThemeSpatialQueryMapper mapper, ThemeDevQueryMapper devMapper) {
         this.mapper = mapper;
+        this.devMapper = devMapper;
     }
 
     public NodeDetail node(SpaceLevel level, String key) {
@@ -104,6 +107,39 @@ public class SpaceService {
         }
         String col = level == SpaceLevel.EMIRATE ? null : level.col();
         return mapper.features(layer.id(), col, key, layer.limit(), layer.tolerance());
+    }
+
+    /**
+     * 开发建设页签：总规、规划建筑面积、总规实现率、在建工地。建筑 / 楼层 / 单元按所在地块统计（管控指标在地块上）。
+     * 返回 scope 表示实际统计的范围；所在建筑没有地块时 scope 为 null、其余为空。
+     */
+    public Map<String, Object> dev(SpaceLevel level, String key) {
+        SpaceLevel scopeLevel = level;
+        String scopeKey = key;
+        if (level == SpaceLevel.BUILDING || level == SpaceLevel.FLOOR || level == SpaceLevel.UNIT) {
+            Map<String, Object> row = mapper.node(level.id(), key);
+            if (row == null || row.get("key") == null) {
+                throw new NoSuchElementException("没有这个" + level.id() + ": " + key);
+            }
+            Object plot = row.get("plot_key");
+            scopeLevel = SpaceLevel.PLOT;
+            scopeKey = plot == null ? null : plot.toString();
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        if (scopeKey == null) {
+            out.put("scope", null);
+            return out;
+        }
+        String col = scopeLevel == SpaceLevel.EMIRATE ? null : scopeLevel.col();
+        String k = scopeLevel == SpaceLevel.EMIRATE ? null : scopeKey;
+        out.put("scope", Map.of("level", scopeLevel.id(), "key", scopeKey));
+        out.put("summary", devMapper.summary(col, k));
+        out.put("stages", devMapper.stages(col, k));
+        out.put("gfaByUse", devMapper.gfaByUse(col, k));
+        out.put("masterPlans", devMapper.masterPlans(col, k, 50));
+        out.put("sites", devMapper.sites(col, k, 50));
+        out.put("plotControls", scopeLevel == SpaceLevel.PLOT ? devMapper.plotControls(scopeKey) : List.of());
+        return out;
     }
 
     public List<Map<String, Object>> search(String q, int limit) {

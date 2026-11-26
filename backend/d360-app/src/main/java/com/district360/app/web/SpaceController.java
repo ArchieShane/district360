@@ -50,6 +50,12 @@ public class SpaceController {
         return ApiResponse.ok(service.children(SpaceLevel.of(level), key, q, page, size));
     }
 
+    /** 开发建设页签：总体规划、规划建筑面积、总规实现率、在建工地、地块管控（建筑及以下按所在地块）。 */
+    @GetMapping("/nodes/{level}/{key}/dev")
+    public ApiResponse<Map<String, Object>> dev(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.dev(SpaceLevel.of(level), key));
+    }
+
     /** 地图图层（GeoJSON FeatureCollection，EPSG:4326）。 */
     @GetMapping("/nodes/{level}/{key}/layers/{layer}.geojson")
     public ResponseEntity<String> layer(@PathVariable String level, @PathVariable String key, @PathVariable String layer) {

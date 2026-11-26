@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type Map as MlMap, type StyleSpecification } from 'maplibre-gl'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { api, type Layer, type Level, type NodeDetail, type NodeRef } from '../api'
+import { api, LEVELS, type Layer, type Level, type NodeDetail, type NodeRef } from '../api'
 import { colorOf, LEVEL_NAME, PLOT_STATUS } from '../labels'
 
 /**
@@ -12,7 +12,7 @@ import { colorOf, LEVEL_NAME, PLOT_STATUS } from '../labels'
  *   建筑：楼层半透明分层堆叠 + 单元按户型着色（3D，底标高 / 层高）
  *   楼层 / 单元：本层单元 + 整栋楼层轮廓；选中对象用白色描边
  */
-const props = defineProps<{ node: NodeDetail | null }>()
+const props = defineProps<{ node: NodeDetail | null; devLayers?: boolean; focus?: { lon: number; lat: number; t: number } | null }>()
 const emit = defineEmits<{ pick: [level: Level, key: string] }>()
 
 const el = ref<HTMLDivElement>()
@@ -28,7 +28,7 @@ let hovered: { src: string; id: number } | null = null
 let resizeObs: ResizeObserver | null = null
 
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
-const SOURCES = ['area', 'plot', 'bld', 'flr', 'unit', 'sel'] as const
+const SOURCES = ['area', 'plot', 'bld', 'flr', 'unit', 'sel', 'mp', 'site'] as const
 type Src = typeof SOURCES[number]
 
 const STYLE: StyleSpecification = {
@@ -70,6 +70,11 @@ function addLayers(m: MlMap) {
   m.addLayer({ id: 'flr-line', type: 'line', source: 'flr', paint: { 'line-color': '#FFFFFF', 'line-width': 1, 'line-opacity': 0.6 } })
   m.addLayer({ id: 'unit-ext', type: 'fill-extrusion', source: 'unit', paint: {
     'fill-extrusion-color': '#4C8DF6', 'fill-extrusion-base': ['get', 'b'], 'fill-extrusion-height': ['get', 't'], 'fill-extrusion-opacity': 0.9 } })
+  // 开发建设页签：总规项目面（橙色虚线）、在建工地（红色）
+  m.addLayer({ id: 'mp-fill', type: 'fill', source: 'mp', paint: { 'fill-color': '#F0A64A', 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.28, 0.1] } })
+  m.addLayer({ id: 'mp-line', type: 'line', source: 'mp', paint: { 'line-color': '#F0A64A', 'line-width': 1.6, 'line-dasharray': [3, 2] } })
+  m.addLayer({ id: 'site-fill', type: 'fill', source: 'site', paint: { 'fill-color': '#E86A6A', 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.55, 0.32] } })
+  m.addLayer({ id: 'site-line', type: 'line', source: 'site', paint: { 'line-color': '#FF8A8A', 'line-width': 1.2 } })
   m.addLayer({ id: 'sel-line', type: 'line', source: 'sel', paint: { 'line-color': '#FFFFFF', 'line-width': 2.4 } })
 }
 
@@ -102,7 +107,8 @@ async function show(n: NodeDetail) {
   const m = map
   const layers = plan(n)
   const want = new Set(layers.map(l => l.src))
-  SOURCES.filter(s => s !== 'sel' && !want.has(s)).forEach(s => (m.getSource(s) as GeoJSONSource).setData(EMPTY))
+  showDev(n)
+  SOURCES.filter(s => s !== 'sel' && s !== 'mp' && s !== 'site' && !want.has(s)).forEach(s => (m.getSource(s) as GeoJSONSource).setData(EMPTY))
   ;(m.getSource('sel') as GeoJSONSource).setData(n.geometry ? { type: 'Feature', geometry: n.geometry, properties: {} } : EMPTY)
   // 建筑层级：本楼不画体块（看楼层和单元），周边建筑压暗
   m.setPaintProperty('bld-ext', 'fill-extrusion-opacity', n.level === 'building' || n.level === 'floor' || n.level === 'unit' ? 0.55 : 0.95)
@@ -129,6 +135,20 @@ async function show(n: NodeDetail) {
       const seen = new Set(fc.features.map(f => String(f.properties?.s)))
       legend.value = { title: '地块', items: Object.entries(PLOT_STATUS).filter(([k]) => seen.has(k)).map(([, v]) => v) }
     }
+  }
+}
+
+/** 开发建设图层：页签打开且本层级支持时加载总规面、在建工地，否则清空 */
+let devCtrl: AbortController | null = null
+async function showDev(n: NodeDetail) {
+  if (!map || !ready) return
+  devCtrl?.abort()
+  devCtrl = new AbortController()
+  const m = map, sig = devCtrl.signal
+  for (const [src, layer] of [['mp', 'masterplans'], ['site', 'sites']] as [Src, Layer][]) {
+    const on = props.devLayers && n.layers.includes(layer)
+    if (!on) { (m.getSource(src) as GeoJSONSource).setData(EMPTY); continue }
+    api.layer(n.level, n.key, layer, sig).then(fc => { if (!sig.aborted) (m.getSource(src) as GeoJSONSource).setData(fc) }).catch(() => undefined)
   }
 }
 
@@ -172,8 +192,10 @@ function fit(n: NodeDetail) {
   })
 }
 
-const PICKABLE = ['unit-ext', 'flr-ext', 'bld-ext', 'plot-fill', 'area-fill']
-const SRC_OF: Record<string, Src> = { 'unit-ext': 'unit', 'flr-ext': 'flr', 'bld-ext': 'bld', 'plot-fill': 'plot', 'area-fill': 'area' }
+const PICKABLE = ['unit-ext', 'flr-ext', 'bld-ext', 'site-fill', 'plot-fill', 'mp-fill', 'area-fill']
+const SRC_OF: Record<string, Src> = { 'unit-ext': 'unit', 'flr-ext': 'flr', 'bld-ext': 'bld', 'site-fill': 'site', 'plot-fill': 'plot', 'mp-fill': 'mp', 'area-fill': 'area' }
+/** 悬停提示里非下钻对象的类型名 */
+const EXTRA_NAME: Record<string, string> = { masterplan: '总体规划', site: '在建工地' }
 
 function topFeature(e: maplibregl.MapMouseEvent) {
   if (!map) return null
@@ -208,19 +230,22 @@ onMounted(() => {
     setHover(f)
     map!.getCanvas().style.cursor = f ? 'pointer' : ''
     const p = f?.properties as { name?: string; level?: Level } | undefined
-    tip.value = f && p?.name ? { x: e.point.x, y: e.point.y, name: p.name, sub: p.level ? LEVEL_NAME[p.level] : '' } : null
+    tip.value = f && p?.name ? { x: e.point.x, y: e.point.y, name: p.name, sub: p.level ? (LEVEL_NAME[p.level] ?? EXTRA_NAME[p.level] ?? '') : '' } : null
   })
   map.on('mouseout', () => { setHover(null); tip.value = null })
   map.on('click', e => {
     const f = topFeature(e)
     const p = f?.properties as { key?: string; level?: Level } | undefined
-    if (p?.key && p.level && !(p.level === props.node?.level && p.key === props.node?.key)) emit('pick', p.level, p.key)
+    // 总规、工地不是下钻层级，只做提示不跳转
+    if (p?.key && p.level && LEVELS.includes(p.level) && !(p.level === props.node?.level && p.key === props.node?.key)) emit('pick', p.level, p.key)
   })
 })
 
 onBeforeUnmount(() => { ctrl?.abort(); resizeObs?.disconnect(); map?.remove(); map = null })
 
 watch(() => props.node, n => { if (n) show(n) })
+watch(() => props.devLayers, () => { if (props.node) showDev(props.node) })
+watch(() => props.focus, f => { if (f && map) map.flyTo({ center: [f.lon, f.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 }) })
 watch(base, b => {
   map?.setLayoutProperty('sat', 'visibility', b === 'sat' ? 'visible' : 'none')
   map?.setLayoutProperty('dark', 'visibility', b === 'dark' ? 'visible' : 'none')

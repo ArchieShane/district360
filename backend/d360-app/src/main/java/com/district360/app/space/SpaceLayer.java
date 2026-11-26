@@ -11,7 +11,11 @@ public enum SpaceLayer {
     PLOTS(30000, 0),
     BUILDINGS(30000, 0),
     FLOORS(2000, 0),
-    UNITS(20000, 0);
+    UNITS(20000, 0),
+    /** 开发建设：总体规划项目面（要素 level = masterplan，不是下钻层级）。 */
+    MASTERPLANS(2000, 0.00001),
+    /** 开发建设：在建工地面（要素 level = site）。 */
+    SITES(5000, 0);
 
     private final int limit;
     private final double tolerance;
