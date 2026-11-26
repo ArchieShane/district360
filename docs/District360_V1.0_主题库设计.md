@@ -44,7 +44,21 @@ Flyway：`V10__theme_spatial.sql`（空间）、`V11__theme_business.sql`（业�
 （objectid 数值区间重叠但空间 0/300 吻合）。因此按「该楼最低一层的面内一点落在哪个 udm 建筑面内」匹配；
 匹配不上的 BDMS 楼用其楼层外包面生成 `source = bdms` 的建筑，页面标「推导数据」。
 
-### 2.2 业务主题（已建表，待接入）
+### 2.2 开发建设（部分接入，`ods-dev`，2026-11-26）
+
+迁移 V14（按源字段补列）、V15（加宽用途文本）。抽取器 `ods-dev` 在每日定时里排在 `ods-spatial` 之后（按空间结果关联），全量约 40 秒。
+
+| 表 | 行数 | ODS 源表 | 关联口径 | 关联结果（makani_1119） |
+|---|---|---|---|---|
+| `dev_masterplan` | 1,029 | makani_masterplan_ud_masterplan_boundary | 项目面内点落社区，再落区域（源 districtid 是区名文本且常为空，不用）；阶段 `stage_dm` 归一为 Concept / Detailed / Minor Amendment / Time Extension / Enquiry / Other，原值在 `stage_raw` | 1,026 有社区 / 区域；123 个阶段为 Other（源为 None 或空） |
+| `dev_masterplan_plot` | 82,675 | makani_masterplan_ud_plot | 先 `udm_gisid` = 地块 gisid，再面内点落未注销地块；社区 / 区域随地块 | 82,200（99.4%）有地块，其中 52,055 按 gisid；79,421（96%）属于已知总规 |
+| `dev_construction_site` | 2,028 | makani_udm_constructionsite | 面内点落未注销地块，再落社区；在建建筑数 = `sp_building.construction_site_id` | 1,818 有地块，全部有社区；457 个工地有 833 栋建筑 |
+
+**总规实现率** = 范围内能对上地块的总规地块中，所在地块 `construction_status = Constructed` 的比例。它直接继承地块表的建设状态：例如 AL REEM ISLAND（ADM-57）地块表本身 2,319 块 Not Constructed、155 块 Constructed，实现率只有 7.5%，是否反映实际待与数据方确认。
+
+资本项目 `dev_capital_project`、建设许可 `dev_permit`、竣工 / 维修 / 拆除 `dev_building_application` 的源视图（view_gsec_*、view_emecs_dashboard、view_meps_*）在 pop 库为 0 行、makani_1119 里没有这些表，暂未接入。
+
+### 2.3 其他业务主题（已建表，待接入）
 
 | 主题 | 表 | ODS 源表 | 空间归属 |
 |---|---|---|---|
