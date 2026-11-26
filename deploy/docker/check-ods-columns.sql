@@ -1,4 +1,4 @@
--- 升级前检查：ODS 源库里有没有 ODS 抽取（d360-ods：ods-spatial、ods-dev、ods-mkt）要用的字段，类型是否兼容（只读，不改任何数据）。
+-- 升级前检查：ODS 源库里有没有 ODS 抽取（d360-ods：ods-spatial、ods-dev、ods-mkt、ods-ops）要用的字段，类型是否兼容（只读，不改任何数据）。
 -- 在 ODS 库里执行。使用前按 config/application-prod.yml 的 d360.ods.schema / table-prefix 改 params（默认 ods / ods_）。
 --
 -- 结果为空 = 全部通过。有结果 = 列出的字段缺失或类型不兼容，ods-spatial 抽取会失败（主题库保持旧数据），发给开发处理。
@@ -7,6 +7,26 @@ WITH params AS (
     SELECT 'ods'::text AS schema, 'ods_'::text AS table_prefix
 ),
 expected(tbl, col, kind) AS (VALUES
+    -- makani_adwea_e_streetlight（ods-ops）
+    ('makani_adwea_e_streetlight', 'shape', 'geom'),
+    ('makani_adwea_e_streetlight', 'objectid', 'num'),
+    ('makani_adwea_e_streetlight', 'lampcount', 'num'),
+    ('makani_adwea_e_streetlight', 'statusindicator', 'text'),
+    ('makani_adwea_e_streetlight', 'lamptype', 'text'),
+    ('makani_adwea_e_streetlight', 'roadtype', 'text'),
+    ('makani_adwea_e_streetlight', 'fixtureheight', 'num'),
+    ('makani_adwea_e_streetlight', 'installationdate', 'date'),
+    ('makani_adwea_e_streetlight', 'entity_name', 'text'),
+    ('makani_adwea_e_streetlight', 'trs_moye_input_time', 'date'),
+    -- makani_bus_stop（ods-ops）
+    ('makani_bus_stop', 'shape', 'geom'),
+    ('makani_bus_stop', 'objectid', 'num'),
+    ('makani_bus_stop', 'gtfs_id', 'num'),
+    ('makani_bus_stop', 'code', 'text'),
+    ('makani_bus_stop', 'name', 'text'),
+    ('makani_bus_stop', 'name_ar', 'text'),
+    ('makani_bus_stop', 'stop_number', 'num'),
+    ('makani_bus_stop', 'point_type', 'num'),
     -- makani_tbl_tawtheeq_all（ods-mkt；ADREC re_* 表可缺省，不在此检查）
     ('makani_tbl_tawtheeq_all', 'tenancy_id', 'num'),
     ('makani_tbl_tawtheeq_all', 'tenancy_contract_num', 'text'),

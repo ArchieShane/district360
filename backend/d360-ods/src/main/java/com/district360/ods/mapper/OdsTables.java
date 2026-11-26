@@ -24,8 +24,22 @@ public class OdsTables {
     private final String reRent;
     private final String elmsBuySell;
     private final String elmsMortgage;
+    private final String streetlight;
+    private final String busStop;
+    private final String addaCases;
+    private final String accidents;
+    private final String distortions;
+    private final String violations;
+    private final String occupancySurvey;
 
     public OdsTables(OdsProperties p) {
+        this.streetlight = p.table("makani_adwea_e_streetlight");
+        this.busStop = p.table("makani_bus_stop");
+        this.addaCases = p.table("view_adda_cases");
+        this.accidents = p.table("view_accident_master_new");
+        this.distortions = p.table("view_ins_distortion");
+        this.violations = p.table("view_ins_violations");
+        this.occupancySurvey = p.table("view_ins_survey");
         this.tawtheeq = p.table("makani_tbl_tawtheeq_all");
         this.reSale = p.table("re_x_q21_matview_sale");
         this.reMortgage = p.table("re_x_q21_matview_mortgage");
@@ -60,4 +74,11 @@ public class OdsTables {
     public String getReRent() { return reRent; }
     public String getElmsBuySell() { return elmsBuySell; }
     public String getElmsMortgage() { return elmsMortgage; }
+    public String getStreetlight() { return streetlight; }
+    public String getBusStop() { return busStop; }
+    public String getAddaCases() { return addaCases; }
+    public String getAccidents() { return accidents; }
+    public String getDistortions() { return distortions; }
+    public String getViolations() { return violations; }
+    public String getOccupancySurvey() { return occupancySurvey; }
 }

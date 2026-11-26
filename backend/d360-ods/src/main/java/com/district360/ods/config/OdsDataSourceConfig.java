@@ -2,9 +2,11 @@ package com.district360.ods.config;
 
 import com.district360.ods.extract.OdsDevExtractor;
 import com.district360.ods.extract.OdsMktExtractor;
+import com.district360.ods.extract.OdsOpsExtractor;
 import com.district360.ods.extract.OdsSpatialExtractor;
 import com.district360.ods.mapper.OdsDevMapper;
 import com.district360.ods.mapper.OdsMktMapper;
+import com.district360.ods.mapper.OdsOpsMapper;
 import com.district360.ods.extract.OdsUnitExtractor;
 import com.district360.ods.mapper.OdsSpatialMapper;
 import com.zaxxer.hikari.HikariDataSource;
@@ -83,6 +85,12 @@ public class OdsDataSourceConfig {
     @Order(3)
     public OdsMktExtractor odsMktExtractor(OdsMktMapper mapper, OdsProperties properties) {
         return new OdsMktExtractor(mapper, properties);
+    }
+
+    @Bean
+    @Order(4)
+    public OdsOpsExtractor odsOpsExtractor(OdsOpsMapper mapper, OdsProperties properties) {
+        return new OdsOpsExtractor(mapper, properties);
     }
 
     @Bean
