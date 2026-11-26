@@ -242,6 +242,18 @@ export const TIER_TRIGGER: Record<string, string> = {
 }
 
 /** 设施项目的重要性类别（AD lens） */
+/** 设施类型目录的 8 个领域（宜居库 dim_facility_types.category，Saftey 为源库拼写） */
+export const FACILITY_DOMAIN: Record<string, { n: string; c: string }> = {
+  Leisure_And_Entertainment: { n: '休闲娱乐', c: '#FF7AB6' },
+  Social_Infrastructure: { n: '社会基础设施', c: '#3DD6D0' },
+  Sport_And_Recreation: { n: '体育与游憩', c: '#5FD068' },
+  Infrastructure: { n: '交通基础设施', c: '#4C8DF6' },
+  Health_And_Wellbeing: { n: '医疗健康', c: '#FF5A5A' },
+  Education: { n: '教育', c: '#FFB23E' },
+  Culture_And_Literature: { n: '文化与文学', c: '#B58CFF' },
+  Saftey_And_Security: { n: '公共安全', c: '#F2D94E' },
+}
+
 export const FACILITY_CATEGORY: Record<string, string> = {
   critical: '关键', important: '重要', basic: '基础', other: '其他',
 }

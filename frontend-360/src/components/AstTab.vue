@@ -2,8 +2,9 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { api, type AstCategory, type AstItem, type AstView, type NodeDetail } from '../api'
 import { num } from '../format'
-import { AST_ATTR, AST_CATEGORY, LEVEL_NAME } from '../labels'
+import { AST_ATTR, AST_CATEGORY, FACILITY_DOMAIN, LEVEL_NAME } from '../labels'
 import NearbyCard from './NearbyCard.vue'
+import { lang } from '../i18n'
 
 /**
  * 设施页签（ods-ast）：学校（学位、在校生、使用率）、医疗（床位、医院）、药房、清真寺（礼拜人数）、公园（个数、面积），
@@ -66,6 +67,16 @@ const bst = computed(() => props.node.stat)
 const showAssets = computed(() => ['emirate', 'municipality', 'district', 'community', 'plot'].includes(props.node.level) && (bst.value.buildings ?? 0) > 0)
 const ha = (v: number | undefined) => num((v ?? 0) / 1e4, 1)
 
+/** 设施类型目录（宜居 35 类，原型 Public facilities 的 top 5 types 与 all facility types by domain） */
+const ft = computed(() => ast.value?.facilityTypes ?? null)
+const ftNote = computed(() => {
+  const sc = ft.value?.scope
+  return sc && sc.level !== props.node.level ? `按所在${LEVEL_NAME[sc.level]}统计` : ''
+})
+const openDom = ref<string | null>(null)
+const domC = (c: string) => FACILITY_DOMAIN[c]?.c ?? '#3DD6D0'
+const domN = (c: string, label: string) => FACILITY_DOMAIN[c]?.n ?? label
+
 const capLabel: Record<AstCategory, string> = { school: '学位', medical: '床位', pharmacy: '', mosque: '礼拜人数', park: '面积' }
 </script>
 
@@ -111,6 +122,46 @@ const capLabel: Record<AstCategory, string> = { school: '学位', medical: '床�
       </div>
     </section>
 
+    <section v-if="ft" class="card">
+      <h2>设施类型<span class="chip">宜居 35 类</span><span class="src">dim_facility_types · fact_facilities</span></h2>
+      <p v-if="ftNote" style="margin:-.2rem 0 .5rem">{{ ftNote }}</p>
+      <div class="nums">
+        <div><b>{{ num(ft.total) }}</b><span>设施合计</span></div>
+        <div><b>{{ ft.typesPresent }}<small>/ {{ ft.typesInCatalogue }}</small></b><span>类型覆盖</span></div>
+        <div><b>{{ ft.domains?.filter(d => d.n > 0).length ?? 0 }}<small>/ {{ ft.domains?.length ?? 0 }}</small></b><span>领域</span></div>
+      </div>
+      <template v-if="ft.top.length">
+        <div class="sub">前 5 类</div>
+        <div class="hb">
+          <div v-for="x in ft.top" :key="x.type">
+            <span :title="x.label">{{ x.label }}</span>
+            <i><u :style="{ width: (x.n / ft.top[0].n * 100) + '%', background: domC(x.category) }" /></i>
+            <b>{{ num(x.n) }}</b>
+          </div>
+        </div>
+      </template>
+
+      <div class="sub">按领域</div>
+      <div class="rows" style="--cols: minmax(0,1fr) 4.2rem 4.6rem">
+        <template v-for="d in ft.domains" :key="d.category">
+          <button class="row" :class="{ on: openDom === d.category }" :aria-expanded="openDom === d.category"
+                  @click="openDom = openDom === d.category ? null : d.category">
+            <span><b><i class="dot" :style="{ background: domC(d.category) }" />{{ domN(d.category, d.label) }}</b><small v-if="lang === 'zh'">{{ d.label }}</small></span>
+            <span>{{ d.present }} / {{ d.types.length }} 类</span>
+            <span>{{ num(d.n) }}</span>
+          </button>
+          <div v-if="openDom === d.category" class="hb" style="padding:.2rem .4rem .6rem 1.2rem">
+            <div v-for="t in d.types" :key="t.type" :style="t.n ? {} : { opacity: .45 }">
+              <span :title="t.label">{{ t.label }}</span>
+              <i><u :style="{ width: (d.types[0].n ? t.n / d.types[0].n * 100 : 0) + '%', background: domC(d.category) }" /></i>
+              <b>{{ num(t.n) }}</b>
+            </div>
+          </div>
+        </template>
+      </div>
+      <p style="margin-top:.5rem">宜居设施目录（dim_facility_types）的 8 个领域、35 类，按现状（Existing）设施计数；宜居数据只有区域粒度。</p>
+    </section>
+
     <section class="card">
       <div class="chips" style="margin:0 0 .6rem">
         <button v-for="(v, k) in AST_CATEGORY" :key="k" class="chip" :style="cat === k ? { background: v.c, color: '#10141A' } : {}"
@@ -147,3 +198,7 @@ const capLabel: Record<AstCategory, string> = { school: '学位', medical: '床�
     </section>
   </template>
 </template>
+
+<style scoped>
+.dot { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; margin-right: .4rem; vertical-align: .05rem }
+</style>

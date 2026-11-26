@@ -106,6 +106,26 @@
         </foreach>
     </insert>
 
+    <delete id="deleteAllLivFacilityTypes">DELETE FROM stat.stat_liv_facility_type</delete>
+
+    <insert id="insertLivFacilityTypes">
+        INSERT INTO stat.stat_liv_facility_type (facility_type, type_label, category, category_label)
+        VALUES
+        <foreach collection="list" item="t" separator=",">
+            (#{t.facilityType}, #{t.typeLabel}, #{t.category}, #{t.categoryLabel})
+        </foreach>
+    </insert>
+
+    <delete id="deleteAllLivFacilityCounts">DELETE FROM stat.stat_district_liv_facility_count</delete>
+
+    <insert id="insertLivFacilityCounts">
+        INSERT INTO stat.stat_district_liv_facility_count (district_code, facility_type, n)
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (#{r.code}, #{r.c.facilityType}, #{r.c.n})
+        </foreach>
+    </insert>
+
     <delete id="deleteAllAdrec">DELETE FROM stat.stat_district_adrec</delete>
 
     <insert id="insertAdrec">

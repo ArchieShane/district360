@@ -194,6 +194,19 @@ export interface AstView {
     parks: number; parkAreaHa: number }
   bySubtype?: Record<AstCategory, { k: string; n: number; capacity: number }[]>
   items?: Record<AstCategory, AstItem[]>
+  /** 设施类型目录（宜居 35 类）；宜居数据只有区域粒度，社区及以下按所在区域；目录未抽取时为 null */
+  facilityTypes?: FacilityTypes | null
+}
+
+/** 设施类型目录（宜居库 dim_facility_types，原型 8 个领域 35 类）与范围内现状数量 */
+export interface FacilityTypes {
+  scope: { level: Level; key: string }
+  total: number
+  typesPresent: number
+  typesInCatalogue: number
+  top: { type: string; label: string; category: string; n: number }[]
+  /** 按数量降序；首页总览不带 */
+  domains?: { category: string; label: string; n: number; present: number; types: { type: string; label: string; n: number }[] }[]
 }
 
 export interface ChildItem {
@@ -268,8 +281,12 @@ export interface LivDistrict {
   parkGapHa: number | null
   sample: boolean
   asOf?: string
-  /** 达标所需投资 CAPEX（fact_budget.total_capex，AED） */
+  /** 达标所需投资 CAPEX（AED）：优先 fact_budget.total_capex_tier_target，为空时用 total_capex */
   capexAed?: number | null
+  /** capexAed 用的是哪个：tier_target 分档目标口径 / total 宜居平台 Budget 总额 */
+  capexBasis?: 'tier_target' | 'total' | null
+  /** fact_budget.total_capex 原值（AED） */
+  capexTotalAed?: number | null
   opexAed?: number | null
   /** 全部按分档目标缺口计的 CAPEX（AED） */
   capexTierTargetAed?: number | null

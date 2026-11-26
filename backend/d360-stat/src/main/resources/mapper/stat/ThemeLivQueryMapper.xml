@@ -5,6 +5,9 @@
   经 stat.dim_district（市政 + makani_district_id）对到主题库 theme.sp_district.district_key。
   排名只在评估范围内（in_scope 不为 false）按在途评分（score_current）降序；范围外的区不给评分，只给公园。
   CAPEX / OPEX、优先级分档、最缺设施、居民需求同样由 v1 liveability 抽取器写入（V20），口径与宜居平台 dashboard 一致。
+  达标所需投资 capexAed（产品口径 2026-11-26）：优先用 fact_budget.total_capex_tier_target（全部按分档目标缺口计），
+  为空时用 total_capex（宜居平台 Budget 卡片总额）；capexBasis 标明用了哪个，capexTotalAed / capexTierTargetAed 为原值。
+  宜居页签、首页总览、地图着色、需关注区域都读 capexAed，口径一致。
 -->
 <mapper namespace="com.district360.stat.mapper.ThemeLivQueryMapper">
 
@@ -35,7 +38,9 @@
                CASE WHEN in_scope THEN round(score_target - score_current, 2) END AS "gap",
                rk AS "rank", scope_n AS "rankOf", muni_rk AS "muniRank", muni_scope_n AS "muniRankOf",
                parks AS "parks", park_area_ha AS "parkAreaHa", park_gap_ha AS "parkGapHa", is_sample AS "sample",
-               capex_aed AS "capexAed", opex_aed AS "opexAed", capex_tier_target_aed AS "capexTierTargetAed",
+               coalesce(capex_tier_target_aed, capex_aed) AS "capexAed",
+               CASE WHEN capex_tier_target_aed IS NOT NULL THEN 'tier_target' WHEN capex_aed IS NOT NULL THEN 'total' END AS "capexBasis",
+               capex_aed AS "capexTotalAed", opex_aed AS "opexAed", capex_tier_target_aed AS "capexTierTargetAed",
                tier AS "tier", tier_rule AS "tierRule", tier_triggers AS "tierTriggers",
                liv_district_id AS "livDistrictId", calc_version_id AS "calcVersionId", cx AS "cx", cy AS "cy",
                to_char(source_as_of, 'YYYY-MM-DD') AS "asOf"
@@ -66,5 +71,24 @@
                  JOIN theme.sp_district d ON d.municipality_code = upper(x.municipality) AND d.district_id = x.makani_district_id
         WHERE d.district_key = #{district}
         ORDER BY n.rk
+    </select>
+
+    <!-- 设施类型目录（宜居 dim_facility_types，35 类）及范围内现状数量（fact_facilities，stage = Existing） -->
+    <select id="facilityTypes" resultType="java.util.LinkedHashMap">
+        WITH c AS (
+            SELECT n.facility_type, sum(n.n) AS n
+            FROM stat.stat_district_liv_facility_count n
+                     JOIN stat.dim_district x ON x.code = n.district_code
+                     JOIN theme.sp_district d ON d.municipality_code = upper(x.municipality) AND d.district_id = x.makani_district_id
+            WHERE true
+            <if test="municipality != null">AND d.municipality_code = #{municipality}</if>
+            <if test="district != null">AND d.district_key = #{district}</if>
+            GROUP BY n.facility_type
+        )
+        SELECT t.category AS "category", t.category_label AS "categoryLabel", t.facility_type AS "type",
+               t.type_label AS "label", coalesce(c.n, 0)::int AS "n"
+        FROM stat.stat_liv_facility_type t
+                 LEFT JOIN c ON c.facility_type = t.facility_type
+        ORDER BY t.category, coalesce(c.n, 0) DESC, t.type_label
     </select>
 </mapper>

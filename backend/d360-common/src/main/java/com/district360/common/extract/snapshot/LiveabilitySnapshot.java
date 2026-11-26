@@ -16,8 +16,10 @@ import java.util.List;
  *
  * @param calcVersionId 宜居发布版本（dim_calc_versions，current_flag 且 approved）
  * @param runId         优先级批次（fact_prioritization_runs 最近一次 approved）；没有时为 null，分档与最缺设施为空
+ * @param facilityTypes 设施类型目录（原型 8 个领域、35 类），各区数量见 {@link District#facilityCounts()}
  */
-public record LiveabilitySnapshot(LocalDate sourceAsOf, Long calcVersionId, Long runId, List<District> districts)
+public record LiveabilitySnapshot(LocalDate sourceAsOf, Long calcVersionId, Long runId, List<FacilityType> facilityTypes,
+                                  List<District> districts)
         implements SourceSnapshot {
 
     @Override
@@ -42,6 +44,7 @@ public record LiveabilitySnapshot(LocalDate sourceAsOf, Long calcVersionId, Long
      * @param tierTriggers       触发项，逗号分隔（classification_triggers.triggered）
      * @param facilityGaps       最缺设施（按差距降序）
      * @param needs              居民需求（理想社区调查得票占比降序）；受访人数不足时为空
+     * @param facilityCounts     各设施类型的现状数量（只含数量大于 0 的类型）
      */
     public record District(
             String code,
@@ -60,7 +63,8 @@ public record LiveabilitySnapshot(LocalDate sourceAsOf, Long calcVersionId, Long
             String tierRule,
             String tierTriggers,
             List<FacilityGap> facilityGaps,
-            List<Need> needs) {
+            List<Need> needs,
+            List<FacilityCount> facilityCounts) {
     }
 
     /** 一个设施项目：三阶段供给评分（0–100）、分档目标、差距 = 目标 − 在途。 */
@@ -70,5 +74,13 @@ public record LiveabilitySnapshot(LocalDate sourceAsOf, Long calcVersionId, Long
 
     /** 理想社区调查的一个选项：得票占比 %、得票（受访人数）、本区受访人数。 */
     public record Need(String item, BigDecimal pct, Integer votes, Integer respondents) {
+    }
+
+    /** 设施类型目录的一类：类型、显示名、领域、领域显示名（宜居库 dim_facility_types）。 */
+    public record FacilityType(String facilityType, String typeLabel, String category, String categoryLabel) {
+    }
+
+    /** 一类设施在区内的现状数量（fact_facilities stage = Existing）。 */
+    public record FacilityCount(String facilityType, int n) {
     }
 }

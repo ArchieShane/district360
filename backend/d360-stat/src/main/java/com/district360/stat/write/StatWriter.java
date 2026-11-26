@@ -63,6 +63,7 @@ public class StatWriter {
             chunked(s.districts(), list -> mapper.insertLiveability(list, s));
             List<StatWriteMapper.LivGapRow> gaps = new java.util.ArrayList<>();
             List<StatWriteMapper.LivNeedRow> needs = new java.util.ArrayList<>();
+            List<StatWriteMapper.LivCountRow> counts = new java.util.ArrayList<>();
             for (LiveabilitySnapshot.District d : s.districts()) {
                 for (int i = 0; i < d.facilityGaps().size(); i++) {
                     gaps.add(new StatWriteMapper.LivGapRow(d.code(), i + 1, d.facilityGaps().get(i)));
@@ -70,11 +71,18 @@ public class StatWriter {
                 for (int i = 0; i < d.needs().size(); i++) {
                     needs.add(new StatWriteMapper.LivNeedRow(d.code(), i + 1, d.needs().get(i)));
                 }
+                for (LiveabilitySnapshot.FacilityCount c : d.facilityCounts()) {
+                    counts.add(new StatWriteMapper.LivCountRow(d.code(), c));
+                }
             }
             mapper.deleteAllLivFacilityGaps();
             chunked(gaps, mapper::insertLivFacilityGaps);
             mapper.deleteAllLivNeeds();
             chunked(needs, mapper::insertLivNeeds);
+            mapper.deleteAllLivFacilityTypes();
+            chunked(s.facilityTypes(), mapper::insertLivFacilityTypes);
+            mapper.deleteAllLivFacilityCounts();
+            chunked(counts, mapper::insertLivFacilityCounts);
         });
     }
 
