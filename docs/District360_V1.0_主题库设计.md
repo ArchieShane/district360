@@ -73,7 +73,17 @@ Flyway：`V10__theme_spatial.sql`（空间）、`V11__theme_business.sql`（业�
 - 样例数据起租 2010-12 至到期 2024-12；「生效中」按源状态 ACTIVE，部分已过到期日。
 - ADREC / ELMS 抽取 SQL 已在 pop 库（各 10 行样例）上验证可执行。
 
-### 2.4 其他业务主题（已建表，待接入）
+### 2.4 城市运行（部分接入，`ods-ops`，2026-11-26）
+
+迁移 V17。抽取器 `ods-ops` 在每日定时里排在市场之后，约 30 秒。
+
+| 表 | 行数 | ODS 源表 | 说明 |
+|---|---|---|---|
+| `ops_streetlight` | 124,961 点 / 182,260 灯盏 | makani_adwea_e_streetlight | 源为 EPSG:32640，转 4326；点落社区（124,944 条），社区没有的落区域；状态 In Service / Out Of Service / UnderConst / Proposed / Abandon；源 roadtype 全为空，不统计 |
+| `ops_bus_stop` | 3,338 站台 / 1,949 站 | makani_bus_stop | 一行一个站台（主键源 objectid），`gtfs_id` 相同为同一站（如 76000A / B / C 相距约 100 m）；EPSG:32640 转 4326；全部落到社区 |
+| `ops_case`、`ops_accident`、`ops_distortion`、`ops_violation`、`ops_occupancy_case` | 0 | view_adda_cases 等 | pop 为 0 行、makani_1119 无表。抽取器每次检查源表并在 `meta_table.note` 写「ODS 无源表 / 源表无数据 / 已有数据但抽取未实现」，有数据后再实现抽取 |
+
+### 2.5 其他业务主题（已建表，待接入）
 
 | 主题 | 表 | ODS 源表 | 空间归属 |
 |---|---|---|---|
