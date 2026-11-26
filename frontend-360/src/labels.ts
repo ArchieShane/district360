@@ -164,9 +164,18 @@ export const GFA_USE: Record<string, string> = {
   'Commercial recreation': '商业娱乐', Religious: '宗教', Education: '教育', Healthcare: '医疗', 'Community facilities': '社区设施',
 }
 
+/** Tawtheeq 租约状态 */
+export const TENANCY_STATUS: Record<string, { n: string; c: string }> = {
+  ACTIVE: { n: '生效中', c: '#62D36A' },
+  CLOSED: { n: '已结束', c: '#8C929B' },
+  EXPIRED: { n: '已到期', c: '#F0A64A' },
+  CANCELLED: { n: '已取消', c: '#E86A6A' },
+  TERMINATED: { n: '已终止', c: '#B58CFF' },
+  Unknown: { n: '未标注', c: '#6B7280' },
+}
+
 /** 尚未接入的主题页签：对应主题库 theme.meta_table.theme */
 export const PENDING_TABS: { id: string; name: string; theme: string; note: string }[] = [
-  { id: 'mkt', name: '市场', theme: '市场', note: '买卖、抵押、租赁、地块交易、Tawtheeq 租约与入住率' },
   { id: 'ops', name: '城市运行', theme: '城市运行', note: '居民诉求、道路事故、视觉违规、违规处罚、住宅占用、路灯、公交站' },
   { id: 'ast', name: '设施', theme: '资产与设施', note: '学校、医疗、清真寺、公园' },
 ]

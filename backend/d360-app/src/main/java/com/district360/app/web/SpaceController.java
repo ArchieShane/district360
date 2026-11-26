@@ -56,6 +56,12 @@ public class SpaceController {
         return ApiResponse.ok(service.dev(SpaceLevel.of(level), key));
     }
 
+    /** 市场页签：Tawtheeq 租约与 ADREC 交易（建筑及以下按所在地块），不含个人信息。 */
+    @GetMapping("/nodes/{level}/{key}/mkt")
+    public ApiResponse<Map<String, Object>> mkt(@PathVariable String level, @PathVariable String key) {
+        return ApiResponse.ok(service.mkt(SpaceLevel.of(level), key));
+    }
+
     /** 地图图层（GeoJSON FeatureCollection，EPSG:4326）。 */
     @GetMapping("/nodes/{level}/{key}/layers/{layer}.geojson")
     public ResponseEntity<String> layer(@PathVariable String level, @PathVariable String key, @PathVariable String layer) {

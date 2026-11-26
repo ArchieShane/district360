@@ -133,6 +133,24 @@ export interface NodeDetail {
   layers: Layer[]
 }
 
+/** 市场页签（GET /nodes/{level}/{key}/mkt）。租金为年租金 AED，分组与汇总用中位数 */
+export interface MktView {
+  scope: { level: Level; key: string } | null
+  tenancy?: {
+    records: number; contracts: number; units: number; activeContracts: number; activeAnnualRent: number
+    medianAnnualRent?: number; rentPerSqm?: number; expiring90: number; firstStart?: string; lastEnd?: string
+  }
+  byStatus?: { k: string; n: number; medianRent?: number }[]
+  byUnitType?: { k: string; n: number; medianRent?: number }[]
+  byPropertyUsage?: { k: string; n: number; medianRent?: number }[]
+  byYear?: { y: number; n: number; medianRent?: number }[]
+  tenancies?: { contractNum?: string; unitName?: string; unitType?: string; propertyName?: string; status?: string;
+    startDate?: string; endDate?: string; annualRent?: number; areaSqm?: number; bedrooms?: number }[]
+  adrec?: { sales: number; salesValue: number; salesRatePerSqm?: number; mortgages: number; mortgagesValue: number;
+    rents: number; rentsAnnualValue: number; plotTransactions: number }
+  adrecByMonth?: { m: string; sales: number; mortgages: number; rents: number }[]
+}
+
 export interface ChildItem {
   key: string
   name: string
@@ -161,6 +179,8 @@ export interface MetaTable {
   title: string
   sources: string
   extractor?: string
+  /** 如「ODS 无源表：…」 */
+  note?: string
   rows?: number
   asOf?: string
   loadedAt?: string
@@ -210,6 +230,7 @@ export const api = {
     if (!res.ok) throw new Error(`请求失败：${res.status}`)
     return res.json()
   },
+  mkt: (level: Level, key: string, signal?: AbortSignal) => get<MktView>(`/nodes/${level}/${enc(key)}/mkt`, signal),
   dev: (level: Level, key: string, signal?: AbortSignal) => get<DevView>(`/nodes/${level}/${enc(key)}/dev`, signal),
   search: (q: string) => get<SearchHit[]>(`/search?q=${enc(q)}&limit=6`),
   meta: () => get<Meta>('/meta'),

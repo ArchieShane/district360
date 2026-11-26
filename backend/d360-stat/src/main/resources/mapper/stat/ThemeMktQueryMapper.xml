@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 市场读查询。${col} / ${dim} 只来自代码白名单，请求参数一律 #{}。
+  Tawtheeq rental_value 为年租金（AED，抽查公寓中位数 72,000、合同平均约 1 年）。
+  「生效中」= tenancy_status = 'ACTIVE'（源状态，样例数据截至 2021，end_date 可能早于今天）。
+  均价 = Σ金额 ÷ Σ面积，不对单价直接取平均；租金用中位数（少数大额合同会把平均值拉高数倍）。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeMktQueryMapper">
+
+    <sql id="f"><if test="col != null">AND x.${col} = #{key}</if></sql>
+
+    <select id="tenancySummary" resultType="java.util.LinkedHashMap">
+        SELECT count(*)                                                     AS "records",
+               count(DISTINCT x.tenancy_id)                                 AS "contracts",
+               count(DISTINCT x.tawtheeq_unit_id)                           AS "units",
+               count(DISTINCT x.tenancy_id) FILTER (WHERE x.tenancy_status = 'ACTIVE') AS "activeContracts",
+               round(coalesce(sum(x.rental_value_aed) FILTER (WHERE x.tenancy_status = 'ACTIVE'), 0), 0) AS "activeAnnualRent",
+               round((percentile_cont(0.5) WITHIN GROUP (ORDER BY x.rental_value_aed) FILTER (WHERE x.tenancy_status = 'ACTIVE' AND x.rental_value_aed > 0))::numeric, 0) AS "medianAnnualRent",
+               round(sum(x.rental_value_aed) FILTER (WHERE x.rental_value_aed > 0 AND x.unit_area_sqm > 0)
+                     / nullif(sum(x.unit_area_sqm) FILTER (WHERE x.rental_value_aed > 0 AND x.unit_area_sqm > 0), 0), 0) AS "rentPerSqm",
+               count(DISTINCT x.tenancy_id) FILTER (WHERE x.tenancy_status = 'ACTIVE'
+                                                     AND x.tenancy_end_date BETWEEN current_date AND current_date + 90) AS "expiring90",
+               min(x.start_date)                                            AS "firstStart",
+               max(x.tenancy_end_date)                                      AS "lastEnd"
+        FROM theme.mkt_tenancy x
+        WHERE true <include refid="f"/>
+    </select>
+
+    <select id="tenancyBreakdown" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(nullif(x.${dim}, ''), 'Unknown') AS "k",
+               count(DISTINCT x.tenancy_id) AS "n",
+               round((percentile_cont(0.5) WITHIN GROUP (ORDER BY x.rental_value_aed) FILTER (WHERE x.rental_value_aed > 0))::numeric, 0) AS "medianRent"
+        FROM theme.mkt_tenancy x
+        WHERE true <include refid="f"/>
+        GROUP BY 1
+        ORDER BY 2 DESC
+        LIMIT 12
+    </select>
+
+    <select id="tenancyByYear" resultType="java.util.LinkedHashMap">
+        SELECT extract(year FROM x.start_date)::int AS "y", count(DISTINCT x.tenancy_id) AS "n",
+               round((percentile_cont(0.5) WITHIN GROUP (ORDER BY x.rental_value_aed) FILTER (WHERE x.rental_value_aed > 0))::numeric, 0) AS "medianRent"
+        FROM theme.mkt_tenancy x
+        WHERE x.start_date IS NOT NULL <include refid="f"/>
+        GROUP BY 1
+        ORDER BY 1
+    </select>
+
+    <select id="tenancies" resultType="java.util.LinkedHashMap">
+        SELECT x.contract_num AS "contractNum", x.unit_name AS "unitName", x.unit_type AS "unitType",
+               x.property_name AS "propertyName", x.tenancy_status AS "status", x.start_date AS "startDate",
+               x.tenancy_end_date AS "endDate", round(x.rental_value_aed, 0) AS "annualRent", x.unit_area_sqm AS "areaSqm",
+               x.bedrooms AS "bedrooms"
+        FROM theme.mkt_tenancy x
+        WHERE true <include refid="f"/>
+        ORDER BY x.start_date DESC NULLS LAST
+        LIMIT #{limit}
+    </select>
+
+    <select id="adrecSummary" resultType="java.util.LinkedHashMap">
+        SELECT (SELECT count(*) FROM theme.mkt_sale x WHERE true <include refid="f"/>)                         AS "sales",
+               (SELECT round(coalesce(sum(price_aed), 0), 0) FROM theme.mkt_sale x WHERE true <include refid="f"/>) AS "salesValue",
+               (SELECT round(sum(price_aed) / nullif(sum(sold_area_sqm), 0), 0)
+                  FROM theme.mkt_sale x WHERE price_aed > 0 AND sold_area_sqm > 0 <include refid="f"/>)         AS "salesRatePerSqm",
+               (SELECT count(*) FROM theme.mkt_mortgage x WHERE true <include refid="f"/>)                      AS "mortgages",
+               (SELECT round(coalesce(sum(amount_aed), 0), 0) FROM theme.mkt_mortgage x WHERE true <include refid="f"/>) AS "mortgagesValue",
+               (SELECT count(*) FROM theme.mkt_rent x WHERE true <include refid="f"/>)                          AS "rents",
+               (SELECT round(coalesce(sum(annual_value_aed), 0), 0) FROM theme.mkt_rent x WHERE true <include refid="f"/>) AS "rentsAnnualValue",
+               (SELECT count(*) FROM theme.mkt_plot_transaction x WHERE true <include refid="f"/>)              AS "plotTransactions"
+    </select>
+
+    <select id="adrecByMonth" resultType="java.util.LinkedHashMap">
+        SELECT to_char(m, 'YYYY-MM') AS "m", sum(s) AS "sales", sum(mo) AS "mortgages", sum(r) AS "rents"
+        FROM (
+            SELECT date_trunc('month', contract_date) m, 1 s, 0 mo, 0 r FROM theme.mkt_sale x WHERE contract_date IS NOT NULL <include refid="f"/>
+            UNION ALL
+            SELECT date_trunc('month', start_date), 0, 1, 0 FROM theme.mkt_mortgage x WHERE start_date IS NOT NULL <include refid="f"/>
+            UNION ALL
+            SELECT date_trunc('month', start_date), 0, 0, 1 FROM theme.mkt_rent x WHERE start_date IS NOT NULL <include refid="f"/>
+        ) u
+        GROUP BY m
+        ORDER BY m DESC
+        LIMIT 12
+    </select>
+</mapper>

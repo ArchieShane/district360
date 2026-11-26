@@ -2,6 +2,7 @@ package com.district360.app.space;
 
 import com.district360.app.web.dto.PageResult;
 import com.district360.stat.mapper.ThemeDevQueryMapper;
+import com.district360.stat.mapper.ThemeMktQueryMapper;
 import com.district360.stat.mapper.ThemeSpatialQueryMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -35,10 +36,12 @@ public class SpaceService {
 
     private final ThemeSpatialQueryMapper mapper;
     private final ThemeDevQueryMapper devMapper;
+    private final ThemeMktQueryMapper mktMapper;
 
-    public SpaceService(ThemeSpatialQueryMapper mapper, ThemeDevQueryMapper devMapper) {
+    public SpaceService(ThemeSpatialQueryMapper mapper, ThemeDevQueryMapper devMapper, ThemeMktQueryMapper mktMapper) {
         this.mapper = mapper;
         this.devMapper = devMapper;
+        this.mktMapper = mktMapper;
     }
 
     public NodeDetail node(SpaceLevel level, String key) {
@@ -114,25 +117,16 @@ public class SpaceService {
      * 返回 scope 表示实际统计的范围；所在建筑没有地块时 scope 为 null、其余为空。
      */
     public Map<String, Object> dev(SpaceLevel level, String key) {
-        SpaceLevel scopeLevel = level;
-        String scopeKey = key;
-        if (level == SpaceLevel.BUILDING || level == SpaceLevel.FLOOR || level == SpaceLevel.UNIT) {
-            Map<String, Object> row = mapper.node(level.id(), key);
-            if (row == null || row.get("key") == null) {
-                throw new NoSuchElementException("没有这个" + level.id() + ": " + key);
-            }
-            Object plot = row.get("plot_key");
-            scopeLevel = SpaceLevel.PLOT;
-            scopeKey = plot == null ? null : plot.toString();
-        }
+        Scope sc = scope(level, key);
         Map<String, Object> out = new LinkedHashMap<>();
-        if (scopeKey == null) {
-            out.put("scope", null);
+        out.put("scope", sc.ref());
+        if (sc.key() == null) {
             return out;
         }
-        String col = scopeLevel == SpaceLevel.EMIRATE ? null : scopeLevel.col();
-        String k = scopeLevel == SpaceLevel.EMIRATE ? null : scopeKey;
-        out.put("scope", Map.of("level", scopeLevel.id(), "key", scopeKey));
+        String col = sc.col();
+        String k = sc.filterKey();
+        SpaceLevel scopeLevel = sc.level();
+        String scopeKey = sc.key();
         out.put("summary", devMapper.summary(col, k));
         out.put("stages", devMapper.stages(col, k));
         out.put("gfaByUse", devMapper.gfaByUse(col, k));
@@ -140,6 +134,49 @@ public class SpaceService {
         out.put("sites", devMapper.sites(col, k, 50));
         out.put("plotControls", scopeLevel == SpaceLevel.PLOT ? devMapper.plotControls(scopeKey) : List.of());
         return out;
+    }
+
+    /**
+     * 市场页签：Tawtheeq 租约（状态、户型、年份、租金）与 ADREC 买卖 / 抵押 / 租赁、ELMS 地块交易。
+     * 建筑 / 楼层 / 单元按所在地块统计（Tawtheeq 目前只能关联到地块）。地块范围另给租约明细（不含个人信息）。
+     */
+    public Map<String, Object> mkt(SpaceLevel level, String key) {
+        Scope sc = scope(level, key);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("scope", sc.ref());
+        if (sc.key() == null) {
+            return out;
+        }
+        String col = sc.col();
+        String k = sc.filterKey();
+        out.put("tenancy", mktMapper.tenancySummary(col, k));
+        out.put("byStatus", mktMapper.tenancyBreakdown(col, k, "tenancy_status"));
+        out.put("byUnitType", mktMapper.tenancyBreakdown(col, k, "unit_type"));
+        out.put("byPropertyUsage", mktMapper.tenancyBreakdown(col, k, "property_usage"));
+        out.put("byYear", mktMapper.tenancyByYear(col, k));
+        out.put("tenancies", sc.level() == SpaceLevel.PLOT ? mktMapper.tenancies(col, k, 50) : List.of());
+        out.put("adrec", mktMapper.adrecSummary(col, k));
+        out.put("adrecByMonth", mktMapper.adrecByMonth(col, k));
+        return out;
+    }
+
+    /** 主题页签的统计范围：建筑 / 楼层 / 单元按所在地块；没有地块时 key 为 null。 */
+    private record Scope(SpaceLevel level, String key) {
+        String col() { return level == SpaceLevel.EMIRATE ? null : level.col(); }
+        String filterKey() { return level == SpaceLevel.EMIRATE ? null : key; }
+        Map<String, Object> ref() { return key == null ? null : Map.of("level", level.id(), "key", key); }
+    }
+
+    private Scope scope(SpaceLevel level, String key) {
+        if (level == SpaceLevel.BUILDING || level == SpaceLevel.FLOOR || level == SpaceLevel.UNIT) {
+            Map<String, Object> row = mapper.node(level.id(), key);
+            if (row == null || row.get("key") == null) {
+                throw new NoSuchElementException("没有这个" + level.id() + ": " + key);
+            }
+            Object plot = row.get("plot_key");
+            return new Scope(SpaceLevel.PLOT, plot == null ? null : plot.toString());
+        }
+        return new Scope(level, key);
     }
 
     public List<Map<String, Object>> search(String q, int limit) {
