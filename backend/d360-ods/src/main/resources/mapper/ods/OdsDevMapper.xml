@@ -81,6 +81,118 @@
         WHERE shape IS NOT NULL
     </select>
 
+    <!-- ===================== 业务视图（ods_pop_view） ===================== -->
+
+    <!-- 几何文本（WKB hex / EWKT / WKT）→ geometry；都不像时为 null。SRID 为 0 时按坐标大小判断 32640 或 4326 -->
+    <sql id="shapeText">
+        CASE WHEN ${col} ~ '^[0-9A-Fa-f]+$' AND length(${col}) % 2 = 0 THEN ST_GeomFromEWKB(decode(${col}, 'hex'))
+             WHEN ${col} ~* '^\s*(SRID=[0-9]+;)?\s*(MULTI)?(POINT|LINESTRING|POLYGON)\s*\(|^\s*(SRID=[0-9]+;)?\s*GEOMETRYCOLLECTION'
+                  THEN ST_GeomFromEWKT(${col}) END
+    </sql>
+
+    <!-- 资本项目：同一 project_id 取最后修改的一行；几何先取点表，没有再取面表（同一项目多行时取 objectid 最大的） -->
+    <select id="capitalProjects" resultType="com.district360.common.theme.dev.DevRows$CapitalProject">
+        SELECT DISTINCT ON (d.project_id)
+               trim(d.project_id)                                AS project_id,
+               coalesce(<include refid="txt"><property name="col" value="d.cip_project_name_eng"/></include>,
+                        <include refid="txt"><property name="col" value="d.project_name"/></include>) AS project_name,
+               <include refid="txt"><property name="col" value="d.cip_project_category"/></include> AS category,
+               <include refid="txt"><property name="col" value="d.project_phase"/></include> AS phase,
+               <include refid="txt"><property name="col" value="d.project_status"/></include> AS status,
+               <include refid="txt"><property name="col" value="d.type"/></include> AS project_type,
+               <include refid="txt"><property name="col" value="d.dof_no"/></include> AS dof_no,
+               CASE WHEN abs(d.approved_budget) &lt; 1e15 THEN round(d.approved_budget, 2) END AS approved_budget,
+               CASE WHEN abs(d.cumulative_expenditures) &lt; 1e15 THEN round(d.cumulative_expenditures, 2) END AS cumulative_expenditures,
+               d.original_planned_com_date::date                 AS original_planned_com_date,
+               d.actual_forecast_com_date::date                  AS actual_forecast_com_date,
+               CASE WHEN abs(d.actual_progress) &lt; 1e6 THEN round(d.actual_progress, 2) END AS actual_progress,
+               CASE WHEN abs(d.revised_progress) &lt; 1e6 THEN round(d.revised_progress, 2) END AS revised_progress,
+               CASE WHEN abs(d.original_progress) &lt; 1e6 THEN round(d.original_progress, 2) END AS original_progress,
+               <include refid="txt"><property name="col" value="d.cip_location_district"/></include> AS cip_location_district,
+               <include refid="txt"><property name="col" value="d.cip_location_communitty"/></include> AS cip_location_community,
+               <include refid="txt"><property name="col" value="d.cip_location_plot"/></include> AS cip_location_plot,
+               <include refid="txt"><property name="col" value="d.municipalityname"/></include> AS src_municipality,
+               <include refid="ods.common.muni"><property name="col" value="d.municipalityname"/></include> AS municipality_code,
+               <include refid="txt"><property name="col" value="d.contractor_name"/></include> AS contractor_name,
+               CASE WHEN d.start_year BETWEEN 1900 AND 2100 THEN d.start_year::int END AS start_year,
+               CASE WHEN h.geo IS NOT NULL THEN g.k END          AS geom_kind,
+               encode(ST_AsEWKB(ST_Force2D(CASE
+                   WHEN h.geo IS NULL THEN NULL
+                   WHEN ST_SRID(h.geo) = 0 AND abs(ST_X(ST_PointOnSurface(h.geo))) &gt; 1000 THEN ST_Transform(ST_SetSRID(h.geo, 32640), 4326)
+                   WHEN ST_SRID(h.geo) = 0 THEN ST_SetSRID(h.geo, 4326)
+                   WHEN ST_SRID(h.geo) = 4326 THEN h.geo
+                   ELSE ST_Transform(h.geo, 4326) END)), 'hex') AS geom_hex
+        FROM ${t.gsecProjects} d
+        LEFT JOIN (SELECT DISTINCT ON (project_id) project_id, shape FROM ${t.gsecPoints}
+                   WHERE project_id IS NOT NULL AND nullif(trim(shape), '') IS NOT NULL ORDER BY project_id, objectid DESC) pt
+               ON pt.project_id = d.project_id
+        LEFT JOIN (SELECT DISTINCT ON (project_id) project_id, shape FROM ${t.gsecPolygons}
+                   WHERE project_id IS NOT NULL AND nullif(trim(shape), '') IS NOT NULL ORDER BY project_id, objectid DESC) pg
+               ON pg.project_id = d.project_id
+        CROSS JOIN LATERAL (SELECT trim(coalesce(pt.shape, pg.shape)) AS s,
+                                   CASE WHEN pt.shape IS NOT NULL THEN 'point' WHEN pg.shape IS NOT NULL THEN 'polygon' END AS k) g
+        CROSS JOIN LATERAL (SELECT <include refid="shapeText"><property name="col" value="g.s"/></include> AS geo) h
+        WHERE nullif(trim(d.project_id), '') IS NOT NULL
+        ORDER BY d.project_id, d.last_modified_on DESC NULLS LAST, d.objectid DESC NULLS LAST
+    </select>
+
+    <!-- 建设许可：同一许可号取签发日最新的一行 -->
+    <select id="permits" resultType="com.district360.common.theme.dev.DevRows$Permit">
+        SELECT DISTINCT ON (s.permitnumber)
+               trim(s.permitnumber)                              AS permit_number,
+               s.permitissuingdate::date                         AS issuing_date,
+               <include refid="txt"><property name="col" value="s.gisid"/></include> AS gisid,
+               <include refid="txt"><property name="col" value="s.permitstatus"/></include> AS permit_status,
+               <include refid="txt"><property name="col" value="s.projectstatus"/></include> AS project_status,
+               s.projectcompletiondate::date                     AS project_completion_date,
+               <include refid="txt"><property name="col" value="s.delayedstatus"/></include> AS delayed_status,
+               s.delayedvariance                                 AS delayed_variance_days,
+               <include refid="txt"><property name="col" value="s.projectnumber"/></include> AS project_number,
+               <include refid="txt"><property name="col" value="s.projectname"/></include> AS project_name,
+               <include refid="txt"><property name="col" value="s.ownertype"/></include> AS owner_type,
+               s.projectregistrationdate::date                   AS registration_date,
+               s.projectworkstartdate::date                      AS work_start_date,
+               <include refid="txt"><property name="col" value="s.projectexpectedcompletiondate"/></include> AS expected_completion,
+               <include refid="txt"><property name="col" value="s.landusename"/></include> AS land_use,
+               <include refid="txt"><property name="col" value="s.zone"/></include> AS zone,
+               <include refid="txt"><property name="col" value="s.sector"/></include> AS sector,
+               <include refid="txt"><property name="col" value="s.plotnumber"/></include> AS plot_number,
+               <include refid="txt"><property name="col" value="s.municiplaity"/></include> AS src_municipality,
+               <include refid="ods.common.muni"><property name="col" value="s.municiplaity"/></include> AS municipality_code,
+               <include refid="ods.common.xy"><property name="a" value="c.a"/><property name="b" value="c.b"/></include> AS geom_hex
+        FROM ${t.emecs} s
+        CROSS JOIN LATERAL (SELECT <include refid="ods.common.fnum"><property name="col" value="s.latitude"/></include> AS a,
+                                   <include refid="ods.common.fnum"><property name="col" value="s.longitude"/></include> AS b) c
+        WHERE nullif(trim(s.permitnumber), '') IS NOT NULL
+        ORDER BY s.permitnumber, s.permitissuingdate DESC NULLS LAST, s.sno DESC NULLS LAST
+    </select>
+
+    <!-- 建筑类申请：kind 按 projecttypename 关键词归类（待业务确认） -->
+    <select id="buildingApplications" resultType="com.district360.common.theme.dev.DevRows$BuildingApplication">
+        SELECT <include refid="txt"><property name="col" value="s.projectnumber"/></include> AS project_number,
+               <include refid="txt"><property name="col" value="s.projectname"/></include> AS project_name,
+               <include refid="txt"><property name="col" value="s.projecttype"/></include> AS project_type,
+               <include refid="txt"><property name="col" value="s.projecttypename"/></include> AS project_type_name,
+               CASE WHEN s.projecttypename ~* 'complet' THEN 'completion'
+                    WHEN s.projecttypename ~* 'demoli' THEN 'demolition'
+                    WHEN s.projecttypename ~* '(mainten|repair|renovat)' THEN 'maintenance'
+                    ELSE 'other' END                             AS kind,
+               <include refid="txt"><property name="col" value="s.projectcurrentstatus"/></include> AS current_status,
+               s.projectsubmissiondate::date                     AS submission_date,
+               <include refid="txt"><property name="col" value="s.zone"/></include> AS zone,
+               <include refid="txt"><property name="col" value="s.sector"/></include> AS sector,
+               <include refid="txt"><property name="col" value="s.plot_number"/></include> AS plot_number,
+               <include refid="txt"><property name="col" value="s.landusegroupname"/></include> AS land_use_group,
+               <include refid="ods.common.flag"><property name="col" value="s.islegalizationproject"/></include> AS is_legalization,
+               s.projectkpistartdate::date                       AS kpi_start_date,
+               s.projectkpienddate::date                         AS kpi_end_date,
+               s.projectlaststatusupdatedate::date               AS last_status_date,
+               s.projectcompletionduration                       AS duration_days,
+               <include refid="txt"><property name="col" value="s.projectmunicipality"/></include> AS src_municipality,
+               <include refid="ods.common.muni"><property name="col" value="s.projectmunicipality"/></include> AS municipality_code
+        FROM ${t.meps} s
+    </select>
+
     <select id="dataDate" resultType="java.time.LocalDate">
         SELECT max(trs_moye_input_time)::date FROM ${t.masterplanBoundary}
     </select>

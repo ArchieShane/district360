@@ -36,6 +36,14 @@ public class OdsTables {
     private final String mosques;
     private final String parks;
     private final String parkDetails;
+    private final String violationsUis;
+    private final String violationResults;
+    private final String gsecProjects;
+    private final String gsecPoints;
+    private final String gsecPolygons;
+    private final String emecs;
+    private final String meps;
+    private final String tawtheeqUnitStatus;
 
     public OdsTables(OdsProperties p) {
         this.schools = p.table("makani_poi_adek_schools_locations");
@@ -45,11 +53,19 @@ public class OdsTables {
         this.parkDetails = p.table("makani_parks_details");
         this.streetlight = p.table("makani_adwea_e_streetlight");
         this.busStop = p.table("makani_bus_stop");
-        this.addaCases = p.table("view_adda_cases");
-        this.accidents = p.table("view_accident_master_new");
-        this.distortions = p.table("view_ins_distortion");
-        this.violations = p.table("view_ins_violations");
-        this.occupancySurvey = p.table("view_ins_survey");
+        this.addaCases = p.view("adda_cases");
+        this.accidents = p.view("accident_master_new");
+        this.distortions = p.view("ins_distortion");
+        this.violations = p.view("ins_violations");
+        this.violationsUis = p.view("ins_violations_uis");
+        this.violationResults = p.view("ins_violation_trx_result");
+        this.occupancySurvey = p.view("ins_survey");
+        this.gsecProjects = p.view("gsec_project_details");
+        this.gsecPoints = p.view("gsec_project_point");
+        this.gsecPolygons = p.view("gsec_project_polygon");
+        this.emecs = p.view("emecs_dashboard");
+        this.meps = p.view("meps_cj_building_projects_dashboard");
+        this.tawtheeqUnitStatus = p.view("vw_tawtheeq_unit_status");
         this.tawtheeq = p.table("makani_tbl_tawtheeq_all");
         this.reSale = p.table("re_x_q21_matview_sale");
         this.reMortgage = p.table("re_x_q21_matview_mortgage");
@@ -96,4 +112,12 @@ public class OdsTables {
     public String getMosques() { return mosques; }
     public String getParks() { return parks; }
     public String getParkDetails() { return parkDetails; }
+    public String getViolationsUis() { return violationsUis; }
+    public String getViolationResults() { return violationResults; }
+    public String getGsecProjects() { return gsecProjects; }
+    public String getGsecPoints() { return gsecPoints; }
+    public String getGsecPolygons() { return gsecPolygons; }
+    public String getEmecs() { return emecs; }
+    public String getMeps() { return meps; }
+    public String getTawtheeqUnitStatus() { return tawtheeqUnitStatus; }
 }

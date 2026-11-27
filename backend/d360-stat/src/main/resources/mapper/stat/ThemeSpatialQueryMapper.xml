@@ -398,6 +398,16 @@
                 WHERE x.${col} = #{key}
                 LIMIT #{limit}
             </when>
+            <when test="layer == 'projects'">
+                SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
+                       'geometry', ST_AsGeoJSON(x.centroid, 6)::json,
+                       'properties', json_build_object('key', x.project_id, 'name', coalesce(x.project_name, x.project_id),
+                                     'level', 'project', 'st', x.status, 'c', x.category, 'd', x.delayed,
+                                     'b', round(x.approved_budget, 0))) AS f
+                FROM theme.dev_capital_project x
+                WHERE x.${col} = #{key} AND x.centroid IS NOT NULL
+                LIMIT #{limit}
+            </when>
             <when test="layer == 'busstops'">
                 SELECT json_build_object('type', 'Feature', 'id', row_number() OVER (),
                        'geometry', ST_AsGeoJSON(x.geom, 6)::json,

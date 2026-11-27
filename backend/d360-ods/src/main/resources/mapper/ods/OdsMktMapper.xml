@@ -108,4 +108,36 @@
                NULL AS project_name
         FROM ${t.elmsMortgage}
     </select>
+
+    <!--
+      Tawtheeq 单元状态（业务视图 view_vw_tawtheeq_unit_status）：一行一个单元，不读任何个人信息。
+      is_rented 除是 / 否外也认 Rented / Leased / Occupied（真）与 Vacant / Available（假）；
+      blocked = 今天处于 hard / soft / general block 期间。gisid 是 numeric，转成不带小数的文本以对 sp_plot.gisid。
+    -->
+    <select id="unitStatuses" resultType="com.district360.common.theme.mkt.MktRows$UnitStatus">
+        SELECT DISTINCT ON (s.objectid)
+               s.objectid                                        AS src_id,
+               CASE WHEN s.gisid = trunc(s.gisid) AND s.gisid &lt; 1e18 THEN trunc(s.gisid)::bigint::text END AS gisid,
+               CASE WHEN s.buildingid = trunc(s.buildingid) AND s.buildingid &lt; 1e18 THEN trunc(s.buildingid)::bigint END AS tawtheeq_building_id,
+               CASE WHEN s.unitid = trunc(s.unitid) AND s.unitid &lt; 1e18 THEN trunc(s.unitid)::bigint END AS tawtheeq_unit_id,
+               <include refid="ods.common.txt"><property name="col" value="s.unit_reg_num"/></include> AS unit_reg_num,
+               <include refid="ods.common.txt"><property name="col" value="s.unitnumber"/></include> AS unit_number,
+               <include refid="ods.common.txt"><property name="col" value="s.floornumber"/></include> AS floor_number,
+               coalesce(<include refid="ods.common.txt"><property name="col" value="s.buildingname_e"/></include>,
+                        <include refid="ods.common.txt"><property name="col" value="s.buildingname_a"/></include>) AS building_name,
+               <include refid="ods.common.txt"><property name="col" value="s.usagetype_e"/></include> AS usage_type,
+               <include refid="ods.common.txt"><property name="col" value="s.classificationname_e"/></include> AS classification,
+               CASE WHEN s.numofbedroom BETWEEN 0 AND 100 THEN s.numofbedroom::int END AS bedrooms,
+               CASE WHEN s.unitarea BETWEEN 0 AND 1e10 THEN round(s.unitarea, 2) END AS area_sqm,
+               CASE WHEN lower(trim(s.is_rented)) IN ('1', 'y', 'yes', 'true', 't', 'rented', 'leased', 'occupied') THEN true
+                    WHEN lower(trim(s.is_rented)) IN ('0', 'n', 'no', 'false', 'f', 'vacant', 'available', 'not rented') THEN false END AS is_rented,
+               (s.hardblockstartdate &lt;= now() AND (s.hardblockenddate IS NULL OR s.hardblockenddate &gt;= now()))
+                   OR (s.softblockstartdate &lt;= now() AND (s.softblockenddate IS NULL OR s.softblockenddate &gt;= now()))
+                   OR (s.generalblockstartdate &lt;= now() AND (s.generalblockenddate IS NULL OR s.generalblockenddate &gt;= now()))
+                                                                 AS blocked,
+               <include refid="ods.common.muni"><property name="col" value="s.municipalityname"/></include> AS municipality_code
+        FROM ${t.tawtheeqUnitStatus} s
+        WHERE s.objectid IS NOT NULL
+        ORDER BY s.objectid, s.etlinsertdate DESC NULLS LAST
+    </select>
 </mapper>

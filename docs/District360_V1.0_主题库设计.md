@@ -81,7 +81,7 @@ Flyway：`V10__theme_spatial.sql`（空间）、`V11__theme_business.sql`（业�
 |---|---|---|---|
 | `ops_streetlight` | 124,961 点 / 182,260 灯盏 | makani_adwea_e_streetlight | 源为 EPSG:32640，转 4326；点落社区（124,944 条），社区没有的落区域；状态 In Service / Out Of Service / UnderConst / Proposed / Abandon；源 roadtype 全为空，不统计 |
 | `ops_bus_stop` | 3,338 站台 / 1,949 站 | makani_bus_stop | 一行一个站台（主键源 objectid），`gtfs_id` 相同为同一站（如 76000A / B / C 相距约 100 m）；EPSG:32640 转 4326；全部落到社区 |
-| `ops_case`、`ops_accident`、`ops_distortion`、`ops_violation`、`ops_occupancy_case` | 0 | view_adda_cases 等 | pop 为 0 行、makani_1119 无表。抽取器每次检查源表并在 `meta_table.note` 写「ODS 无源表 / 源表无数据 / 已有数据但抽取未实现」，有数据后再实现抽取 |
+| `ops_case`、`ops_accident`、`ops_distortion`、`ops_violation`、`ops_occupancy_case` | 0 | view_adda_cases 等 | 2026-11-27 起已实现抽取（见 2.7），源表目前为空 |
 
 ### 2.5 设施（已接入，`ods-ast`，2026-11-26）
 
@@ -98,6 +98,35 @@ Flyway：`V10__theme_spatial.sql`（空间）、`V11__theme_business.sql`（业�
 
 - **社区 / 区域按设施自身位置点落区**（与 v1「中心点落在区面内」一致），不随地块；地块另按 gisid / 位置关联（医疗、药房多在商场楼宇里，落到地块的约 70%）。
 - 与 v1 逐区核对（216 个区）：学校、清真寺完全一致；医疗只差 4 个区各 1 条，即 v1 不计的阿拉伯文 طبي 类别。
+
+### 2.7 业务视图（已实现抽取，源表待导入，2026-11-27）
+
+业务视图（源系统名 `view_xxx`）从 pop 库迁到 makani_1119 的 **`ods_pop_view` schema**，表名 `ods_pop_view_<去掉 view_ 的视图名>`
+（配置 `d360.ods.view-schema` / `view-prefix`）。迁移 V22 补列并新建 `mkt_unit_status`。抽取放在原有三个抽取器里，
+**源表不存在或没有数据时跳过**，`meta_table.note` 写「ODS 无源表 / ODS 源表无数据」；数据导入后次日定时同步自动出数，不用改代码。
+字段检查脚本 `deploy/docker/check-ods-view-columns.sql`（makani_1119 通过）。
+
+| 主题表 | 抽取器 | ODS 源表（ods_pop_view） | 清洗与去重 | 空间归属（依次尝试） |
+|---|---|---|---|---|
+| `dev_capital_project` | ods-dev | gsec_project_details + _point / _polygon | 同 project_id 取最后修改的一行；几何文本（WKB hex / WKT / EWKT）解析，SRID 0 按坐标大小判断 32640 / 4326 | 点（或面内一点）落社区 / 区域 → cip_location_district 区名 |
+| `dev_permit` | ods-dev | emecs_dashboard | 同许可号取签发日最新一行 | gisid → zone + sector + plotnumber → 经纬度 |
+| `dev_building_application` | ods-dev | meps_cj_building_projects_dashboard | kind 按类型名关键词归 completion / maintenance / demolition / other（待确认） | zone + sector + plot_number |
+| `ops_case` | ods-ops | adda_cases | 同工单号取最后修改的一行；经纬度是文本 | 坐标落地块 / 社区 / 区域 |
+| `ops_accident` | ods-ops | accident_master_new | 编号 = 酋长国代码-年份-报告号；坐标优先 latitude / longitude，其次 iac_coordinate_x / y | 坐标落社区 / 区域 |
+| `ops_distortion` | ods-ops | ins_distortion（地块号经 ins_violation_trx_result） | isdistortion 不为假；按期整改 = 关闭日 − 上报日 ≤ maxtime2resolve | plot_gis_id → plot_id → zone + sector + 地块号 → 坐标 |
+| `ops_violation` | ods-ops | ins_violations + ins_violations_uis（只补没有的号）+ trx_result | isviolation 不为假；阶段 fine > warning > awareness | 同上 |
+| `ops_occupancy_case` | ods-ops | ins_survey | issurvey 不为假 | zone + sector + 地块号 → 坐标 |
+| `mkt_unit_status` | ods-mkt | vw_tawtheeq_unit_status | is_rented 认 是 / 否 / Rented / Vacant 等；blocked = 当前在 block 期间 | gisid → 地块；同市政同 unitid 且同地块 → BDMS 单元 |
+
+通用清洗（`OdsCommon.xml`）：业务视图多为 text 列，数值 / 是否 / 坐标「不合法就当空」，不让一行脏数据让整次抽取失败；
+坐标按数值范围识别经纬度（先后都认）或 UTM 40N。2026-11-27 用合成数据在回滚事务里验证了全部抽取、写入、归属与查询 SQL。
+
+待数据到位后核实：
+
+1. `ins_violation_trx_result.application_number` 是否等于 `issue_number`；`plot_gis_id` 是 numeric(10,0)，放不下 ADM 的 11 位 gisid，按 7 位 plot_id 兜底（市政 + plot_id 唯一）。
+2. INS 的 zone_name_e / sector_name_e 与地块的 zone_tpss / sector_tpss 写法是否一致；latlongcoordinates / xy 的格式。
+3. Tawtheeq unitid 与 BDMS unitid 是否同一套编号；is_rented 的取值。
+4. 视觉违规三类、违规三部法律的条目映射；MEPS 类型名与竣工 / 维修 / 拆除的对应；ADDA SLA 是否可用 sla_color。
 
 ### 2.6 其他业务主题（已建表，待接入）
 

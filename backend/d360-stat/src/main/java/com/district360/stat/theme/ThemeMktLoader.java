@@ -5,6 +5,7 @@ import com.district360.common.theme.ThemeLoadResult;
 import com.district360.common.theme.ThemeLoader;
 import com.district360.common.theme.mkt.MktRows;
 import com.district360.common.theme.mkt.MktSink;
+import com.district360.stat.mapper.ThemeBizWriteMapper;
 import com.district360.stat.mapper.ThemeMktWriteMapper;
 import com.district360.stat.mapper.ThemeSpatialWriteMapper;
 import org.slf4j.Logger;
@@ -31,16 +32,19 @@ public class ThemeMktLoader implements ThemeLoader<MktSink> {
 
     private static final Logger log = LoggerFactory.getLogger(ThemeMktLoader.class);
     private static final int CHUNK = 500;
-    static final List<String> TABLES = List.of("mkt_tenancy", "mkt_sale", "mkt_mortgage", "mkt_rent", "mkt_plot_transaction");
+    static final List<String> TABLES = List.of("mkt_tenancy", "mkt_sale", "mkt_mortgage", "mkt_rent", "mkt_plot_transaction",
+            "mkt_unit_status");
 
     private final ThemeMktWriteMapper mapper;
     private final ThemeSpatialWriteMapper common;
+    private final ThemeBizWriteMapper biz;
     private final TransactionTemplate tx;
 
-    public ThemeMktLoader(ThemeMktWriteMapper mapper, ThemeSpatialWriteMapper common,
+    public ThemeMktLoader(ThemeMktWriteMapper mapper, ThemeSpatialWriteMapper common, ThemeBizWriteMapper biz,
                           @Qualifier("statTransactionTemplate") TransactionTemplate tx) {
         this.mapper = mapper;
         this.common = common;
+        this.biz = biz;
         this.tx = tx;
     }
 
@@ -58,19 +62,23 @@ public class ThemeMktLoader implements ThemeLoader<MktSink> {
             Batch<MktRows.Mortgage> mortgages = new Batch<>(mapper::insertMortgages);
             Batch<MktRows.Rent> rents = new Batch<>(mapper::insertRents);
             Batch<MktRows.PlotTransaction> plotTxns = new Batch<>(mapper::insertPlotTransactions);
+            Batch<MktRows.UnitStatus> units = new Batch<>(biz::insertUnitStatuses);
             Map<String, List<String>> missing = new LinkedHashMap<>();
+            Map<String, String> empty = new LinkedHashMap<>();
             LocalDate asOf = extractor.extract(new MktSink() {
                 @Override public void tenancy(MktRows.Tenancy r) { tenancies.add(r); }
                 @Override public void sale(MktRows.Sale r) { sales.add(r); }
                 @Override public void mortgage(MktRows.Mortgage r) { mortgages.add(r); }
                 @Override public void rent(MktRows.Rent r) { rents.add(r); }
                 @Override public void plotTransaction(MktRows.PlotTransaction r) { plotTxns.add(r); }
+                @Override public void unitStatus(MktRows.UnitStatus r) { units.add(r); }
+                @Override public void sourceEmpty(String themeTable, String sourceTable) { empty.put(themeTable, sourceTable); }
                 @Override public void sourceMissing(String themeTable, String sourceTable) {
                     missing.computeIfAbsent(themeTable, k -> new ArrayList<>()).add(sourceTable);
                 }
             });
-            List.of(tenancies, sales, mortgages, rents, plotTxns).forEach(Batch::flush);
-            long total = tenancies.total + sales.total + mortgages.total + rents.total + plotTxns.total;
+            List.of(tenancies, sales, mortgages, rents, plotTxns, units).forEach(Batch::flush);
+            long total = tenancies.total + sales.total + mortgages.total + rents.total + plotTxns.total + units.total;
             log.info("主题库 · 市场：写入 {} 行，缺失源表 {}，开始关联", total, missing);
             TABLES.forEach(common::analyze);
             step("Tawtheeq → 地块（gisid）", mapper::linkTenancies);
@@ -78,6 +86,10 @@ public class ThemeMktLoader implements ThemeLoader<MktSink> {
             step("ADREC 抵押 → 地块 / 建筑（坐标）", () -> mapper.linkByLocation("mkt_mortgage"));
             step("ADREC 租赁 → 地块 / 建筑（坐标）", () -> mapper.linkByLocation("mkt_rent"));
             step("ELMS 地块交易 → 地块", mapper::linkPlotTransactions);
+            if (units.total > 0) {
+                step("Tawtheeq 单元状态 → 地块（gisid）", () -> biz.linkGisid("mkt_unit_status", "gisid"));
+                step("Tawtheeq 单元状态 → BDMS 单元", biz::linkUnitStatuses);
+            }
 
             Map<String, Long> counts = new LinkedHashMap<>();
             for (String t : TABLES) {
@@ -85,7 +97,8 @@ public class ThemeMktLoader implements ThemeLoader<MktSink> {
                 counts.put(t, n);
                 common.updateMeta(t, n, asOf);
                 List<String> src = missing.get(t);
-                mapper.updateNote(t, src == null ? null : "ODS 无源表：" + String.join("、", src));
+                mapper.updateNote(t, src != null ? "ODS 无源表：" + String.join("、", src)
+                        : empty.containsKey(t) ? "ODS 源表无数据：" + empty.get(t) : null);
             }
             log.info("主题库 · 市场完成 {}", counts);
             return new ThemeLoadResult(total, asOf, counts);

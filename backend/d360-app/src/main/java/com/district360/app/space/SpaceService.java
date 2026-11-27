@@ -2,6 +2,7 @@ package com.district360.app.space;
 
 import com.district360.app.web.dto.PageResult;
 import com.district360.stat.mapper.ThemeAstQueryMapper;
+import com.district360.stat.mapper.ThemeBizQueryMapper;
 import com.district360.stat.mapper.ThemeDevQueryMapper;
 import com.district360.stat.mapper.ThemeLivQueryMapper;
 import com.district360.stat.mapper.ThemeMktQueryMapper;
@@ -43,10 +44,12 @@ public class SpaceService {
     private final ThemeOpsQueryMapper opsMapper;
     private final ThemeAstQueryMapper astMapper;
     private final ThemeLivQueryMapper livMapper;
+    private final ThemeBizQueryMapper bizMapper;
 
     public SpaceService(ThemeSpatialQueryMapper mapper, ThemeDevQueryMapper devMapper, ThemeMktQueryMapper mktMapper,
                         ThemeOpsQueryMapper opsMapper, ThemeAstQueryMapper astMapper,
-                        ThemeLivQueryMapper livMapper) {
+                        ThemeLivQueryMapper livMapper, ThemeBizQueryMapper bizMapper) {
+        this.bizMapper = bizMapper;
         this.mapper = mapper;
         this.devMapper = devMapper;
         this.mktMapper = mktMapper;
@@ -130,7 +133,9 @@ public class SpaceService {
     }
 
     /**
-     * 开发建设页签：总规、规划建筑面积、总规实现率、在建工地。建筑 / 楼层 / 单元按所在地块统计（管控指标在地块上）。
+     * 开发建设页签：总规、规划建筑面积、总规实现率、在建工地；资本项目（GSEC）、建设许可（EMECS）、
+     * 竣工 / 维修 / 拆除申请（MEPS）。建筑 / 楼层 / 单元按所在地块统计（管控指标在地块上）；
+     * 资本项目没有地块属性，地块层级按地块所在社区统计。
      * 返回 scope 表示实际统计的范围；所在建筑没有地块时 scope 为 null、其余为空。
      */
     public Map<String, Object> dev(SpaceLevel level, String key) {
@@ -150,6 +155,22 @@ public class SpaceService {
         out.put("masterPlans", devMapper.masterPlans(col, k, 50));
         out.put("sites", devMapper.sites(col, k, 50));
         out.put("plotControls", scopeLevel == SpaceLevel.PLOT ? devMapper.plotControls(scopeKey) : List.of());
+        Map<String, Object> projects = new LinkedHashMap<>();
+        projects.put("summary", bizMapper.projectSummary(col, k));
+        projects.put("byStatus", bizMapper.projectsBy(col, k, "status"));
+        projects.put("byCategory", bizMapper.projectsBy(col, k, "category"));
+        projects.put("byPhase", bizMapper.projectsBy(col, k, "phase"));
+        projects.put("items", bizMapper.projects(col, k, 50));
+        out.put("capitalProjects", projects);
+        Map<String, Object> permits = new LinkedHashMap<>();
+        permits.put("summary", bizMapper.permitSummary(col, k));
+        permits.put("byStatus", bizMapper.permitsBy(col, k, "permit_status"));
+        permits.put("applications", bizMapper.applicationSummary(col, k));
+        permits.put("applicationTypes", bizMapper.applicationTypes(col, k));
+        permits.put("applicationsByMonth", bizMapper.applicationsByMonth(col, k));
+        permits.put("plotRecords", scopeLevel == SpaceLevel.PLOT ? bizMapper.plotPermits(scopeKey, 100) : List.of());
+        out.put("permits", permits);
+        out.put("sources", sources("dev_capital_project", "dev_permit", "dev_building_application"));
         return out;
     }
 
@@ -174,22 +195,34 @@ public class SpaceService {
         out.put("tenancies", sc.level() == SpaceLevel.PLOT ? mktMapper.tenancies(col, k, 50) : List.of());
         out.put("adrec", mktMapper.adrecSummary(col, k));
         out.put("adrecByMonth", mktMapper.adrecByMonth(col, k));
+        Map<String, Object> occ = new LinkedHashMap<>();
+        occ.put("summary", bizMapper.occupancySummary(col, k));
+        occ.put("byUsage", bizMapper.occupancyBy(col, k, "usage_type"));
+        occ.put("byClassification", bizMapper.occupancyBy(col, k, "classification"));
+        occ.put("units", level == SpaceLevel.FLOOR ? bizMapper.unitStatuses(key, null)
+                : level == SpaceLevel.UNIT ? bizMapper.unitStatuses(null, key) : List.of());
+        out.put("occupancy", occ);
+        out.put("sources", sources("mkt_unit_status"));
         return out;
     }
 
     /**
-     * 城市运行页签：路灯（点数、灯盏、状态、灯型；源 roadtype 全为空，不统计）与公交站（站、站台、列表）。
-     * 都是区域设施、没有地块属性：地块 / 建筑 / 楼层 / 单元按所在社区统计。
+     * 城市运行页签：路灯（点数、灯盏、状态、灯型；源 roadtype 全为空，不统计）与公交站（站、站台、列表）；
+     * 居民诉求、道路事故、视觉违规、违规处罚、住宅占用（业务视图）。
+     * 统计范围：地块 / 建筑 / 楼层 / 单元按所在社区；地块及以下另给本地块的视觉违规 / 违规 / 占用案件记录（plotRecords）。
      */
     public Map<String, Object> ops(SpaceLevel level, String key) {
         SpaceLevel scopeLevel = level;
         String scopeKey = key;
+        String plotKey = null;
         if (level == SpaceLevel.PLOT || level == SpaceLevel.BUILDING || level == SpaceLevel.FLOOR || level == SpaceLevel.UNIT) {
             Map<String, Object> row = mapper.node(level.id(), key);
             if (row == null || row.get("key") == null) {
                 throw new NoSuchElementException("没有这个" + level.id() + ": " + key);
             }
             Object c = row.get("community_key");
+            Object p = level == SpaceLevel.PLOT ? row.get("key") : row.get("plot_key");
+            plotKey = p == null ? null : p.toString();
             scopeLevel = SpaceLevel.COMMUNITY;
             scopeKey = c == null ? null : c.toString();
         }
@@ -205,6 +238,54 @@ public class SpaceService {
         out.put("lightsByStatus", opsMapper.lightsBy(col, k, "status"));
         out.put("lightsByLampType", opsMapper.lightsBy(col, k, "lamp_type"));
         out.put("busStops", opsMapper.busStops(col, k, 100));
+        Map<String, Object> cases = new LinkedHashMap<>();
+        cases.put("summary", bizMapper.caseSummary(col, k));
+        cases.put("byCategory", bizMapper.casesBy(col, k, "service_category"));
+        cases.put("byType", bizMapper.casesBy(col, k, "case_type"));
+        cases.put("byMonth", bizMapper.casesByMonth(col, k));
+        out.put("cases", cases);
+        Map<String, Object> accidents = new LinkedHashMap<>();
+        accidents.put("summary", bizMapper.accidentSummary(col, k));
+        accidents.put("bySeverity", bizMapper.accidentsBy(col, k, "severity"));
+        accidents.put("byKind", bizMapper.accidentsBy(col, k, "accident_kind"));
+        accidents.put("byMonth", bizMapper.accidentsByMonth(col, k));
+        out.put("accidents", accidents);
+        Map<String, Object> distortions = new LinkedHashMap<>();
+        distortions.put("summary", bizMapper.distortionSummary(col, k));
+        distortions.put("byService", bizMapper.distortionsBy(col, k, "service_name"));
+        distortions.put("byEntity", bizMapper.distortionsBy(col, k, "responsible_entity"));
+        distortions.put("byMonth", bizMapper.distortionsByMonth(col, k));
+        out.put("distortions", distortions);
+        Map<String, Object> violations = new LinkedHashMap<>();
+        violations.put("summary", bizMapper.violationSummary(col, k));
+        violations.put("byService", bizMapper.violationsBy(col, k, "service_name"));
+        violations.put("byItem", bizMapper.violationsBy(col, k, "violation_name"));
+        out.put("violations", violations);
+        Map<String, Object> occupancy = new LinkedHashMap<>();
+        occupancy.put("summary", bizMapper.occupancyCaseSummary(col, k));
+        occupancy.put("byStage", bizMapper.occupancyCasesBy(col, k, "current_activity"));
+        out.put("occupancyCases", occupancy);
+        out.put("plotRecords", plotKey == null ? List.of() : bizMapper.plotOpsRecords(plotKey, 100));
+        out.put("sources", sources("ops_case", "ops_accident", "ops_distortion", "ops_violation", "ops_occupancy_case"));
+        return out;
+    }
+
+    /**
+     * 业务视图主题表的数据状态：{表名: {rows, note}}，rows 为 0 时 note 说明原因（如「ODS 源表无数据」），
+     * 页面据此显示「待接入」而不是 0。
+     */
+    private Map<String, Object> sources(String... tables) {
+        Map<String, Map<String, Object>> all = new LinkedHashMap<>();
+        for (Map<String, Object> r : bizMapper.tableRows()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("rows", r.get("rows"));
+            m.put("note", r.get("note"));
+            all.put(String.valueOf(r.get("table")), m);
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (String t : tables) {
+            out.put(t, all.get(t));
+        }
         return out;
     }
 
@@ -403,6 +484,8 @@ public class SpaceService {
         Map<String, Object> dev = new LinkedHashMap<>();
         dev.put("summary", devMapper.summary(col, k));
         dev.put("stages", devMapper.stages(col, k));
+        dev.put("capitalProjects", bizMapper.projectSummary(col, k));
+        dev.put("permits", bizMapper.permitSummary(col, k));
         out.put("dev", dev);
         Map<String, Object> ast = new LinkedHashMap<>();
         Map<String, Object> astSummary = astMapper.summary(col, k);
@@ -418,8 +501,19 @@ public class SpaceService {
         Map<String, Object> mkt = new LinkedHashMap<>();
         mkt.put("tenancy", mktMapper.tenancySummary(col, k));
         mkt.put("adrec", mktMapper.adrecSummary(col, k));
+        mkt.put("occupancy", bizMapper.occupancySummary(col, k));
         out.put("mkt", mkt);
-        out.put("ops", opsMapper.summary(col, k));
+        Map<String, Object> ops = new LinkedHashMap<>();
+        Map<String, Object> opsSummary = opsMapper.summary(col, k);
+        if (opsSummary != null) {
+            ops.putAll(opsSummary);
+        }
+        ops.put("cases", bizMapper.caseSummary(col, k));
+        ops.put("accidents", bizMapper.accidentSummary(col, k));
+        ops.put("accidentsBySeverity", bizMapper.accidentsBy(col, k, "severity"));
+        ops.put("distortions", bizMapper.distortionSummary(col, k));
+        ops.put("violations", bizMapper.violationSummary(col, k));
+        out.put("ops", ops);
         // 宜居：区域及社区给所在区域的评分与 CAPEX；酋长国 / 市政给平均分、CAPEX 合计、分档分布（不带区域列表）
         Map<String, Object> liv = new LinkedHashMap<>(liv(level, key));
         liv.remove("districts");
