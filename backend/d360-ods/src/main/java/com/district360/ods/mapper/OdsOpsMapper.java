@@ -24,4 +24,19 @@ public interface OdsOpsMapper {
     void streetlights(@Param("t") OdsTables t, ResultHandler<OpsRows.Streetlight> handler);
 
     void busStops(@Param("t") OdsTables t, ResultHandler<OpsRows.BusStop> handler);
+
+    void cases(@Param("t") OdsTables t, ResultHandler<OpsRows.Case> handler);
+
+    void accidents(@Param("t") OdsTables t, ResultHandler<OpsRows.Accident> handler);
+
+    /** 需要处理结果表 {@link OdsTables#getViolationResults()} 存在。 */
+    void distortions(@Param("t") OdsTables t, ResultHandler<OpsRows.Distortion> handler);
+
+    /** 需要处理结果表存在。 */
+    void violations(@Param("t") OdsTables t, ResultHandler<OpsRows.Violation> handler);
+
+    /** 需要 view_ins_violations 与处理结果表存在。 */
+    void violationsUis(@Param("t") OdsTables t, ResultHandler<OpsRows.Violation> handler);
+
+    void occupancyCases(@Param("t") OdsTables t, ResultHandler<OpsRows.OccupancyCase> handler);
 }

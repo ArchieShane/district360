@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 业务视图写入与空间归属（V22）：资本项目、建设许可、建筑类申请、居民诉求、道路事故、视觉违规、违规处罚、
+  住宅占用、Tawtheeq 单元状态。由 ThemeDevLoader / ThemeOpsLoader / ThemeMktLoader 在各自事务里调用。
+
+  空间归属按可信度依次尝试，前一步对上的不再覆盖：
+    1. gisid → sp_plot（plot_key = gisid）；
+    2. zone + sector + 地块号 → sp_plot.zone_tpss / sector_tpss / plot_number（忽略大小写和首尾空白；源带市政时同市政；
+       同一组合对应多个地块时取 plot_key 最小的，这类重号多在同一区内）；
+    3. 位置：点（面取面内一点）落未注销地块，落不到的落社区，再落不到的落区域；
+    4. 资本项目最后按 cip_location_district 区名（英文名 / 俗称，忽略大小写）落区。
+  ${table} / ${col} 等只来自代码常量，不来自请求。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeBizWriteMapper">
+
+    <sql id="g">ST_GeomFromEWKB(decode(#{r.geomHex}, 'hex'))</sql>
+
+    <!-- ============================== 写入 ============================== -->
+
+    <insert id="insertCapitalProjects">
+        INSERT INTO theme.dev_capital_project (project_id, project_name, category, phase, status, project_type, dof_no,
+            approved_budget, cumulative_expenditures, original_planned_com_date, actual_forecast_com_date,
+            actual_progress, revised_progress, original_progress, cip_location_district, cip_location_community,
+            cip_location_plot, src_municipality, municipality_code, contractor_name, start_year, geom_kind, geom, centroid)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.projectId}, #{r.projectName}, #{r.category}, #{r.phase}, #{r.status}, #{r.projectType}, #{r.dofNo},
+             #{r.approvedBudget}, #{r.cumulativeExpenditures}, #{r.originalPlannedComDate}, #{r.actualForecastComDate},
+             #{r.actualProgress}, #{r.revisedProgress}, #{r.originalProgress}, #{r.cipLocationDistrict}, #{r.cipLocationCommunity},
+             #{r.cipLocationPlot}, #{r.srcMunicipality}, #{r.municipalityCode}, #{r.contractorName}, #{r.startYear}, #{r.geomKind},
+             <include refid="g"/>, ST_PointOnSurface(<include refid="g"/>))
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertPermits">
+        INSERT INTO theme.dev_permit (permit_number, issuing_date, gisid, permit_status, project_status, project_completion_date,
+            delayed_status, delayed_variance_days, project_number, project_name, owner_type, registration_date, work_start_date,
+            expected_completion, land_use, zone, sector, plot_number, src_municipality, municipality_code, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.permitNumber}, #{r.issuingDate}, #{r.gisid}, #{r.permitStatus}, #{r.projectStatus}, #{r.projectCompletionDate},
+             #{r.delayedStatus}, #{r.delayedVarianceDays}, #{r.projectNumber}, #{r.projectName}, #{r.ownerType}, #{r.registrationDate},
+             #{r.workStartDate}, #{r.expectedCompletion}, #{r.landUse}, #{r.zone}, #{r.sector}, #{r.plotNumber}, #{r.srcMunicipality},
+             #{r.municipalityCode}, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertBuildingApplications">
+        INSERT INTO theme.dev_building_application (project_number, project_name, project_type, project_type_name, kind,
+            current_status, submission_date, zone, sector, plot_number, land_use_group, is_legalization, kpi_start_date,
+            kpi_end_date, last_status_date, duration_days, src_municipality, municipality_code)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.projectNumber}, #{r.projectName}, #{r.projectType}, #{r.projectTypeName}, #{r.kind}, #{r.currentStatus},
+             #{r.submissionDate}, #{r.zone}, #{r.sector}, #{r.plotNumber}, #{r.landUseGroup}, #{r.isLegalization}, #{r.kpiStartDate},
+             #{r.kpiEndDate}, #{r.lastStatusDate}, #{r.durationDays}, #{r.srcMunicipality}, #{r.municipalityCode})
+        </foreach>
+    </insert>
+
+    <insert id="insertCases">
+        INSERT INTO theme.ops_case (case_number, date_opened, date_closed, status, closed, sla_color, service_category,
+            service_name, category1, category2, case_type, area_en, entity, priority, channel, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.caseNumber}, #{r.dateOpened}, #{r.dateClosed}, #{r.status}, #{r.closed}, #{r.slaColor}, #{r.serviceCategory},
+             #{r.serviceName}, #{r.category1}, #{r.category2}, #{r.caseType}, #{r.areaEn}, #{r.entity}, #{r.priority}, #{r.channel},
+             <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertAccidents">
+        INSERT INTO theme.ops_accident (report_no, report_date, severity, accident_kind, report_kind, street, emirate, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.reportNo}, #{r.reportDate}, #{r.severity}, #{r.accidentKind}, #{r.reportKind}, #{r.street}, #{r.emirate},
+             <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertDistortions">
+        INSERT INTO theme.ops_distortion (issue_number, raised_on, closed_date, max_time_to_resolve, days_passed, status,
+            is_duplicate, is_awareness, converted_to_warning, converted_to_violation, within_sla, service_name, violation_name,
+            responsible_entity, org_id, service_center, zone_name, sector_name, plot_number, plot_gis_id, municipality_code, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.issueNumber}, #{r.raisedOn}, #{r.closedDate}, #{r.maxTimeToResolve}, #{r.daysPassed}, #{r.status},
+             #{r.isDuplicate}, #{r.isAwareness}, #{r.convertedToWarning}, #{r.convertedToViolation}, #{r.withinSla},
+             #{r.serviceName}, #{r.violationName}, #{r.responsibleEntity}, #{r.orgId}, #{r.serviceCenter}, #{r.zoneName},
+             #{r.sectorName}, #{r.plotNumber}, #{r.plotGisId}, #{r.municipalityCode}, <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertViolations">
+        INSERT INTO theme.ops_violation (issue_number, source, raised_on, closed_date, status, issue_status, current_activity,
+            is_duplicate, stage, fine_amount, received_amount, payment_status, violation_name, service_name, zone_name,
+            sector_name, plot_number, plot_gis_id, result, municipality_code, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.issueNumber}, #{r.source}, #{r.raisedOn}, #{r.closedDate}, #{r.status}, #{r.issueStatus}, #{r.currentActivity},
+             #{r.isDuplicate}, #{r.stage}, #{r.fineAmount}, #{r.receivedAmount}, #{r.paymentStatus}, #{r.violationName},
+             #{r.serviceName}, #{r.zoneName}, #{r.sectorName}, #{r.plotNumber}, #{r.plotGisId}, #{r.result}, #{r.municipalityCode},
+             <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertOccupancyCases">
+        INSERT INTO theme.ops_occupancy_case (issue_number, raised_on, closed_date, status, current_activity, is_urgent,
+            fine_amount, service_name, violation_name, zone_name, sector_name, plot_number, municipality_code, geom)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.issueNumber}, #{r.raisedOn}, #{r.closedDate}, #{r.status}, #{r.currentActivity}, #{r.isUrgent}, #{r.fineAmount},
+             #{r.serviceName}, #{r.violationName}, #{r.zoneName}, #{r.sectorName}, #{r.plotNumber}, #{r.municipalityCode},
+             <include refid="g"/>)
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertUnitStatuses">
+        INSERT INTO theme.mkt_unit_status (src_id, gisid, tawtheeq_building_id, tawtheeq_unit_id, unit_reg_num, unit_number,
+            floor_number, building_name, usage_type, classification, bedrooms, area_sqm, is_rented, blocked, municipality_code)
+        VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.srcId}, #{r.gisid}, #{r.tawtheeqBuildingId}, #{r.tawtheeqUnitId}, #{r.unitRegNum}, #{r.unitNumber},
+             #{r.floorNumber}, #{r.buildingName}, #{r.usageType}, #{r.classification}, #{r.bedrooms}, #{r.areaSqm},
+             #{r.isRented}, #{r.blocked}, #{r.municipalityCode})
+        </foreach>
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <!-- ============================== 空间归属 ============================== -->
+
+    <update id="linkGisid">
+        UPDATE theme.${table} x
+           SET plot_key = p.plot_key, community_key = p.community_key, district_key = p.district_key,
+               municipality_code = coalesce(p.municipality_code, x.municipality_code)
+          FROM theme.sp_plot p
+         WHERE x.plot_key IS NULL AND x.${col} IS NOT NULL AND p.plot_key = x.${col}
+    </update>
+
+    <!--
+      处理结果表的 plot_gis_id 是 numeric(10,0)，放不下 ADM 的 11 位 gisid，实际可能是 7 位 plot_id
+      （gisid = 市政前缀 1000 / 1001 / 1002 + plot_id；市政 + plot_id 唯一）。gisid 对不上时按 plot_id 再对一次：
+      有市政时同市政；没有市政时只认全表唯一的 plot_id。
+    -->
+    <update id="linkPlotId">
+        UPDATE theme.${table} x
+           SET plot_key = p.plot_key, community_key = p.community_key, district_key = p.district_key,
+               municipality_code = p.municipality_code
+          FROM theme.sp_plot p
+         WHERE x.plot_key IS NULL AND x.${col} IS NOT NULL AND length(x.${col}) &lt;= 8
+           AND p.cancel_date IS NULL AND p.plot_id = x.${col}
+           AND (p.municipality_code = x.municipality_code
+                OR (x.municipality_code IS NULL
+                    AND NOT EXISTS (SELECT 1 FROM theme.sp_plot q
+                                    WHERE q.plot_id = p.plot_id AND q.plot_key &lt;&gt; p.plot_key AND q.cancel_date IS NULL)))
+    </update>
+
+    <update id="linkZoneSectorPlot">
+        UPDATE theme.${table} x
+           SET plot_key = p.plot_key, community_key = p.community_key, district_key = p.district_key,
+               municipality_code = coalesce(p.municipality_code, x.municipality_code)
+          FROM (SELECT DISTINCT ON (municipality_code, z, s, n) municipality_code, z, s, n, plot_key, community_key, district_key
+                FROM (SELECT municipality_code, upper(trim(zone_tpss)) AS z, upper(trim(sector_tpss)) AS s,
+                             upper(trim(plot_number)) AS n, plot_key, community_key, district_key
+                      FROM theme.sp_plot
+                      WHERE cancel_date IS NULL AND zone_tpss IS NOT NULL AND sector_tpss IS NOT NULL AND plot_number IS NOT NULL) q
+                ORDER BY municipality_code, z, s, n, plot_key) p
+         WHERE x.plot_key IS NULL AND x.district_key IS NULL
+           AND x.${zone} IS NOT NULL AND x.${sector} IS NOT NULL AND x.${plot} IS NOT NULL
+           AND p.z = upper(trim(x.${zone})) AND p.s = upper(trim(x.${sector})) AND p.n = upper(trim(x.${plot}))
+           AND (x.municipality_code IS NULL OR p.municipality_code = x.municipality_code)
+    </update>
+
+    <!-- 位置：withPlot 为真时先落地块（表有 plot_key 列），再落社区、区域；只处理还没有区域的行 -->
+    <update id="linkLocation">
+        <if test="withPlot">
+        UPDATE theme.${table} x
+           SET plot_key = p.plot_key, community_key = p.community_key, district_key = p.district_key,
+               municipality_code = p.municipality_code
+          FROM theme.sp_plot p
+         WHERE x.district_key IS NULL AND x.${geom} IS NOT NULL AND p.cancel_date IS NULL
+           AND p.geom &amp;&amp; x.${geom} AND ST_Intersects(p.geom, x.${geom});
+        </if>
+        UPDATE theme.${table} x
+           SET community_key = c.community_key, district_key = c.district_key, municipality_code = c.municipality_code
+          FROM theme.sp_community c
+         WHERE x.district_key IS NULL AND x.${geom} IS NOT NULL
+           AND c.geom &amp;&amp; x.${geom} AND ST_Intersects(c.geom, x.${geom});
+        UPDATE theme.${table} x
+           SET district_key = d.district_key, municipality_code = d.municipality_code
+          FROM theme.sp_district d
+         WHERE x.district_key IS NULL AND x.${geom} IS NOT NULL
+           AND d.geom &amp;&amp; x.${geom} AND ST_Intersects(d.geom, x.${geom})
+    </update>
+
+    <update id="linkProjectsByDistrictName">
+        UPDATE theme.dev_capital_project x
+           SET district_key = d.district_key, municipality_code = d.municipality_code
+          FROM theme.sp_district d
+         WHERE x.district_key IS NULL AND x.cip_location_district IS NOT NULL
+           AND (upper(d.name_en) = upper(trim(x.cip_location_district))
+                OR upper(d.popular_name_en) = upper(trim(x.cip_location_district)))
+           AND (x.municipality_code IS NULL OR d.municipality_code = x.municipality_code)
+    </update>
+
+    <!-- 资本项目完工 / 延期标记（口径见 V22 列注释） -->
+    <update id="flagProjects">
+        UPDATE theme.dev_capital_project
+           SET completed = coalesce(status, '') ~* '(complet|closed)' OR coalesce(phase, '') ~* '(complet|closed)';
+        UPDATE theme.dev_capital_project
+           SET delayed = NOT completed
+                         AND (actual_forecast_com_date &gt; original_planned_com_date
+                              OR revised_progress - actual_progress &gt; 10)
+    </update>
+
+    <!-- 单元状态 → BDMS 单元：同市政同 unitid，且两边落在同一地块才认 -->
+    <update id="linkUnitStatuses">
+        UPDATE theme.mkt_unit_status x
+           SET unit_key = u.unit_key, building_key = u.building_key
+          FROM theme.sp_unit u
+         WHERE x.tawtheeq_unit_id IS NOT NULL AND x.municipality_code IS NOT NULL AND x.plot_key IS NOT NULL
+           AND u.unit_key = x.municipality_code || '-' || x.tawtheeq_unit_id AND u.plot_key = x.plot_key
+    </update>
+</mapper>

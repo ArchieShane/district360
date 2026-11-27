@@ -16,6 +16,8 @@ public enum SpaceLayer {
     MASTERPLANS(2000, 0.00001),
     /** 开发建设：在建工地面（要素 level = site）。 */
     SITES(5000, 0),
+    /** 开发建设：资本项目（要素 level = project；点，或面的面内一点；属性 st 状态、d 是否延期）。 */
+    PROJECTS(5000, 0),
     /** 城市运行：公交站台点（要素 level = busstop）。 */
     BUSSTOPS(5000, 0),
     /** 城市运行：路灯点（要素 level = streetlight）。 */

@@ -1,5 +1,6 @@
 package com.district360.common.theme.dev;
 
+import java.time.LocalDate;
 import java.math.BigDecimal;
 
 /**
@@ -71,5 +72,83 @@ public final class DevRows {
         public String description;
         public String municipalityCode;
         public String geomHex;
+    }
+
+    /** 资本项目（view_gsec_project_details，几何取 view_gsec_project_point，没有点时取 _polygon）。 */
+    public static class CapitalProject {
+        public String projectId;
+        public String projectName;
+        public String category;
+        public String phase;
+        public String status;
+        public String projectType;
+        public String dofNo;
+        public BigDecimal approvedBudget;
+        public BigDecimal cumulativeExpenditures;
+        public LocalDate originalPlannedComDate;
+        public LocalDate actualForecastComDate;
+        public BigDecimal actualProgress;
+        public BigDecimal revisedProgress;
+        public BigDecimal originalProgress;
+        public String cipLocationDistrict;
+        public String cipLocationCommunity;
+        public String cipLocationPlot;
+        public String srcMunicipality;
+        public String municipalityCode;
+        public String contractorName;
+        public Integer startYear;
+        /** point / polygon / null */
+        public String geomKind;
+        /** EPSG:4326 任意几何 */
+        public String geomHex;
+    }
+
+    /** 建设许可（view_emecs_dashboard），同一许可号取最新一行。 */
+    public static class Permit {
+        public String permitNumber;
+        public LocalDate issuingDate;
+        public String gisid;
+        public String permitStatus;
+        public String projectStatus;
+        public LocalDate projectCompletionDate;
+        public String delayedStatus;
+        public Integer delayedVarianceDays;
+        public String projectNumber;
+        public String projectName;
+        public String ownerType;
+        public LocalDate registrationDate;
+        public LocalDate workStartDate;
+        public String expectedCompletion;
+        public String landUse;
+        public String zone;
+        public String sector;
+        public String plotNumber;
+        public String srcMunicipality;
+        public String municipalityCode;
+        /** EPSG:4326 点 */
+        public String geomHex;
+    }
+
+    /** 建筑类申请：竣工证书、维修、拆除等（view_meps_cj_building_projects_dashboard）。 */
+    public static class BuildingApplication {
+        public String projectNumber;
+        public String projectName;
+        public String projectType;
+        public String projectTypeName;
+        /** completion / maintenance / demolition / other */
+        public String kind;
+        public String currentStatus;
+        public LocalDate submissionDate;
+        public String zone;
+        public String sector;
+        public String plotNumber;
+        public String landUseGroup;
+        public Boolean isLegalization;
+        public LocalDate kpiStartDate;
+        public LocalDate kpiEndDate;
+        public LocalDate lastStatusDate;
+        public Integer durationDays;
+        public String srcMunicipality;
+        public String municipalityCode;
     }
 }

@@ -23,4 +23,12 @@ public interface MktSink extends ThemeSink {
      * @param sourceTable 缺失的 ODS 源表全名
      */
     void sourceMissing(String themeTable, String sourceTable);
+
+    /** Tawtheeq 单元状态（业务视图 view_vw_tawtheeq_unit_status）。 */
+    default void unitStatus(MktRows.UnitStatus row) {
+    }
+
+    /** 源表存在但没有数据（业务视图）；写入端在表登记里记下「源表无数据」。 */
+    default void sourceEmpty(String themeTable, String sourceTable) {
+    }
 }

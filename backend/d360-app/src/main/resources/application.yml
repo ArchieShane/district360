@@ -54,9 +54,13 @@ d360:
   # ODS 源表位置：表全名 = <schema>.<table-prefix><表名>，例如 ods.ods_makani_udm_district
   #   fetch-size：流式读取每批行数；statement-timeout-seconds：单条 SQL 超时
   #   municipality-codes：ods_makani_uae_all_municipalities.municipalityid → 市政编码（只取阿布扎比三个市政）
+  #   view-schema / view-prefix：业务视图（view_xxx）的位置，表全名 = <view-schema>.<view-prefix><去掉 view_ 的视图名>，
+  #     例如 view_adda_cases → ods_pop_view.ods_pop_view_adda_cases（2026-11-27 起，从 pop 库迁到 makani_1119）
   ods:
     schema: ${D360_ODS_SCHEMA:ods}
     table-prefix: ${D360_ODS_TABLE_PREFIX:ods_}
+    view-schema: ${D360_ODS_VIEW_SCHEMA:ods_pop_view}
+    view-prefix: ${D360_ODS_VIEW_PREFIX:ods_pop_view_}
     fetch-size: 5000
     statement-timeout-seconds: 1800
     municipality-codes: { 101: ADM, 102: AAM, 103: WRM }

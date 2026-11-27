@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  主题库 · 业务视图读查询（V22）：资本项目、建设许可、建筑类申请、居民诉求、道路事故、视觉违规、违规处罚、住宅占用、
+  Tawtheeq 单元状态。${col} / ${dim} 只来自代码白名单，请求参数一律 #{}。
+
+  时间窗口：「近 12 个月」以该表全表最晚日期为锚（不按今天），快照滞后时也能出数；返回的 asOf 即锚定日期。
+  各项口径同 metric-lineage.yml 与 V22 迁移的列注释。
+-->
+<mapper namespace="com.district360.stat.mapper.ThemeBizQueryMapper">
+
+    <sql id="f"><if test="col != null">AND x.${col} = #{key}</if></sql>
+
+    <!-- 资本项目没有地块列：地块层级按地块所在社区 -->
+    <sql id="fp">
+        <choose>
+            <when test="col == 'plot_key'">AND x.community_key = (SELECT community_key FROM theme.sp_plot WHERE plot_key = #{key})</when>
+            <when test="col != null">AND x.${col} = #{key}</when>
+        </choose>
+    </sql>
+
+    <sql id="pct">CASE WHEN ${d} &gt; 0 THEN round(100.0 * ${n} / ${d}, 1) END</sql>
+
+    <!-- ============================== 资本项目 ============================== -->
+
+    <select id="projectSummary" resultType="java.util.LinkedHashMap">
+        SELECT count(*)                                                        AS "projects",
+               round(coalesce(sum(x.approved_budget), 0), 0)                   AS "budgetAed",
+               round(coalesce(sum(x.cumulative_expenditures), 0), 0)           AS "spentAed",
+               CASE WHEN sum(x.approved_budget) &gt; 0
+                    THEN round(100.0 * sum(x.cumulative_expenditures) / sum(x.approved_budget), 1) END AS "spentPct",
+               count(*) FILTER (WHERE x.completed)                             AS "completed",
+               count(*) FILTER (WHERE NOT coalesce(x.completed, false))        AS "ongoing",
+               count(*) FILTER (WHERE x.delayed)                               AS "delayed",
+               round(coalesce(sum(x.approved_budget) FILTER (WHERE x.delayed), 0), 0) AS "delayedBudgetAed",
+               count(*) FILTER (WHERE x.geom IS NOT NULL)                      AS "mapped"
+        FROM theme.dev_capital_project x
+        WHERE true <include refid="fp"/>
+    </select>
+
+    <select id="projectsBy" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(nullif(x.${dim}, ''), 'Unknown') AS "k", count(*) AS "n",
+               round(coalesce(sum(x.approved_budget), 0), 0) AS "budgetAed",
+               count(*) FILTER (WHERE x.delayed) AS "delayed"
+        FROM theme.dev_capital_project x
+        WHERE true <include refid="fp"/>
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 12
+    </select>
+
+    <select id="projects" resultType="java.util.LinkedHashMap">
+        SELECT x.project_id AS "projectId", x.project_name AS "name", x.category AS "category", x.phase AS "phase",
+               x.status AS "status", round(x.approved_budget, 0) AS "budgetAed", round(x.cumulative_expenditures, 0) AS "spentAed",
+               CASE WHEN x.approved_budget &gt; 0 THEN round(100.0 * x.cumulative_expenditures / x.approved_budget, 1) END AS "spentPct",
+               x.actual_progress AS "actualProgress", x.revised_progress AS "plannedProgress", x.original_progress AS "originalProgress",
+               x.original_planned_com_date AS "plannedEnd", x.actual_forecast_com_date AS "forecastEnd",
+               x.delayed AS "delayed", x.completed AS "completed", x.contractor_name AS "contractor",
+               x.district_key AS "districtKey", ST_X(x.centroid) AS "cx", ST_Y(x.centroid) AS "cy"
+        FROM theme.dev_capital_project x
+        WHERE true <include refid="fp"/>
+        ORDER BY x.delayed DESC NULLS LAST, x.approved_budget DESC NULLS LAST, x.project_id
+        LIMIT #{limit}
+    </select>
+
+    <!-- ============================== 建设许可 / 建筑类申请 ============================== -->
+
+    <sql id="permitActive">
+        coalesce(x.permit_status, '') !~* '(expir|cancel|revok|reject|closed|suspend)'
+        AND x.project_completion_date IS NULL AND coalesce(x.project_status, '') !~* 'complet'
+    </sql>
+
+    <select id="permitSummary" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT max(issuing_date) AS d FROM theme.dev_permit)
+        SELECT (SELECT d FROM a)                                               AS "asOf",
+               count(*)                                                        AS "permits",
+               count(*) FILTER (WHERE x.issuing_date &gt; (SELECT d FROM a) - interval '12 months') AS "newLast12m",
+               count(*) FILTER (WHERE x.issuing_date &gt; (SELECT d FROM a) - interval '6 months')  AS "newLast6m",
+               count(*) FILTER (WHERE x.issuing_date &gt; (SELECT d FROM a) - interval '12 months'
+                                  AND x.issuing_date &lt;= (SELECT d FROM a) - interval '6 months')  AS "newPrev6m",
+               count(*) FILTER (WHERE <include refid="permitActive"/>)          AS "inProgress",
+               count(*) FILTER (WHERE x.delayed_status ~* 'delay' AND x.delayed_variance_days &gt; 180) AS "stalled180"
+        FROM theme.dev_permit x
+        WHERE true <include refid="f"/>
+    </select>
+
+    <select id="permitsBy" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(nullif(x.${dim}, ''), 'Unknown') AS "k", count(*) AS "n"
+        FROM theme.dev_permit x
+        WHERE true <include refid="f"/>
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 12
+    </select>
+
+    <select id="applicationSummary" resultType="java.util.LinkedHashMap">
+        SELECT count(*)                                         AS "applications",
+               count(*) FILTER (WHERE x.kind = 'completion')    AS "completionCertificates",
+               count(*) FILTER (WHERE x.kind = 'maintenance')   AS "maintenancePermits",
+               count(*) FILTER (WHERE x.kind = 'demolition')    AS "demolitionPermits",
+               count(*) FILTER (WHERE x.kind = 'other')         AS "other"
+        FROM theme.dev_building_application x
+        WHERE true <include refid="f"/>
+    </select>
+
+    <select id="applicationTypes" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(x.project_type_name, 'Unknown') AS "k", max(x.kind) AS "kind", count(*) AS "n"
+        FROM theme.dev_building_application x
+        WHERE true <include refid="f"/>
+        GROUP BY 1 ORDER BY 3 DESC LIMIT 15
+    </select>
+
+    <!-- 近 12 个月每月维修 / 拆除申请（以全表最晚提交日所在月为最后一个月） -->
+    <select id="applicationsByMonth" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT date_trunc('month', max(submission_date))::date AS m FROM theme.dev_building_application),
+             months AS (SELECT generate_series((SELECT m FROM a) - interval '11 months', (SELECT m FROM a), interval '1 month')::date AS m)
+        SELECT to_char(months.m, 'YYYY-MM') AS "month",
+               count(x.*) FILTER (WHERE x.kind = 'maintenance') AS "maintenance",
+               count(x.*) FILTER (WHERE x.kind = 'demolition')  AS "demolition",
+               count(x.*) FILTER (WHERE x.kind = 'completion')  AS "completion"
+        FROM months
+        LEFT JOIN theme.dev_building_application x
+               ON date_trunc('month', x.submission_date) = months.m <include refid="f"/>
+        GROUP BY months.m ORDER BY months.m
+    </select>
+
+    <!-- 地块的许可与申请记录（原型地块 Permits &amp; certificates） -->
+    <select id="plotPermits" resultType="java.util.LinkedHashMap">
+        SELECT * FROM (
+            SELECT 'permit' AS "type", x.permit_number AS "number", x.project_name AS "name", x.permit_status AS "status",
+                   x.project_status AS "projectStatus", x.issuing_date AS "date", x.project_completion_date AS "completedOn"
+            FROM theme.dev_permit x WHERE x.plot_key = #{plot}
+            UNION ALL
+            SELECT x.kind, x.project_number, coalesce(x.project_type_name, x.project_name), x.current_status,
+                   NULL, x.submission_date, x.last_status_date
+            FROM theme.dev_building_application x WHERE x.plot_key = #{plot}
+        ) q
+        ORDER BY "date" DESC NULLS LAST
+        LIMIT #{limit}
+    </select>
+
+    <!-- ============================== 居民诉求 ============================== -->
+
+    <select id="caseSummary" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT max(date_opened)::date AS d FROM theme.ops_case)
+        SELECT (SELECT d FROM a)                                  AS "asOf",
+               count(*)                                           AS "cases12m",
+               count(*) FILTER (WHERE x.closed)                   AS "closed12m",
+               <include refid="pct"><property name="n" value="count(*) FILTER (WHERE x.closed)"/><property name="d" value="count(*)"/></include> AS "closedPct",
+               count(*) FILTER (WHERE x.closed AND x.sla_color IS NOT NULL) AS "slaRated",
+               <include refid="pct"><property name="n" value="count(*) FILTER (WHERE x.closed AND x.sla_color ~* 'green')"/><property name="d" value="count(*) FILTER (WHERE x.closed AND x.sla_color IS NOT NULL)"/></include> AS "slaPct",
+               avg(x.csat_score)                                  AS "csat"
+        FROM theme.ops_case x
+        WHERE x.date_opened &gt; (SELECT d FROM a) - interval '12 months' <include refid="f"/>
+    </select>
+
+    <select id="casesBy" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT max(date_opened)::date AS d FROM theme.ops_case)
+        SELECT coalesce(nullif(x.${dim}, ''), 'Unknown') AS "k", count(*) AS "n",
+               count(*) FILTER (WHERE x.closed) AS "closed"
+        FROM theme.ops_case x
+        WHERE x.date_opened &gt; (SELECT d FROM a) - interval '12 months' <include refid="f"/>
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+    </select>
+
+    <select id="casesByMonth" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT date_trunc('month', max(date_opened))::date AS m FROM theme.ops_case),
+             months AS (SELECT generate_series((SELECT m FROM a) - interval '11 months', (SELECT m FROM a), interval '1 month')::date AS m)
+        SELECT to_char(months.m, 'YYYY-MM') AS "month",
+               (SELECT count(*) FROM theme.ops_case x WHERE date_trunc('month', x.date_opened) = months.m <include refid="f"/>) AS "opened",
+               (SELECT count(*) FROM theme.ops_case x WHERE date_trunc('month', x.date_closed) = months.m <include refid="f"/>) AS "closed"
+        FROM months ORDER BY months.m
+    </select>
+
+    <!-- ============================== 道路事故 ============================== -->
+
+    <select id="accidentSummary" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT max(report_date)::date AS d FROM theme.ops_accident)
+        SELECT (SELECT d FROM a) AS "asOf", count(*) AS "accidents12m"
+        FROM theme.ops_accident x
+        WHERE x.report_date &gt; (SELECT d FROM a) - interval '12 months' <include refid="f"/>
+    </select>
+
+    <select id="accidentsBy" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT max(report_date)::date AS d FROM theme.ops_accident)
+        SELECT coalesce(nullif(x.${dim}, ''), 'Unknown') AS "k", count(*) AS "n"
+        FROM theme.ops_accident x
+        WHERE x.report_date &gt; (SELECT d FROM a) - interval '12 months' <include refid="f"/>
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+    </select>
+
+    <select id="accidentsByMonth" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT date_trunc('month', max(report_date))::date AS m FROM theme.ops_accident),
+             months AS (SELECT generate_series((SELECT m FROM a) - interval '11 months', (SELECT m FROM a), interval '1 month')::date AS m)
+        SELECT to_char(months.m, 'YYYY-MM') AS "month", count(x.*) AS "n"
+        FROM months
+        LEFT JOIN theme.ops_accident x ON date_trunc('month', x.report_date) = months.m <include refid="f"/>
+        GROUP BY months.m ORDER BY months.m
+    </select>
+
+    <!-- ============================== 视觉违规上报 ============================== -->
+
+    <select id="distortionSummary" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT max(raised_on)::date AS d FROM theme.ops_distortion)
+        SELECT (SELECT d FROM a)                                       AS "asOf",
+               count(*)                                                AS "reports12m",
+               count(*) FILTER (WHERE x.within_sla IS NOT NULL)        AS "slaRated",
+               <include refid="pct"><property name="n" value="count(*) FILTER (WHERE x.within_sla)"/><property name="d" value="count(*) FILTER (WHERE x.within_sla IS NOT NULL)"/></include> AS "slaFixedPct",
+               <include refid="pct"><property name="n" value="count(*) FILTER (WHERE x.is_duplicate)"/><property name="d" value="count(*)"/></include> AS "duplicatePct",
+               count(*) FILTER (WHERE x.converted_to_violation)        AS "convertedToViolation",
+               count(*) FILTER (WHERE x.closed_date IS NULL)           AS "open"
+        FROM theme.ops_distortion x
+        WHERE x.raised_on &gt; (SELECT d FROM a) - interval '12 months' <include refid="f"/>
+    </select>
+
+    <select id="distortionsBy" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT max(raised_on)::date AS d FROM theme.ops_distortion)
+        SELECT coalesce(nullif(x.${dim}, ''), 'Unknown') AS "k", count(*) AS "n",
+               <include refid="pct"><property name="n" value="count(*) FILTER (WHERE x.within_sla)"/><property name="d" value="count(*) FILTER (WHERE x.within_sla IS NOT NULL)"/></include> AS "slaFixedPct"
+        FROM theme.ops_distortion x
+        WHERE x.raised_on &gt; (SELECT d FROM a) - interval '12 months' <include refid="f"/>
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+    </select>
+
+    <select id="distortionsByMonth" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT date_trunc('month', max(raised_on))::date AS m FROM theme.ops_distortion),
+             months AS (SELECT generate_series((SELECT m FROM a) - interval '11 months', (SELECT m FROM a), interval '1 month')::date AS m)
+        SELECT to_char(months.m, 'YYYY-MM') AS "month", count(x.*) AS "reports",
+               count(x.*) FILTER (WHERE x.converted_to_violation) AS "convertedToViolation"
+        FROM months
+        LEFT JOIN theme.ops_distortion x ON date_trunc('month', x.raised_on) = months.m <include refid="f"/>
+        GROUP BY months.m ORDER BY months.m
+    </select>
+
+    <!-- ============================== 违规与处罚 ============================== -->
+
+    <select id="violationSummary" resultType="java.util.LinkedHashMap">
+        SELECT count(*)                                                 AS "violations",
+               count(*) FILTER (WHERE x.closed_date IS NULL)            AS "open",
+               count(*) FILTER (WHERE x.stage = 'awareness')            AS "awareness",
+               count(*) FILTER (WHERE x.stage = 'warning')              AS "warning",
+               count(*) FILTER (WHERE x.stage = 'fine')                 AS "fine",
+               round(coalesce(sum(x.fine_amount), 0), 0)               AS "fineAed",
+               round(coalesce(sum(x.received_amount), 0), 0)           AS "receivedAed",
+               CASE WHEN sum(x.fine_amount) &gt; 0 THEN round(100.0 * coalesce(sum(x.received_amount), 0) / sum(x.fine_amount), 1) END AS "collectionPct",
+               max(x.raised_on)::date                                   AS "asOf"
+        FROM theme.ops_violation x
+        WHERE NOT coalesce(x.is_duplicate, false) <include refid="f"/>
+    </select>
+
+    <select id="violationsBy" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(nullif(x.${dim}, ''), 'Unknown') AS "k", count(*) AS "n",
+               count(*) FILTER (WHERE x.closed_date IS NULL) AS "open",
+               round(coalesce(sum(x.fine_amount), 0), 0) AS "fineAed"
+        FROM theme.ops_violation x
+        WHERE NOT coalesce(x.is_duplicate, false) <include refid="f"/>
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+    </select>
+
+    <!-- ============================== 住宅占用 ============================== -->
+
+    <select id="occupancyCaseSummary" resultType="java.util.LinkedHashMap">
+        SELECT count(*) AS "cases", count(*) FILTER (WHERE x.closed_date IS NULL) AS "open",
+               count(*) FILTER (WHERE x.is_urgent) AS "urgent", round(coalesce(sum(x.fine_amount), 0), 0) AS "fineAed"
+        FROM theme.ops_occupancy_case x
+        WHERE true <include refid="f"/>
+    </select>
+
+    <select id="occupancyCasesBy" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(nullif(x.${dim}, ''), 'Unknown') AS "k", count(*) AS "n"
+        FROM theme.ops_occupancy_case x
+        WHERE true <include refid="f"/>
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+    </select>
+
+    <!-- 地块的视觉违规、违规、占用案件记录（原型地块三张列表） -->
+    <select id="plotOpsRecords" resultType="java.util.LinkedHashMap">
+        SELECT * FROM (
+            SELECT 'distortion' AS "type", x.issue_number AS "number", x.raised_on AS "raisedOn", x.closed_date AS "closedOn",
+                   x.status AS "status", coalesce(x.violation_name, x.service_name) AS "item", NULL::numeric AS "fineAed",
+                   x.within_sla AS "withinSla"
+            FROM theme.ops_distortion x WHERE x.plot_key = #{plot}
+            UNION ALL
+            SELECT 'violation', x.issue_number, x.raised_on, x.closed_date, coalesce(x.issue_status, x.status),
+                   coalesce(x.violation_name, x.service_name), x.fine_amount, NULL
+            FROM theme.ops_violation x WHERE x.plot_key = #{plot} AND NOT coalesce(x.is_duplicate, false)
+            UNION ALL
+            SELECT 'occupancy', x.issue_number, x.raised_on, x.closed_date, x.status,
+                   coalesce(x.current_activity, x.violation_name), x.fine_amount, NULL
+            FROM theme.ops_occupancy_case x WHERE x.plot_key = #{plot}
+        ) q
+        ORDER BY "raisedOn" DESC NULLS LAST
+        LIMIT #{limit}
+    </select>
+
+    <!-- ============================== Tawtheeq 单元状态（入住率） ============================== -->
+
+    <select id="occupancySummary" resultType="java.util.LinkedHashMap">
+        SELECT count(*)                                         AS "units",
+               count(*) FILTER (WHERE x.is_rented)              AS "rented",
+               count(*) FILTER (WHERE x.is_rented = false)      AS "vacant",
+               <include refid="pct"><property name="n" value="count(*) FILTER (WHERE x.is_rented)"/><property name="d" value="count(*) FILTER (WHERE x.is_rented IS NOT NULL)"/></include> AS "occupancyPct",
+               count(*) FILTER (WHERE x.blocked)                AS "blocked",
+               count(x.unit_key)                                AS "linkedUnits"
+        FROM theme.mkt_unit_status x
+        WHERE true <include refid="f"/>
+    </select>
+
+    <select id="occupancyBy" resultType="java.util.LinkedHashMap">
+        SELECT coalesce(nullif(x.${dim}, ''), 'Unknown') AS "k", count(*) AS "units",
+               count(*) FILTER (WHERE x.is_rented) AS "rented",
+               <include refid="pct"><property name="n" value="count(*) FILTER (WHERE x.is_rented)"/><property name="d" value="count(*) FILTER (WHERE x.is_rented IS NOT NULL)"/></include> AS "occupancyPct"
+        FROM theme.mkt_unit_status x
+        WHERE true <include refid="f"/>
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+    </select>
+
+    <!-- 楼层 / 单元的单元状态（只有对上 BDMS 单元的才有）：floor 给 floor_key，unit 给 unit_key -->
+    <select id="unitStatuses" resultType="java.util.LinkedHashMap">
+        SELECT u.unit_key AS "unitKey", u.unit_number AS "unitNumber", x.is_rented AS "isRented", x.blocked AS "blocked",
+               CASE WHEN x.blocked THEN 'blocked' WHEN x.is_rented THEN 'rented' WHEN x.is_rented = false THEN 'vacant' END AS "status",
+               x.usage_type AS "usageType", x.classification AS "classification", x.area_sqm AS "areaSqm"
+        FROM theme.mkt_unit_status x
+        JOIN theme.sp_unit u ON u.unit_key = x.unit_key
+        WHERE <choose><when test="floor != null">u.floor_key = #{floor}</when><otherwise>u.unit_key = #{unit}</otherwise></choose>
+        ORDER BY u.unit_number
+        LIMIT 500
+    </select>
+
+    <!-- ============================== 需关注区域：按区汇总 ============================== -->
+
+    <select id="watchProjects" resultType="java.util.LinkedHashMap">
+        SELECT x.district_key AS "key", count(*) FILTER (WHERE x.delayed) AS "delayed", count(*) AS "projects",
+               round(coalesce(sum(x.approved_budget) FILTER (WHERE x.delayed), 0), 0) AS "delayedBudgetAed"
+        FROM theme.dev_capital_project x
+        WHERE x.district_key IS NOT NULL <if test="municipality != null">AND x.municipality_code = #{municipality}</if>
+        GROUP BY 1
+    </select>
+
+    <select id="watchOccupancy" resultType="java.util.LinkedHashMap">
+        SELECT x.district_key AS "key", count(*) FILTER (WHERE x.is_rented IS NOT NULL) AS "units",
+               count(*) FILTER (WHERE x.is_rented) AS "rented"
+        FROM theme.mkt_unit_status x
+        WHERE x.district_key IS NOT NULL <if test="municipality != null">AND x.municipality_code = #{municipality}</if>
+        GROUP BY 1
+    </select>
+
+    <select id="watchDistortions" resultType="java.util.LinkedHashMap">
+        WITH a AS (SELECT max(raised_on)::date AS d FROM theme.ops_distortion)
+        SELECT x.district_key AS "key", count(*) FILTER (WHERE x.within_sla IS NOT NULL) AS "reports",
+               count(*) FILTER (WHERE x.within_sla) AS "fixed"
+        FROM theme.ops_distortion x
+        WHERE x.district_key IS NOT NULL AND x.raised_on &gt; (SELECT d FROM a) - interval '12 months'
+              <if test="municipality != null">AND x.municipality_code = #{municipality}</if>
+        GROUP BY 1
+    </select>
+
+    <!-- 各表行数（表登记），用于判断业务视图有没有数据 -->
+    <select id="tableRows" resultType="java.util.LinkedHashMap">
+        SELECT table_name AS "table", row_count AS "rows", note AS "note"
+        FROM theme.meta_table
+        WHERE table_name IN ('dev_capital_project', 'dev_permit', 'dev_building_application', 'ops_case', 'ops_accident',
+                             'ops_distortion', 'ops_violation', 'ops_occupancy_case', 'mkt_unit_status')
+    </select>
+</mapper>

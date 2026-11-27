@@ -27,4 +27,10 @@ public interface OdsMktMapper {
     void plotSales(@Param("t") OdsTables t, ResultHandler<MktRows.PlotTransaction> handler);
 
     void plotMortgages(@Param("t") OdsTables t, ResultHandler<MktRows.PlotTransaction> handler);
+
+    /** 表里是否有行。table 只来自 {@link OdsTables}，不来自请求。 */
+    @Select("SELECT EXISTS (SELECT 1 FROM ${table})")
+    boolean hasRows(@Param("table") String fullTableName);
+
+    void unitStatuses(@Param("t") OdsTables t, ResultHandler<MktRows.UnitStatus> handler);
 }

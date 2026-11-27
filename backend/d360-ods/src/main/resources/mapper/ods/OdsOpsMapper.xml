@@ -37,4 +37,208 @@
         FROM ${t.busStop}
         WHERE shape IS NOT NULL
     </select>
+
+    <!-- ===================== 业务视图（ods_pop_view），口径见 V22 迁移与 metric-lineage.yml ===================== -->
+
+    <!-- 居民诉求工单：同一工单号取最后修改的一行；经纬度是文本 -->
+    <select id="cases" resultType="com.district360.common.theme.ops.OpsRows$Case">
+        SELECT DISTINCT ON (s.case_number)
+               s.case_number                                     AS case_number,
+               s.date_opened                                     AS date_opened,
+               s.date_closed                                     AS date_closed,
+               <include refid="ods.common.txt"><property name="col" value="s.status"/></include> AS status,
+               (s.date_closed IS NOT NULL OR s.status ~* '(clos|resolv|complet)') AS closed,
+               <include refid="ods.common.txt"><property name="col" value="s.sla_color"/></include> AS sla_color,
+               <include refid="ods.common.txt"><property name="col" value="s.service_category"/></include> AS service_category,
+               <include refid="ods.common.txt"><property name="col" value="s.service_name"/></include> AS service_name,
+               <include refid="ods.common.txt"><property name="col" value="s.category1"/></include> AS category1,
+               <include refid="ods.common.txt"><property name="col" value="s.category2"/></include> AS category2,
+               <include refid="ods.common.txt"><property name="col" value="s.case_type"/></include> AS case_type,
+               <include refid="ods.common.txt"><property name="col" value="s.area_en"/></include> AS area_en,
+               <include refid="ods.common.txt"><property name="col" value="s.entity"/></include> AS entity,
+               <include refid="ods.common.txt"><property name="col" value="s.priority"/></include> AS priority,
+               <include refid="ods.common.txt"><property name="col" value="s.case_channel"/></include> AS channel,
+               <include refid="ods.common.xy"><property name="a" value="c.a"/><property name="b" value="c.b"/></include> AS geom_hex
+        FROM ${t.addaCases} s
+        CROSS JOIN LATERAL (SELECT <include refid="ods.common.fnum"><property name="col" value="s.latitude"/></include> AS a,
+                                   <include refid="ods.common.fnum"><property name="col" value="s.longitude"/></include> AS b) c
+        WHERE nullif(trim(s.case_number), '') IS NOT NULL
+        ORDER BY s.case_number, s.modified_date DESC NULLS LAST, s.row_id DESC NULLS LAST
+    </select>
+
+    <!-- 道路事故：编号 = 酋长国代码-年份-报告号；坐标优先 latitude / longitude，其次 iac_coordinate_x / y -->
+    <select id="accidents" resultType="com.district360.common.theme.ops.OpsRows$Accident">
+        SELECT DISTINCT ON (1)
+               concat_ws('-', s.pn_rep_emi_code, s.pn_rep_year, s.pn_rep_no) AS report_no,
+               coalesce(s.pd_rep_date::date + s.pd_rep_time::time, s.pd_rep_date) AS report_date,
+               <include refid="ods.common.txt"><property name="col" value="s.pv_fls_desc_en"/></include> AS severity,
+               <include refid="ods.common.txt"><property name="col" value="s.pv_acc_kind_desc_en"/></include> AS accident_kind,
+               <include refid="ods.common.txt"><property name="col" value="s.pv_rep_kind_desc_en"/></include> AS report_kind,
+               <include refid="ods.common.txt"><property name="col" value="s.pv_street_desc_en"/></include> AS street,
+               <include refid="ods.common.txt"><property name="col" value="s.pv_rep_emi_desc_en"/></include> AS emirate,
+               <include refid="ods.common.xy"><property name="a" value="c.a"/><property name="b" value="c.b"/></include> AS geom_hex
+        FROM ${t.accidents} s
+        CROSS JOIN LATERAL (SELECT coalesce(s.latitude, <include refid="ods.common.fnum"><property name="col" value="s.iac_coordinate_y"/></include>) AS a,
+                                   coalesce(s.longitude, <include refid="ods.common.fnum"><property name="col" value="s.iac_coordinate_x"/></include>) AS b) c
+        WHERE s.pn_rep_no IS NOT NULL
+        ORDER BY 1, s.etlinsertdate DESC NULLS LAST
+    </select>
+
+    <!-- 视觉违规上报：isdistortion 不为假；按期整改 = 已关闭且（关闭日 − 上报日）≤ maxtime2resolve；地块号经处理结果表 -->
+    <select id="distortions" resultType="com.district360.common.theme.ops.OpsRows$Distortion">
+        SELECT DISTINCT ON (s.issue_number)
+               s.issue_number                                    AS issue_number,
+               s.raised_on                                       AS raised_on,
+               s.closed_date                                     AS closed_date,
+               n.max_days                                        AS max_time_to_resolve,
+               <include refid="ods.common.num"><property name="col" value="s.days_passed"/></include> AS days_passed,
+               coalesce(<include refid="ods.common.txt"><property name="col" value="s.issue_status_english"/></include>,
+                        <include refid="ods.common.txt"><property name="col" value="s.status"/></include>) AS status,
+               <include refid="ods.common.flag"><property name="col" value="s.isduplicate"/></include> AS is_duplicate,
+               <include refid="ods.common.flag"><property name="col" value="s.isawareness"/></include> AS is_awareness,
+               <include refid="ods.common.flag"><property name="col" value="s.isconvertedtowarning"/></include> AS converted_to_warning,
+               <include refid="ods.common.flag"><property name="col" value="s.isconvertedtoviolation"/></include> AS converted_to_violation,
+               CASE WHEN n.max_days IS NULL OR s.raised_on IS NULL THEN NULL
+                    ELSE s.closed_date IS NOT NULL AND s.closed_date::date - s.raised_on::date &lt;= n.max_days END AS within_sla,
+               <include refid="ods.common.txt"><property name="col" value="s.service_name_english"/></include> AS service_name,
+               <include refid="ods.common.txt"><property name="col" value="s.violation_english"/></include> AS violation_name,
+               <include refid="ods.common.txt"><property name="col" value="s.organization"/></include> AS responsible_entity,
+               <include refid="ods.common.txt"><property name="col" value="s.org_id"/></include> AS org_id,
+               <include refid="ods.common.txt"><property name="col" value="s.service_center_english"/></include> AS service_center,
+               <include refid="ods.common.txt"><property name="col" value="s.zone_name_e"/></include> AS zone_name,
+               <include refid="ods.common.txt"><property name="col" value="s.sector_name_e"/></include> AS sector_name,
+               <include refid="ods.common.txt"><property name="col" value="s.plot_number"/></include> AS plot_number,
+               r.plot_gis_id                                     AS plot_gis_id,
+               <include refid="ods.common.muni"><property name="col" value="s.department_english"/></include> AS municipality_code,
+               <include refid="ods.common.xy"><property name="a" value="c.a"/><property name="b" value="c.b"/></include> AS geom_hex
+        FROM ${t.distortions} s
+        LEFT JOIN (<include refid="trx"/>) r ON r.application_number = s.issue_number
+        CROSS JOIN LATERAL (SELECT <include refid="ods.common.num"><property name="col" value="s.maxtime2resolve"/></include> AS max_days) n
+        CROSS JOIN LATERAL (SELECT coalesce(<include refid="ods.common.pair"><property name="col" value="s.latlongcoordinates"/><property name="i" value="1"/></include>,
+                                            <include refid="ods.common.pair"><property name="col" value="s.xy"/><property name="i" value="1"/></include>) AS a,
+                                   coalesce(<include refid="ods.common.pair"><property name="col" value="s.latlongcoordinates"/><property name="i" value="2"/></include>,
+                                            <include refid="ods.common.pair"><property name="col" value="s.xy"/><property name="i" value="2"/></include>) AS b) c
+        WHERE nullif(trim(s.issue_number), '') IS NOT NULL
+          AND coalesce(<include refid="ods.common.flag"><property name="col" value="s.isdistortion"/></include>, true)
+        ORDER BY s.issue_number, s.etlinsertdate DESC NULLS LAST
+    </select>
+
+    <!-- 处理结果表：每个申请号取最新一条的地块 gisid 与处理结果（application_number = issue_number，待数据到位后核实） -->
+    <sql id="trx">
+        SELECT DISTINCT ON (application_number)
+               application_number,
+               CASE WHEN plot_gis_id IS NOT NULL THEN plot_gis_id::bigint::text END AS plot_gis_id,
+               nullif(trim(result_e), '') AS result
+        FROM ${t.violationResults}
+        WHERE application_number IS NOT NULL
+        ORDER BY application_number, create_date DESC NULLS LAST
+    </sql>
+
+    <!-- 违规与处罚：view_ins_violations（isviolation 不为假），再补 UIS 里号码不重复的；阶段 fine &gt; warning &gt; awareness -->
+    <select id="violations" resultType="com.district360.common.theme.ops.OpsRows$Violation">
+        SELECT v.*,
+               CASE WHEN coalesce(v.fine_amount, 0) &gt; 0 OR v.converted_v THEN 'fine'
+                    WHEN v.warn THEN 'warning'
+                    WHEN v.aware THEN 'awareness' END AS stage
+        FROM (
+            SELECT DISTINCT ON (s.issue_number)
+                   s.issue_number                                AS issue_number,
+                   'ins'                                         AS source,
+                   s.raised_on                                   AS raised_on,
+                   s.closed_date                                 AS closed_date,
+                   <include refid="ods.common.txt"><property name="col" value="s.status"/></include> AS status,
+                   <include refid="ods.common.txt"><property name="col" value="s.issue_status_english"/></include> AS issue_status,
+                   <include refid="ods.common.txt"><property name="col" value="s.current_activity_english"/></include> AS current_activity,
+                   <include refid="ods.common.flag"><property name="col" value="s.isduplicate"/></include> AS is_duplicate,
+                   <include refid="ods.common.num"><property name="col" value="s.fine_amount"/></include> AS fine_amount,
+                   <include refid="ods.common.num"><property name="col" value="s.received_amount"/></include> AS received_amount,
+                   <include refid="ods.common.txt"><property name="col" value="s.payment_status"/></include> AS payment_status,
+                   <include refid="ods.common.txt"><property name="col" value="s.violation_english"/></include> AS violation_name,
+                   <include refid="ods.common.txt"><property name="col" value="s.service_name_english"/></include> AS service_name,
+                   <include refid="ods.common.txt"><property name="col" value="s.zone_name_e"/></include> AS zone_name,
+                   <include refid="ods.common.txt"><property name="col" value="s.sector_name_e"/></include> AS sector_name,
+                   <include refid="ods.common.txt"><property name="col" value="s.plot_number"/></include> AS plot_number,
+                   r.plot_gis_id                                 AS plot_gis_id,
+                   r.result                                      AS result,
+                   <include refid="ods.common.muni"><property name="col" value="s.department_english"/></include> AS municipality_code,
+                   <include refid="ods.common.xy"><property name="a" value="c.a"/><property name="b" value="c.b"/></include> AS geom_hex,
+                   coalesce(<include refid="ods.common.flag"><property name="col" value="s.isconvertedtoviolation"/></include>, false) AS converted_v,
+                   coalesce(<include refid="ods.common.flag"><property name="col" value="s.iswarning"/></include>, false)
+                       OR coalesce(<include refid="ods.common.flag"><property name="col" value="s.isconvertedtowarning"/></include>, false) AS warn,
+                   coalesce(<include refid="ods.common.flag"><property name="col" value="s.isawareness"/></include>, false) AS aware
+            FROM ${t.violations} s
+            LEFT JOIN (<include refid="trx"/>) r ON r.application_number = s.issue_number
+            CROSS JOIN LATERAL (SELECT coalesce(<include refid="ods.common.pair"><property name="col" value="s.latlongcoordinates"/><property name="i" value="1"/></include>,
+                                                <include refid="ods.common.pair"><property name="col" value="s.xy"/><property name="i" value="1"/></include>) AS a,
+                                       coalesce(<include refid="ods.common.pair"><property name="col" value="s.latlongcoordinates"/><property name="i" value="2"/></include>,
+                                                <include refid="ods.common.pair"><property name="col" value="s.xy"/><property name="i" value="2"/></include>) AS b) c
+            WHERE nullif(trim(s.issue_number), '') IS NOT NULL
+              AND coalesce(<include refid="ods.common.flag"><property name="col" value="s.isviolation"/></include>, true)
+            ORDER BY s.issue_number, s.etlinsertdate DESC NULLS LAST
+        ) v
+    </select>
+
+    <!-- UIS 违规：只取 view_ins_violations 里没有的号（UIS 视图的金额、状态多为空或整数编码） -->
+    <select id="violationsUis" resultType="com.district360.common.theme.ops.OpsRows$Violation">
+        SELECT DISTINCT ON (s.issue_number)
+               s.issue_number                                    AS issue_number,
+               'uis'                                             AS source,
+               s.raised_on                                       AS raised_on,
+               <include refid="ods.common.txt"><property name="col" value="s.issue_status_english"/></include> AS issue_status,
+               <include refid="ods.common.flag"><property name="col" value="s.isduplicate"/></include> AS is_duplicate,
+               CASE WHEN coalesce(s.fine_amount, 0) &gt; 0
+                         OR coalesce(<include refid="ods.common.flag"><property name="col" value="s.isconvertedtoviolation"/></include>, false) THEN 'fine'
+                    WHEN coalesce(<include refid="ods.common.flag"><property name="col" value="s.iswarning"/></include>, false)
+                         OR coalesce(<include refid="ods.common.flag"><property name="col" value="s.isconvertedtowarning"/></include>, false) THEN 'warning'
+                    WHEN coalesce(<include refid="ods.common.flag"><property name="col" value="s.isawareness"/></include>, false) THEN 'awareness' END AS stage,
+               <include refid="ods.common.num"><property name="col" value="s.fine_amount"/></include> AS fine_amount,
+               <include refid="ods.common.num"><property name="col" value="s.received_amount"/></include> AS received_amount,
+               <include refid="ods.common.txt"><property name="col" value="s.violation_english"/></include> AS violation_name,
+               <include refid="ods.common.txt"><property name="col" value="s.service_name_english"/></include> AS service_name,
+               <include refid="ods.common.txt"><property name="col" value="s.zone_name_e"/></include> AS zone_name,
+               <include refid="ods.common.txt"><property name="col" value="s.sector_name_e"/></include> AS sector_name,
+               <include refid="ods.common.txt"><property name="col" value="s.plot_number"/></include> AS plot_number,
+               r.plot_gis_id                                     AS plot_gis_id,
+               r.result                                          AS result,
+               <include refid="ods.common.muni"><property name="col" value="s.department_english"/></include> AS municipality_code,
+               <include refid="ods.common.xy"><property name="a" value="c.a"/><property name="b" value="c.b"/></include> AS geom_hex
+        FROM ${t.violationsUis} s
+        LEFT JOIN (<include refid="trx"/>) r ON r.application_number = s.issue_number
+        CROSS JOIN LATERAL (SELECT coalesce(<include refid="ods.common.pair"><property name="col" value="s.latlongcoordinates"/><property name="i" value="1"/></include>,
+                                            <include refid="ods.common.pair"><property name="col" value="s.xy"/><property name="i" value="1"/></include>) AS a,
+                                   coalesce(<include refid="ods.common.pair"><property name="col" value="s.latlongcoordinates"/><property name="i" value="2"/></include>,
+                                            <include refid="ods.common.pair"><property name="col" value="s.xy"/><property name="i" value="2"/></include>) AS b) c
+        WHERE nullif(trim(s.issue_number), '') IS NOT NULL
+          AND coalesce(<include refid="ods.common.flag"><property name="col" value="s.isviolation"/></include>, true)
+          AND NOT EXISTS (SELECT 1 FROM ${t.violations} x WHERE x.issue_number = s.issue_number)
+        ORDER BY s.issue_number, s.etlinsertdate DESC NULLS LAST
+    </select>
+
+    <!-- 住宅占用（超员）案件：view_ins_survey，issurvey 不为假 -->
+    <select id="occupancyCases" resultType="com.district360.common.theme.ops.OpsRows$OccupancyCase">
+        SELECT DISTINCT ON (s.issue_number)
+               s.issue_number                                    AS issue_number,
+               s.raised_on                                       AS raised_on,
+               s.closed_date                                     AS closed_date,
+               coalesce(<include refid="ods.common.txt"><property name="col" value="s.issue_status_english"/></include>,
+                        <include refid="ods.common.txt"><property name="col" value="s.status"/></include>) AS status,
+               <include refid="ods.common.txt"><property name="col" value="s.current_activity_english"/></include> AS current_activity,
+               <include refid="ods.common.flag"><property name="col" value="s.isurgent"/></include> AS is_urgent,
+               <include refid="ods.common.num"><property name="col" value="s.fine_amount"/></include> AS fine_amount,
+               <include refid="ods.common.txt"><property name="col" value="s.service_name_english"/></include> AS service_name,
+               <include refid="ods.common.txt"><property name="col" value="s.violation_english"/></include> AS violation_name,
+               <include refid="ods.common.txt"><property name="col" value="s.zone_name_e"/></include> AS zone_name,
+               <include refid="ods.common.txt"><property name="col" value="s.sector_name_e"/></include> AS sector_name,
+               <include refid="ods.common.txt"><property name="col" value="s.plot_number"/></include> AS plot_number,
+               <include refid="ods.common.muni"><property name="col" value="s.department_english"/></include> AS municipality_code,
+               <include refid="ods.common.xy"><property name="a" value="c.a"/><property name="b" value="c.b"/></include> AS geom_hex
+        FROM ${t.occupancySurvey} s
+        CROSS JOIN LATERAL (SELECT coalesce(<include refid="ods.common.pair"><property name="col" value="s.latlongcoordinates"/><property name="i" value="1"/></include>,
+                                            <include refid="ods.common.pair"><property name="col" value="s.xy"/><property name="i" value="1"/></include>) AS a,
+                                   coalesce(<include refid="ods.common.pair"><property name="col" value="s.latlongcoordinates"/><property name="i" value="2"/></include>,
+                                            <include refid="ods.common.pair"><property name="col" value="s.xy"/><property name="i" value="2"/></include>) AS b) c
+        WHERE nullif(trim(s.issue_number), '') IS NOT NULL
+          AND coalesce(<include refid="ods.common.flag"><property name="col" value="s.issurvey"/></include>, true)
+        ORDER BY s.issue_number, s.etlinsertdate DESC NULLS LAST
+    </select>
 </mapper>

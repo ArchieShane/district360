@@ -115,4 +115,23 @@ public final class MktRows {
         public LocalDate txnDate;
         public String projectName;
     }
+
+    /** Tawtheeq 单元状态（view_vw_tawtheeq_unit_status），一行一个单元；不含任何个人信息。 */
+    public static class UnitStatus {
+        public Long srcId;
+        public String gisid;
+        public Long tawtheeqBuildingId;
+        public Long tawtheeqUnitId;
+        public String unitRegNum;
+        public String unitNumber;
+        public String floorNumber;
+        public String buildingName;
+        public String usageType;
+        public String classification;
+        public Integer bedrooms;
+        public BigDecimal areaSqm;
+        public Boolean isRented;
+        public Boolean blocked;
+        public String municipalityCode;
+    }
 }

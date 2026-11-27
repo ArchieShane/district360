@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  ODS 取数的公共片段（业务视图 ods_pop_view 用）：业务视图多为 text 列，格式没有约定，这里统一做「不合法就当空」的转换，
+  不让一行脏数据让整次抽取失败。其他 mapper 用 <include refid="ods.common.xxx"> 引用。
+-->
+<mapper namespace="ods.common">
+
+    <!-- 去空白，空串当 null -->
+    <sql id="txt">nullif(trim(${col}::text), '')</sql>
+
+    <!-- 数值：只认 [-]123[.45]，千分位逗号先去掉；其他当 null -->
+    <sql id="num">
+        CASE WHEN replace(trim(${col}::text), ',', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             THEN replace(trim(${col}::text), ',', '')::numeric END
+    </sql>
+
+    <!-- 是 / 否：1 / Y / Yes / True / T 为真，0 / N / No / False / F 为假，其他当 null -->
+    <sql id="flag">
+        CASE WHEN lower(trim(${col}::text)) IN ('1', 'y', 'yes', 'true', 't') THEN true
+             WHEN lower(trim(${col}::text)) IN ('0', 'n', 'no', 'false', 'f') THEN false END
+    </sql>
+
+    <!-- 市政名称 → 市政编码（Abu Dhabi / Al Ain / Al Dhafra，旧称 Western Region）；只作为 zone + sector + 地块号匹配时的辅助 -->
+    <sql id="muni">
+        CASE WHEN ${col} ILIKE '%ain%' THEN 'AAM'
+             WHEN ${col} ILIKE '%dhafra%' OR ${col} ILIKE '%western%' OR ${col} ILIKE '%gharbia%' THEN 'WRM'
+             WHEN ${col} ILIKE '%abu%dhabi%' OR ${col} ILIKE '%capital%' THEN 'ADM' END
+    </sql>
+
+    <!--
+      两个数 a、b → EPSG:4326 点的 EWKB hex。按数值范围判断：经纬度（纬度 22–27、经度 51–57，先后都认）
+      或 UTM 40N（x 10 万–90 万、y 240 万–290 万，先后都认，转 4326）；都不像时为 null（记录照常写入，只是没有位置）。
+    -->
+    <sql id="xy">
+        encode(ST_AsEWKB(CASE
+            WHEN ${a} BETWEEN 22 AND 27 AND ${b} BETWEEN 51 AND 57 THEN ST_SetSRID(ST_MakePoint(${b}, ${a}), 4326)
+            WHEN ${b} BETWEEN 22 AND 27 AND ${a} BETWEEN 51 AND 57 THEN ST_SetSRID(ST_MakePoint(${a}, ${b}), 4326)
+            WHEN ${a} BETWEEN 100000 AND 900000 AND ${b} BETWEEN 2400000 AND 2900000
+                 THEN ST_Transform(ST_SetSRID(ST_MakePoint(${a}, ${b}), 32640), 4326)
+            WHEN ${b} BETWEEN 100000 AND 900000 AND ${a} BETWEEN 2400000 AND 2900000
+                 THEN ST_Transform(ST_SetSRID(ST_MakePoint(${b}, ${a}), 32640), 4326)
+        END), 'hex')
+    </sql>
+
+    <!-- 「lat,long」「x y」这类一个文本里两个数：取第 i 个数（1 或 2），没有时为 null -->
+    <sql id="pair">
+        (regexp_match(${col}, '(-?[0-9]+(?:\.[0-9]+)?)[^0-9.-]+(-?[0-9]+(?:\.[0-9]+)?)'))[${i}]::float8
+    </sql>
+
+    <!-- 单个数值文本 → float8，不合法为 null -->
+    <sql id="fnum">
+        CASE WHEN trim(${col}::text) ~ '^-?[0-9]+(\.[0-9]+)?$' THEN trim(${col}::text)::float8 END
+    </sql>
+</mapper>
