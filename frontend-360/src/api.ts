@@ -9,7 +9,7 @@
 const BASE = import.meta.env.VITE_API_BASE || 'api/v2/space'
 
 export type Level = 'emirate' | 'municipality' | 'district' | 'community' | 'plot' | 'building' | 'floor' | 'unit'
-export type Layer = 'municipalities' | 'districts' | 'communities' | 'plots' | 'buildings' | 'floors' | 'units' | 'masterplans' | 'sites' | 'busstops' | 'streetlights' | 'facilities'
+export type Layer = 'municipalities' | 'districts' | 'communities' | 'plots' | 'buildings' | 'floors' | 'units' | 'masterplans' | 'sites' | 'projects' | 'busstops' | 'streetlights' | 'facilities'
 
 /** 开发建设页签（GET /nodes/{level}/{key}/dev）。scope 为实际统计范围：建筑及以下按所在地块；没有地块时为 null */
 export interface DevSummary {
@@ -86,7 +86,69 @@ export interface DevView {
   masterPlans?: DevMasterPlan[]
   sites?: DevSite[]
   plotControls?: DevPlotControl[]
+  capitalProjects?: CapitalProjects
+  permits?: Permits
+  sources?: Sources
 }
+
+/** 业务视图各主题表的数据状态：rows 为 0 时 note 说明原因（如「ODS 源表无数据：…」），页面显示待接入而不是 0 */
+export type Sources = Record<string, { rows: number; note?: string | null } | null>
+
+/** 一组计数（k 为原值） */
+export interface KN { k: string; n: number }
+
+/** 资本项目汇总（GSEC）。延期：未完工且预测完工晚于原计划，或实际进度落后修订计划 10 个百分点以上 */
+export interface ProjectSummary {
+  projects: number; budgetAed: number; spentAed: number; spentPct?: number | null
+  completed: number; ongoing: number; delayed: number; delayedBudgetAed: number; mapped: number
+}
+export interface CapitalProject {
+  projectId: string; name?: string; category?: string; phase?: string; status?: string
+  budgetAed?: number; spentAed?: number; spentPct?: number | null
+  actualProgress?: number | null; plannedProgress?: number | null; originalProgress?: number | null
+  plannedEnd?: string | null; forecastEnd?: string | null; delayed?: boolean | null; completed?: boolean | null
+  contractor?: string | null; districtKey?: string | null; cx?: number | null; cy?: number | null
+}
+export interface CapitalProjects {
+  summary?: ProjectSummary
+  byStatus?: (KN & { budgetAed: number; delayed: number })[]
+  byCategory?: (KN & { budgetAed: number; delayed: number })[]
+  byPhase?: (KN & { budgetAed: number; delayed: number })[]
+  items?: CapitalProject[]
+}
+
+/** 建设许可（EMECS）与建筑类申请（MEPS）。近 12 / 6 个月以该表最晚签发日 asOf 为锚 */
+export interface PermitSummary {
+  asOf?: string | null; permits: number; newLast12m: number; newLast6m: number; newPrev6m: number; inProgress: number; stalled180: number
+}
+export interface Permits {
+  summary?: PermitSummary
+  byStatus?: KN[]
+  applications?: { applications: number; completionCertificates: number; maintenancePermits: number; demolitionPermits: number; other: number }
+  applicationTypes?: (KN & { kind: string })[]
+  applicationsByMonth?: { month: string; maintenance: number; demolition: number; completion: number }[]
+  /** 仅地块：本地块的许可（type=permit）与申请（completion / maintenance / demolition / other） */
+  plotRecords?: { type: string; number?: string; name?: string; status?: string; projectStatus?: string; date?: string; completedOn?: string }[]
+}
+
+/** Tawtheeq 单元状态（入住率） */
+export interface OccupancySummary { units: number; rented: number; vacant: number; occupancyPct?: number | null; blocked: number; linkedUnits: number }
+export interface Occupancy {
+  summary?: OccupancySummary
+  byUsage?: { k: string; units: number; rented: number; occupancyPct?: number | null }[]
+  byClassification?: { k: string; units: number; rented: number; occupancyPct?: number | null }[]
+  /** 仅楼层 / 单元：对上 BDMS 的单元状态 */
+  units?: { unitKey: string; unitNumber?: string; isRented?: boolean | null; blocked?: boolean | null; status?: 'rented' | 'vacant' | 'blocked' | null
+    usageType?: string; classification?: string; areaSqm?: number }[]
+}
+
+/** 城市运行业务视图汇总（近 12 个月以该表最晚日期 asOf 为锚） */
+export interface CaseSummary { asOf?: string | null; cases12m: number; closed12m: number; closedPct?: number | null; slaRated: number; slaPct?: number | null; csat?: number | null }
+export interface AccidentSummary { asOf?: string | null; accidents12m: number }
+export interface DistortionSummary { asOf?: string | null; reports12m: number; slaRated: number; slaFixedPct?: number | null; duplicatePct?: number | null; convertedToViolation: number; open: number }
+export interface ViolationSummary { violations: number; open: number; awareness: number; warning: number; fine: number; fineAed: number; receivedAed: number; collectionPct?: number | null; asOf?: string | null }
+export interface OccupancyCaseSummary { cases: number; open: number; urgent: number; fineAed: number }
+export interface OpsRecord { type: 'distortion' | 'violation' | 'occupancy'; number?: string; raisedOn?: string; closedOn?: string | null; status?: string; item?: string; fineAed?: number | null; withinSla?: boolean | null }
 
 export const LEVELS: Level[] = ['emirate', 'municipality', 'district', 'community', 'plot', 'building', 'floor', 'unit']
 
@@ -165,6 +227,8 @@ export interface MktView {
   adrec?: { sales: number; salesValue: number; salesRatePerSqm?: number; mortgages: number; mortgagesValue: number;
     rents: number; rentsAnnualValue: number; plotTransactions: number }
   adrecByMonth?: { m: string; sales: number; mortgages: number; rents: number }[]
+  occupancy?: Occupancy
+  sources?: Sources
 }
 
 /** 城市运行页签（GET /nodes/{level}/{key}/ops）。地块及以下按所在社区统计 */
@@ -174,6 +238,15 @@ export interface OpsView {
   lightsByStatus?: { k: string; n: number; lamps: number }[]
   lightsByLampType?: { k: string; n: number; lamps: number }[]
   busStops?: { stopId: string; name?: string; nameAr?: string; platforms: number; codes?: string; cx?: number; cy?: number }[]
+  cases?: { summary?: CaseSummary; byCategory?: (KN & { closed: number })[]; byType?: (KN & { closed: number })[]; byMonth?: { month: string; opened: number; closed: number }[] }
+  accidents?: { summary?: AccidentSummary; bySeverity?: KN[]; byKind?: KN[]; byMonth?: { month: string; n: number }[] }
+  distortions?: { summary?: DistortionSummary; byService?: (KN & { slaFixedPct?: number | null })[]; byEntity?: (KN & { slaFixedPct?: number | null })[]
+    byMonth?: { month: string; reports: number; convertedToViolation: number }[] }
+  violations?: { summary?: ViolationSummary; byService?: (KN & { open: number; fineAed: number })[]; byItem?: (KN & { open: number; fineAed: number })[] }
+  occupancyCases?: { summary?: OccupancyCaseSummary; byStage?: KN[] }
+  /** 仅地块及以下：本地块的视觉违规、违规、占用案件记录 */
+  plotRecords?: OpsRecord[]
+  sources?: Sources
 }
 
 export type AstCategory = 'school' | 'medical' | 'pharmacy' | 'mosque' | 'park'
@@ -383,6 +456,15 @@ export interface WatchItem {
   shareOf?: string
   areaHa?: number
   needHa?: number
+  /** prj：项目数、延期项目预算 */
+  projects?: number
+  delayedBudgetAed?: number
+  /** occ：有状态的单元、已租 */
+  units?: number
+  rented?: number
+  /** vio：有时限的上报、按期整改 */
+  reports?: number
+  fixed?: number
 }
 
 export interface WatchDistrict {
@@ -425,6 +507,8 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!res.ok || !body || body.code !== 0) {
     throw new Error(body?.message || `请求失败：${res.status}`)
   }
+  // 仅开发：?mock=biz 时给业务视图填示例数据（源表还没导入时检查页面用，不进生产包）
+  if (import.meta.env.DEV && location.search.includes('mock=biz')) return (await import('./mock')).mockBiz(path, body.data) as T
   return body.data
 }
 

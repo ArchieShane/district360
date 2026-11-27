@@ -2,7 +2,8 @@
 import { computed, shallowRef, watch } from 'vue'
 import { api, type Meta, type MktView, type NodeDetail } from '../api'
 import { num } from '../format'
-import { colorOf, LEVEL_NAME, TENANCY_STATUS } from '../labels'
+import { colorOf, LEVEL_NAME, TENANCY_STATUS, UNIT_STATUS } from '../labels'
+import SrcPending from './SrcPending.vue'
 
 /**
  * 市场页签（ods-mkt）：Tawtheeq 租约（状态、户型、物业用途、逐年新签、租金中位数、地块租约明细），
@@ -39,6 +40,17 @@ const scopeNote = computed(() => {
 const adrecNotes = computed(() => (props.meta?.tables ?? []).filter(x => x.theme === '市场' && x.table !== 'mkt_tenancy' && x.note))
 const a = computed(() => mkt.value?.adrec)
 const hasAdrec = computed(() => !!a.value && (a.value.sales + a.value.mortgages + a.value.rents + a.value.plotTransactions) > 0)
+/** 入住率（Tawtheeq 单元状态）：已租 ÷ 有状态的单元；楼层 / 单元层级另列单元状态 */
+const occ = computed(() => mkt.value?.occupancy)
+const os = computed(() => occ.value?.summary)
+const hasOcc = computed(() => !!mkt.value?.sources?.mkt_unit_status?.rows)
+const occParts = computed(() => {
+  const s = os.value
+  if (!s) return []
+  const other = Math.max(0, s.units - s.rented - s.vacant)
+  return [{ k: 'rented', n: s.rented }, { k: 'vacant', n: s.vacant }, { k: 'unknown', n: other }]
+    .map(x => ({ ...x, n2: UNIT_STATUS[x.k]?.n ?? '无状态', c: UNIT_STATUS[x.k]?.c ?? '#3A3F48' })).filter(x => x.n > 0)
+})
 const big = (v: number | undefined) => !v ? '0' : v >= 1e9 ? num(v / 1e9, 2) + 'B' : v >= 1e6 ? num(v / 1e6, 1) + 'M' : v >= 1e3 ? num(v / 1e3, 0) + 'K' : num(v)
 </script>
 
@@ -47,6 +59,40 @@ const big = (v: number | undefined) => !v ? '0' : v >= 1e9 ? num(v / 1e9, 2) + '
   <section v-else-if="!mkt" class="card muted"><p>加载中…</p></section>
   <section v-else-if="!mkt.scope" class="card muted"><p>该建筑没有对应的地块，没有租约与交易数据。</p></section>
   <template v-else>
+    <section class="card" :class="{ muted: !hasOcc }" :style="{ order: hasOcc ? 0 : 1 }">
+      <h2>入住率<span class="src">theme.mkt_unit_status</span></h2>
+      <SrcPending :sources="mkt.sources" :tables="['mkt_unit_status']" />
+      <template v-if="hasOcc && os">
+        <p v-if="scopeNote" style="margin:-.2rem 0 .5rem">{{ scopeNote }}</p>
+        <div class="nums">
+          <div><b :class="{ bad: os.occupancyPct != null && os.occupancyPct < 80 }">{{ os.occupancyPct ?? '—' }}<small v-if="os.occupancyPct != null">%</small></b><span>入住率</span></div>
+          <div><b>{{ num(os.rented) }}</b><span>已租单元</span></div>
+          <div><b>{{ num(os.units) }}</b><span>单元（Tawtheeq）</span></div>
+        </div>
+        <div class="stack"><i v-for="x in occParts" :key="x.k" :style="{ flex: x.n, background: x.c }" /></div>
+        <div class="keys">
+          <span v-for="x in occParts" :key="x.k"><i class="sw" :style="{ background: x.c }" />{{ x.n2 }}<b>{{ num(x.n) }}</b></span>
+          <span v-if="os.blocked"><i class="sw" :style="{ background: UNIT_STATUS.blocked.c }" />其中冻结<b>{{ num(os.blocked) }}</b></span>
+        </div>
+        <template v-if="occ?.byUsage?.length">
+          <div class="sub">按用途</div>
+          <div class="rows" style="--cols: minmax(0,1fr) 3.6rem 3.6rem 4.4rem; max-height: 14rem; overflow: auto">
+            <div class="row hd"><span>用途</span><span>单元</span><span>已租</span><span>入住率</span></div>
+            <div v-for="x in occ.byUsage" :key="x.k" class="row"><span>{{ x.k }}</span><span>{{ num(x.units) }}</span><span>{{ num(x.rented) }}</span><span>{{ x.occupancyPct != null ? x.occupancyPct + '%' : '—' }}</span></div>
+          </div>
+        </template>
+        <template v-if="occ?.units?.length">
+          <div class="sub">单元状态</div>
+          <div class="ugrid">
+            <span v-for="u in occ.units" :key="u.unitKey" :title="`${u.unitNumber ?? u.unitKey} · ${UNIT_STATUS[u.status ?? '']?.n ?? '无状态'}${u.usageType ? ' · ' + u.usageType : ''}`"
+                  :style="{ background: UNIT_STATUS[u.status ?? '']?.c ?? '#3A3F48' }">{{ u.unitNumber }}</span>
+          </div>
+        </template>
+        <p v-else-if="node.level === 'floor' || node.level === 'unit'" style="margin-top:.5rem">本{{ LEVEL_NAME[node.level] }}的单元对不上 Tawtheeq 单元状态（编号是否同一套待确认）。</p>
+        <p style="margin-top:.5rem">入住率 = 已租 ÷ 有状态（已租 / 空置）的单元；对上 BDMS 单元：{{ num(os.linkedUnits) }}。</p>
+      </template>
+    </section>
+
     <section class="card">
       <h2>租赁 · Tawtheeq<span class="src">theme.mkt_tenancy</span></h2>
       <p v-if="scopeNote" style="margin:-.2rem 0 .5rem">{{ scopeNote }}</p>
@@ -136,3 +182,9 @@ const big = (v: number | undefined) => !v ? '0' : v >= 1e9 ? num(v / 1e9, 2) + '
     </section>
   </template>
 </template>
+
+<style scoped>
+.nums b.bad { color: #FF8A8A }
+.ugrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); gap: .25rem; margin-top: .3rem }
+.ugrid span { padding: .2rem 0; border-radius: .2rem; text-align: center; font-size: .66rem; color: #0E1116; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+</style>

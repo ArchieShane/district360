@@ -73,10 +73,10 @@ let hovered: { src: string; id: number } | null = null
 let resizeObs: ResizeObserver | null = null
 
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
-const SOURCES = ['area', 'plot', 'bld', 'flr', 'unit', 'sel', 'mp', 'site', 'bus', 'light', 'fac', 'ring', 'near'] as const
+const SOURCES = ['area', 'plot', 'bld', 'flr', 'unit', 'sel', 'mp', 'site', 'prj', 'bus', 'light', 'fac', 'ring', 'near'] as const
 /** 主题页签叠加的数据源：页签 → [数据源, 图层] */
 const THEME_LAYERS: Record<string, [Src, Layer][]> = {
-  dev: [['mp', 'masterplans'], ['site', 'sites']],
+  dev: [['mp', 'masterplans'], ['site', 'sites'], ['prj', 'projects']],
   ops: [['bus', 'busstops'], ['light', 'streetlights']],
   ast: [['fac', 'facilities']],
 }
@@ -138,6 +138,11 @@ function addLayers(m: MlMap) {
   m.addLayer({ id: 'mp-line', type: 'line', source: 'mp', paint: { 'line-color': '#F0A64A', 'line-width': 1.6, 'line-dasharray': [3, 2] } })
   m.addLayer({ id: 'site-fill', type: 'fill', source: 'site', paint: { 'fill-color': '#E86A6A', 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.55, 0.32] } })
   m.addLayer({ id: 'site-line', type: 'line', source: 'site', paint: { 'line-color': '#FF8A8A', 'line-width': 1.2 } })
+  // 资本项目点：延期红、其余紫（与需关注区域「延期资本项目」同色系）
+  m.addLayer({ id: 'prj-pt', type: 'circle', source: 'prj', paint: {
+    'circle-color': ['case', ['==', ['get', 'd'], true], '#FF5A5A', '#B58CFF'],
+    'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 1.2,
+    'circle-radius': ['case', ['boolean', ['feature-state', 'hover'], false], 8, 5.5] } })
   // 城市运行页签：路灯（黄色小点）、公交站台（蓝色圆点）
   m.addLayer({ id: 'light-pt', type: 'circle', source: 'light', paint: {
     'circle-color': ['match', ['get', 'st'], 'In Service', '#F2D45C', 'Out Of Service', '#E86A6A', '#8C929B'],
@@ -486,10 +491,10 @@ function fit(n: NodeDetail) {
   })
 }
 
-const PICKABLE = ['near-pt', 'fac-pt', 'bus-pt', 'light-pt', 'unit-ext', 'flr-ext', 'bld-ext', 'site-fill', 'plot-fill', 'mp-fill', 'area-fill']
-const SRC_OF: Record<string, Src> = { 'unit-ext': 'unit', 'flr-ext': 'flr', 'bld-ext': 'bld', 'site-fill': 'site', 'plot-fill': 'plot', 'mp-fill': 'mp', 'area-fill': 'area', 'bus-pt': 'bus', 'light-pt': 'light', 'fac-pt': 'fac', 'near-pt': 'near' }
+const PICKABLE = ['near-pt', 'prj-pt', 'fac-pt', 'bus-pt', 'light-pt', 'unit-ext', 'flr-ext', 'bld-ext', 'site-fill', 'plot-fill', 'mp-fill', 'area-fill']
+const SRC_OF: Record<string, Src> = { 'unit-ext': 'unit', 'flr-ext': 'flr', 'bld-ext': 'bld', 'site-fill': 'site', 'plot-fill': 'plot', 'mp-fill': 'mp', 'area-fill': 'area', 'bus-pt': 'bus', 'prj-pt': 'prj', 'light-pt': 'light', 'fac-pt': 'fac', 'near-pt': 'near' }
 /** 悬停提示里非下钻对象的类型名 */
-const EXTRA_NAME: Record<string, string> = { masterplan: '总体规划', site: '在建工地', busstop: '公交站台', streetlight: '路灯', facility: '设施' }
+const EXTRA_NAME: Record<string, string> = { masterplan: '总体规划', site: '在建工地', project: '资本项目', busstop: '公交站台', streetlight: '路灯', facility: '设施' }
 
 function topFeature(e: maplibregl.MapMouseEvent) {
   if (!map) return null

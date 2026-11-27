@@ -211,6 +211,36 @@ export const AST_ATTR: Record<string, string> = {
   games: '游戏区', fountains: '喷泉', fenced: '围栏', dmtDetail: 'DMT 明细编号',
 }
 
+/** 建设许可与建筑类申请的类型（dev.permits.plotRecords[].type、applicationTypes[].kind） */
+export const PERMIT_KIND: Record<string, { n: string; c: string }> = {
+  permit: { n: '建设许可', c: '#F0A64A' },
+  completion: { n: '竣工证书', c: '#62D36A' },
+  maintenance: { n: '维修许可', c: '#4C8DF6' },
+  demolition: { n: '拆除许可', c: '#E86A6A' },
+  other: { n: '其他申请', c: '#8C929B' },
+}
+
+/** 违规处罚阶段（ops.violations.summary：awareness / warning / fine） */
+export const VIOLATION_STAGE: Record<string, { n: string; c: string }> = {
+  awareness: { n: '宣导', c: '#4C8DF6' },
+  warning: { n: '警告', c: '#F2D45C' },
+  fine: { n: '罚款', c: '#E86A6A' },
+}
+
+/** 地块执法记录类型（ops.plotRecords[].type） */
+export const OPS_RECORD: Record<string, { n: string; c: string }> = {
+  distortion: { n: '视觉违规', c: '#FF7AB6' },
+  violation: { n: '违规', c: '#E86A6A' },
+  occupancy: { n: '住宅占用', c: '#B58CFF' },
+}
+
+/** Tawtheeq 单元状态（mkt.occupancy.units[].status） */
+export const UNIT_STATUS: Record<string, { n: string; c: string }> = {
+  rented: { n: '已租', c: '#3DD6D0' },
+  vacant: { n: '空置', c: '#8C929B' },
+  blocked: { n: '冻结', c: '#F0A64A' },
+}
+
 /** 尚未接入的主题页签：对应主题库 theme.meta_table.theme */
 export const PENDING_TABS: { id: string; name: string; theme: string; note: string }[] = [
 ]
