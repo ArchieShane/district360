@@ -20,16 +20,21 @@ const rest = computed(() => props.view.districts.length - props.view.maxCards)
 /** 卡片列里显示的区（地图画标记和连线用）；收起时为空 */
 watch(() => [open.value, list.value], () => emit('shown', open.value ? list.value.map(w => w.key) : []), { immediate: true })
 
-/** 指标值的显示：差距（分）、投资（AED）、供给率（%） */
+/** 指标值的显示：差距（分）、投资（AED）、延期项目（个）、入住率 / 供给率 / 整改率（%） */
+const aed = (v: number) => v >= 1e9 ? num(v / 1e9, 2) + 'B' : num(v / 1e6, v >= 1e7 ? 0 : 1) + 'M'
 function value(it: WatchItem): [string, string] {
   if (it.key === 'gap') return [num(it.value, 2), '分']
-  if (it.key === 'capex') return [it.value >= 1e9 ? num(it.value / 1e9, 2) + 'B' : num(it.value / 1e6, 0) + 'M', 'AED']
+  if (it.key === 'capex') return [aed(it.value), 'AED']
+  if (it.key === 'prj') return [num(it.value), '个']
   return [num(it.value, 1), '%']
 }
 function refs(it: WatchItem): [string, string][] {
   if (it.key === 'gap') return [['在途', num(it.pipeline, 2)], ['目标', num(it.target, 2)]]
   if (it.key === 'capex') return [[it.shareOf ?? '占比', num(it.sharePct, 1) + '%']]
   if (it.key === 'park') return [['供给 / 需求', `${num(it.areaHa, 1)} / ${num(it.needHa, 1)} ha`]]
+  if (it.key === 'prj') return [['项目', num(it.projects)], ['延期预算', 'AED ' + aed(it.delayedBudgetAed ?? 0)]]
+  if (it.key === 'occ') return [['已租 / 单元', `${num(it.rented)} / ${num(it.units)}`]]
+  if (it.key === 'vio') return [['按期 / 上报', `${num(it.fixed)} / ${num(it.reports)}`]]
   return []
 }
 const tabOf = (w: WatchDistrict) => ind.value[w.items[0]?.key]?.tab ?? 'liv'

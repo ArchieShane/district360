@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import { api, type AstView, type DevSummary, type FacilityTypes, type Level, type LivDistrict, type LivSummary, type MktView, type NodeDetail, type OpsView } from '../api'
+import { api, type AccidentSummary, type AstView, type CaseSummary, type DevSummary, type DistortionSummary, type FacilityTypes, type KN, type Level, type LivDistrict,
+  type LivSummary, type MktView, type NodeDetail, type OccupancySummary, type OpsView, type PermitSummary, type ProjectSummary, type ViolationSummary } from '../api'
 import { num, pct } from '../format'
 import { AST_CATEGORY, FACILITY_DOMAIN, LEVEL_NAME, livColor, PLOT_STATUS, TIER } from '../labels'
 
@@ -8,13 +9,13 @@ import { AST_CATEGORY, FACILITY_DOMAIN, LEVEL_NAME, livColor, PLOT_STATUS, TIER 
  * 首页五主题总览（原型 Overview 的 home view）：开发建设、资产、房地产市场、宜居、城市运行各一块，
  * 每块的标题可点，跳到对应页签。只在酋长国 / 市政 / 区域 / 社区层级显示（地块及以下是地块卡、建筑卡）。
  * 地块建设状态、建筑用途取自节点视图；其余取 /nodes/{level}/{key}/overview（各主题汇总，一次取齐）。
- * 源数据未到位的部分（资本项目、ADREC 成交、交通事故、违规、诉求）写明待接入。
+ * 业务视图（资本项目、许可、诉求、事故、视觉违规、违规、入住率）没有数据时写明待接入；ADREC 成交同。
  */
 interface Overview {
-  dev?: { summary?: DevSummary; stages?: { k: string; n: number }[] }
+  dev?: { summary?: DevSummary; stages?: { k: string; n: number }[]; capitalProjects?: ProjectSummary; permits?: PermitSummary }
   ast?: AstView['summary'] & { facilityTypes?: FacilityTypes | null }
-  mkt?: { tenancy?: MktView['tenancy']; adrec?: MktView['adrec'] }
-  ops?: OpsView['summary']
+  mkt?: { tenancy?: MktView['tenancy']; adrec?: MktView['adrec']; occupancy?: OccupancySummary }
+  ops?: OpsView['summary'] & { cases?: CaseSummary; accidents?: AccidentSummary; accidentsBySeverity?: KN[]; distortions?: DistortionSummary; violations?: ViolationSummary }
   liv?: { district?: LivDistrict | null; summary?: LivSummary }
 }
 
@@ -78,6 +79,18 @@ const track = computed(() => {
 })
 
 const o = computed(() => ov.value?.ops)
+/** 业务视图汇总：有数据才显示（总览不带 sources，按计数判断） */
+const prj = computed(() => ov.value?.dev?.capitalProjects)
+const pmt = computed(() => ov.value?.dev?.permits)
+const occ = computed(() => ov.value?.mkt?.occupancy)
+const hasPrj = computed(() => (prj.value?.projects ?? 0) > 0)
+const hasPmt = computed(() => (pmt.value?.permits ?? 0) > 0)
+const hasOcc = computed(() => (occ.value?.units ?? 0) > 0)
+const hasCase = computed(() => (o.value?.cases?.cases12m ?? 0) > 0)
+const hasAcc = computed(() => (o.value?.accidents?.accidents12m ?? 0) > 0)
+const hasDis = computed(() => (o.value?.distortions?.reports12m ?? 0) > 0)
+const hasVio = computed(() => (o.value?.violations?.violations ?? 0) > 0)
+const opsPending = computed(() => [['居民诉求', hasCase.value], ['道路安全', hasAcc.value], ['视觉违规', hasDis.value], ['违规与罚款', hasVio.value]].filter(x => !x[1]).map(x => x[0]))
 const f2 = (v: number | null | undefined) => v == null ? '—' : num(v, 2)
 const aed = (v: number | null | undefined) => v == null ? '—' : v >= 1e9 ? num(v / 1e9, 2) + 'B' : v >= 1e6 ? num(v / 1e6, 1) + 'M' : num(v)
 </script>
@@ -99,7 +112,18 @@ const aed = (v: number | null | undefined) => v == null ? '—' : v >= 1e9 ? num
         <div><b>{{ num(dev.sites) }}</b><span>在建工地</span></div>
         <div><b>{{ num(st.buildingsUnderConstruction) }}</b><span>在建建筑</span></div>
       </div>
-      <p class="pend">资本项目（数量、预算、延期）、建设许可：源数据待接入</p>
+      <div v-if="hasPrj && prj" class="kp" style="margin-top:.7rem">
+        <div><b>{{ num(prj.projects) }}</b><span>资本项目</span></div>
+        <div><b><small class="pre">AED</small>{{ aed(prj.budgetAed) }}</b><span>项目预算</span></div>
+        <div><b>{{ prj.spentPct ?? '—' }}<small v-if="prj.spentPct != null">%</small></b><span>支出率</span></div>
+        <div><b :class="{ bad: prj.delayed > 0 }">{{ num(prj.delayed) }}</b><span>延期项目</span></div>
+      </div>
+      <div v-if="hasPmt && pmt" class="kp" style="margin-top:.7rem">
+        <div><b>{{ num(pmt.newLast12m) }}</b><span>近 12 个月新签许可</span></div>
+        <div><b>{{ num(pmt.inProgress) }}</b><span>在办许可</span></div>
+        <div><b :class="{ bad: pmt.stalled180 > 0 }">{{ num(pmt.stalled180) }}</b><span>停滞 &gt; 180 天</span></div>
+      </div>
+      <p v-if="ov && (!hasPrj || !hasPmt)" class="pend">{{ [!hasPrj && '资本项目（数量、预算、延期）', !hasPmt && '建设许可'].filter(Boolean).join('、') }}：源数据待接入</p>
     </section>
 
     <!-- 2 资产 -->
@@ -147,6 +171,12 @@ const aed = (v: number | null | undefined) => v == null ? '—' : v >= 1e9 ? num
         </div>
         <p class="pend">ADREC 成交、抵押、租赁与近 12 个月走势：源数据待接入；Tawtheeq 为样例数据（至 2021 年）</p>
       </template>
+      <div v-if="hasOcc && occ" class="kp" style="margin-top:.7rem">
+        <div><b :class="{ bad: occ.occupancyPct != null && occ.occupancyPct < 80 }">{{ occ.occupancyPct ?? '—' }}<small v-if="occ.occupancyPct != null">%</small></b><span>入住率</span></div>
+        <div><b>{{ num(occ.rented) }}</b><span>已租单元</span></div>
+        <div><b>{{ num(occ.units) }}</b><span>单元</span></div>
+      </div>
+      <p v-else-if="ov" class="pend">入住率（Tawtheeq 单元状态）：源数据待接入</p>
     </section>
 
     <!-- 4 宜居 -->
@@ -192,7 +222,13 @@ const aed = (v: number | null | undefined) => v == null ? '—' : v >= 1e9 ? num
         <div><b>{{ num(o?.lights) }}</b><span>路灯 · 在用 {{ o?.lights ? pct(o.lightsInService, o.lights, 0) : '—' }}%</span></div>
         <div><b>{{ num(o?.busStops) }}</b><span>公交站 · {{ num(o?.busPlatforms) }} 站台</span></div>
       </div>
-      <p class="pend">道路安全（交通事故）、视觉违规、违规与罚款、居民诉求：源数据待接入</p>
+      <div v-if="hasCase || hasAcc || hasDis || hasVio" class="kp" style="margin-top:.7rem">
+        <div v-if="hasCase"><b>{{ num(o!.cases!.cases12m) }}</b><span>诉求 · 办结 {{ o!.cases!.closedPct ?? '—' }}%</span></div>
+        <div v-if="hasAcc"><b>{{ num(o!.accidents!.accidents12m) }}</b><span>事故{{ o!.accidentsBySeverity?.[0] ? ' · ' + o!.accidentsBySeverity[0].k + ' ' + num(o!.accidentsBySeverity[0].n) : '' }}</span></div>
+        <div v-if="hasDis"><b :class="{ bad: o!.distortions!.slaFixedPct != null && o!.distortions!.slaFixedPct < 68 }">{{ o!.distortions!.slaFixedPct ?? '—' }}<small v-if="o!.distortions!.slaFixedPct != null">%</small></b><span>视觉违规按期整改 · 上报 {{ num(o!.distortions!.reports12m) }}</span></div>
+        <div v-if="hasVio"><b>{{ num(o!.violations!.open) }}</b><span>未结违规 · 收缴 {{ o!.violations!.collectionPct ?? '—' }}%</span></div>
+      </div>
+      <p v-if="ov && opsPending.length" class="pend">{{ opsPending.join('、') }}：源数据待接入</p>
     </section>
   </div>
 </template>
@@ -213,6 +249,7 @@ const aed = (v: number | null | undefined) => v == null ? '—' : v >= 1e9 ? num
 .dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; margin-right: .3rem; vertical-align: .05rem }
 .pre { font-size: .64rem !important; font-weight: 600; color: var(--tx2); margin: 0 .2rem 0 0 !important }
 .pend { margin-top: .6rem; font-size: .7rem; color: var(--tx3) }
+.kp b.bad { color: #FF8A8A }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem }
 .two > div { min-width: 0 }
 .bh { display: flex; align-items: baseline; justify-content: space-between; font-size: .74rem; color: var(--tx2) }
